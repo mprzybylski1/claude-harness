@@ -1,12 +1,22 @@
 # System State
 
-_Last updated: S001 YYYY-MM-DD_
+_Last updated: S001 2026-05-24_
+
+---
+
+## Deployment
+
+_config.yaml not present — deployment details unavailable._
 
 ---
 
 ## Phase & Gate Status
 
-_(See docs/sessions.md — Current Phase & Status section)_
+**Phase 1 (Active):** [Describe your current phase goal and gate criteria here.]
+
+Gate requirements before Phase 2:
+- [ ] [Criterion 1]
+- [ ] [Criterion 2]
 
 ---
 

@@ -200,10 +200,6 @@ def main() -> None:
     current_session = args.session if args.session is not None else get_current_session(project_root)
     tickets = load_tickets(open_dir)
 
-    if not tickets:
-        print("No open tickets found.", file=sys.stderr)
-        sys.exit(1)
-
     content = render_index(tickets, current_session, today)
     with open(output_path, "w") as f:
         f.write(content)
