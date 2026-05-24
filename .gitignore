@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+*.db
+*.log
+docs/opus_review_context.md
+.git/CLAUDE_SESSION_ID

@@ -1,0 +1,29 @@
+# Claude harness configuration — the only file you need to edit.
+# See scripts/tools/harness_config.py for full documentation.
+# All keys are optional; scripts fall back to built-in defaults when absent.
+
+# Prefix used in session-close commit messages.
+# prepare_opus_context.py uses this to locate the prior session-close anchor in git log.
+session_close_prefix: "docs: S"
+
+# File path prefixes that classify a session as code-touching → triggers full Opus review.
+# Add any path prefix that contains production code.
+code_paths:
+  - "src/"
+  - "lib/"
+  - "tests/"
+
+# Relative path to the open tickets directory.
+tickets_dir: "docs/tickets/open"
+
+# Static analysis checks to run at session close.
+# Available built-in checks: test_syntax, utcnow, eval_exec, sql_mutations,
+#                             exception_swallowing, bash_blocks, spec_status_enum
+# Remove checks that don't apply to your project (e.g. sql_mutations if no audit log,
+# spec_status_enum if no YAML strategy specs).
+static_analysis_checks:
+  - test_syntax
+  - utcnow
+  - eval_exec
+  - exception_swallowing
+  - bash_blocks

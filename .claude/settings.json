@@ -1,0 +1,40 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/hooks/check_ticket_acs.py"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/hooks/regenerate_ticket_index.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 scripts/hooks/check_skill_bash_blocks_hook.py"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/hooks/check_session_log.py"
+          }
+        ]
+      }
+    ]
+  }
+}
