@@ -59,6 +59,14 @@ If this was a code session and `/implementation-review` was not run, ask the use
 "Want to run `/implementation-review` first so we can fix issues inline instead of ticketing them?"
 If they decline, proceed normally.
 
+## Pre-check — Consider `/workflow-review`
+
+If the session exercised harness tooling (scripts, hooks, workspace commands) and
+anything felt slow, required a workaround, or didn't match the SKILL documentation,
+ask the user: "Want to run `/workflow-review` before closing? It surfaces harness
+improvements while context is warm."
+Skip this prompt for purely docs-only sessions.
+
 ## Step 0 — Determine session ID and refresh INDEX.md
 
 Run all three commands:
