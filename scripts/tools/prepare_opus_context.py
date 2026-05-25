@@ -47,19 +47,15 @@ _DIFF_CAP_EXCLUDE = ("docs/tickets/", "docs/archive/")
 _DIFF_ALWAYS_INCLUDE = ("scripts/tools/prepare_opus_context.py",
                         ".claude/skills/session-close/SKILL.md")
 
-# Priority tiers for signal blocks when truncating. Tier 0 fills first (safety-critical);
-# tier 3 is trimmed first. Files not matching any tier get tier 1 (default).
-_TIER_CORE = ("core/", "strategies/runtime.py", "execution/", "main.py")   # tier 0
-_TIER_SCRIPTS = ("scripts/", ".claude/")                                    # tier 1 (same as default)
-_TIER_TESTS = ("tests/",)                                                   # tier 2
-_TIER_RESEARCH = ("research/",)                                             # tier 3
+# Priority tiers for diff-cap truncation. Tier 0 fills first; tier 2 trimmed first.
+# Files not matching any tier get tier 1 (default).
+_TIER_CORE = ("scripts/tools/", "scripts/hooks/")  # tier 0 — harness core logic
+_TIER_TESTS = ("tests/",)                          # tier 2
 
 
 def _priority_tier(path: str) -> int:
-    if any(path.startswith(p) or path == p.rstrip("/") for p in _TIER_CORE):
+    if any(path.startswith(p) for p in _TIER_CORE):
         return 0
-    if any(path.startswith(p) for p in _TIER_RESEARCH):
-        return 3
     if any(path.startswith(p) for p in _TIER_TESTS):
         return 2
     return 1
@@ -100,9 +96,9 @@ def _apply_diff_cap(diff: str, cap: int) -> tuple[str, bool, list[str]]:
     Returns (display_diff, was_truncated, truncated_paths).
     - docs/tickets/ and docs/archive/ blocks are excluded from line counting.
     - Governance files (_DIFF_ALWAYS_INCLUDE) are appended in full even when cap hits.
-    - Signal blocks are filled in priority order: core/strategies/execution/main.py first,
-      then other, then tests/, then research/ — so safety-critical code is never truncated
-      at the expense of test or research files.
+    - Signal blocks are filled in priority order: scripts/tools/ and scripts/hooks/ first,
+      then other, then tests/ — so harness core logic is never truncated at the expense
+      of test files.
     - truncated_paths lists file paths that were cut; empty when nothing was truncated.
     """
     if not diff.strip():
@@ -221,8 +217,8 @@ def check_test_syntax(root: Path) -> str:
 
 
 def check_utcnow(root: Path) -> str:
-    """2. Grep for deprecated datetime.utcnow() in production directories."""
-    prod_dirs = ["core", "data", "execution", "infra", "research", "scripts", "strategies"]
+    """2. Grep for deprecated datetime.utcnow() in scripts/."""
+    prod_dirs = ["scripts", "tests"]
     existing = [str(root / d) for d in prod_dirs if (root / d).exists()]
     if not existing:
         return "SKIP  no production directories found"
@@ -240,143 +236,8 @@ def check_utcnow(root: Path) -> str:
     return "PASS  no datetime.utcnow() in production code"
 
 
-def check_eval_exec(root: Path) -> str:
-    """3. AST scan for eval()/exec() Call nodes in strategies/ (closed indicator set invariant).
-
-    AST-based (not grep) so comments and docstrings are not matched.
-    """
-    import ast as _ast
-    strategies_dir = root / "strategies"
-    if not strategies_dir.exists():
-        return "SKIP  strategies/ not found"
-    eval_hits = []
-    for py_file in sorted(strategies_dir.rglob("*.py")):
-        try:
-            tree = _ast.parse(py_file.read_text())
-        except SyntaxError:
-            continue
-        for node in _ast.walk(tree):
-            if isinstance(node, _ast.Call):
-                func = node.func
-                name = (
-                    func.id if isinstance(func, _ast.Name) else
-                    func.attr if isinstance(func, _ast.Attribute) else None
-                )
-                if name in ("eval", "exec"):
-                    rel = py_file.relative_to(root)
-                    eval_hits.append(f"  {rel}:{node.lineno}: {name}()")
-    if eval_hits:
-        return ("FAIL  eval()/exec() calls found in strategies/ (invariant violation):\n"
-                + "\n".join(eval_hits))
-    return "PASS  no eval()/exec() calls in strategies/"
-
-
-def check_sql_mutations(root: Path) -> str:
-    """4. Grep for UPDATE/DELETE SQL strings in audit_log.py (append-only invariant).
-
-    Pattern matches a quote character immediately before the SQL keyword to avoid
-    matching docstring prose like "never UPDATE or DELETE".
-
-    Also scans scripts/tools/migrate_*.py for DELETE strings and reports them as
-    INFO (not FAIL) — migration scripts are permitted under the
-    architecture_invariants.md operator carve-out (T257 S166), but must be flagged
-    so Opus can verify the six carve-out requirements are met.
-    """
-    audit = root / "infra" / "audit_log.py"
-    if not audit.exists():
-        return "SKIP  infra/audit_log.py not found"
-    r = subprocess.run(
-        ["grep", "-nE", r"""['"](UPDATE|DELETE) """, str(audit)],
-        capture_output=True, text=True,
-    )
-    hits = [ln for ln in r.stdout.splitlines() if ln.strip()]
-    if hits:
-        return ("FAIL  UPDATE/DELETE SQL string in infra/audit_log.py (invariant violation):\n"
-                + "\n".join(f"  {h}" for h in hits))
-
-    # Search both tools/ (legacy location) and migrations/ for migrate_*.py.
-    # glob() on a non-existent dir returns an empty iterator — no exists() guard needed.
-    migrate_scripts = sorted(
-        list((root / "scripts" / "tools").glob("migrate_*.py"))
-        + list((root / "scripts" / "migrations").glob("migrate_*.py"))
-    )
-    migrate_hits = []
-    for script in migrate_scripts:
-        # Use word-boundary pattern (not quote-prefix) so multiline SQL strings are caught.
-        r2 = subprocess.run(
-            ["grep", "-niE", r"\b(UPDATE|DELETE)\b", str(script)],
-            capture_output=True, text=True,
-        )
-        for ln in r2.stdout.splitlines():
-            if ln.strip():
-                migrate_hits.append(f"  {script.name}: {ln.strip()}")
-    if migrate_hits:
-        return (
-            "PASS  no UPDATE/DELETE SQL in infra/audit_log.py\n"
-            "INFO  migration scripts with DELETE/UPDATE (operator carve-out — verify six requirements in architecture_invariants.md):\n"
-            + "\n".join(migrate_hits)
-        )
-    return "PASS  no UPDATE/DELETE SQL strings in infra/audit_log.py"
-
-
-
-# Return values that indicate real exception swallowing (bare defaults / None / falsy literals).
-# Returns of a constructed result object (e.g. return SomeResult(passed=False, ...)) are
-# the documented fail-closed pattern and must NOT be flagged.
-_SWALLOW_RETURN = re.compile(
-    r"""^\s*(?:
-        pass
-        | return \s* (?:None|False|0\.0|0|\[\]|\{\}|""|'')? \s* (?:\#.*)?
-    )$""",
-    re.VERBOSE,
-)
-
-
-def check_exception_swallowing(root: Path) -> str:
-    """5. Heuristic scan for exception swallowing in core/ (pass or bare-default return).
-
-    Pure-Python line scanner — avoids grep context-line format ambiguity.
-
-    Flags: except clause followed immediately (next non-blank line) by:
-      - pass
-      - return  (bare, no value)
-      - return None / False / 0 / 0.0 / [] / {} / "" / ''
-
-    Does NOT flag: return of a constructed result object (e.g. the documented
-    fail-closed pattern: ``return SomeResult(passed=False, reason=str(e))``),
-    a named variable, or a function call. Also does not flag re-raise (raise) or
-    logging patterns.
-
-    This is a heuristic — findings need manual verification.
-    """
-    swallowed = []
-    for py_file in sorted((root / "core").rglob("*.py")):
-        try:
-            lines = py_file.read_text().splitlines()
-        except OSError:
-            continue
-        rel = py_file.relative_to(root)
-        for i, line in enumerate(lines):
-            if not re.search(r"\bexcept\b", line):
-                continue
-            # Scan forward for the first non-empty continuation line
-            for j in range(i + 1, min(i + 4, len(lines))):
-                next_line = lines[j]
-                if not next_line.strip():
-                    continue  # skip blank lines
-                if _SWALLOW_RETURN.match(next_line):
-                    swallowed.append(
-                        f"  {rel}:{i + 1}: {line.strip()} → {next_line.strip()}"
-                    )
-                break  # stop at first non-blank line regardless
-    if swallowed:
-        return ("WARN  possible exception swallowing in core/ (verify manually):\n"
-                + "\n".join(swallowed[:10]))
-    return "PASS  no obvious exception swallowing in core/"
-
-
 def check_bash_blocks(root: Path) -> str:
-    """6. Run check_skill_bash_blocks.py to validate bash fenced blocks in SKILL.md."""
+    """3. Run check_skill_bash_blocks.py to validate bash fenced blocks in SKILL.md."""
     check_script = root / "scripts" / "tools" / "check_skill_bash_blocks.py"
     if not check_script.exists():
         return "SKIP  check_skill_bash_blocks.py not found"
@@ -389,49 +250,13 @@ def check_bash_blocks(root: Path) -> str:
     return f"PASS  {r.stdout.strip()}"
 
 
-def check_spec_status_enum(root: Path) -> str:
-    """7. Verify every strategies/specs/*.yaml has a status: value in StrategyStatus enum (T226).
-
-    Catches the S141+S142 pattern where specs used status: "killed" before the enum had that
-    value, causing SpecLoader.load_all to silently swallow ValidationErrors every cron run.
-    """
-    specs_dir = root / "strategies" / "specs"
-    if not specs_dir.exists():
-        return "SKIP  strategies/specs/ not found"
-
-    # Extract valid values directly from the enum source to avoid importing the module
-    schemas_src = (root / "core" / "schemas.py").read_text()
-    enum_block_match = re.search(
-        r"class StrategyStatus.*?(?=\nclass |\Z)", schemas_src, re.DOTALL
-    )
-    if not enum_block_match:
-        return "SKIP  StrategyStatus enum not found in core/schemas.py"
-    valid_values = set(re.findall(r'"([^"]+)"', enum_block_match.group()))
-
-    status_re = re.compile(r'^\s*status:\s*["\']?(\w+)["\']?', re.MULTILINE)
-    mismatches = []
-    for yaml_file in sorted(specs_dir.glob("*.yaml")):
-        text = yaml_file.read_text()
-        m = status_re.search(text)
-        if not m:
-            continue
-        val = m.group(1)
-        if val not in valid_values:
-            mismatches.append(f"  {yaml_file.name}: status={val!r} not in StrategyStatus enum")
-
-    if mismatches:
-        return ("FAIL  spec files with invalid status enum value (SpecLoader will swallow ValidationError):\n"
-                + "\n".join(mismatches))
-    return f"PASS  all {sum(1 for _ in specs_dir.glob('*.yaml'))} spec files have valid StrategyStatus values"
-
-
 def _is_python_project(root: Path) -> bool:
-    return any((root / d).exists() for d in ("tests", "scripts", "core", "strategies"))
+    return any((root / d).exists() for d in ("tests", "scripts"))
 
 
 def _static_analysis(root: Path = ROOT) -> str:
     """
-    Run all 7 pre-flight invariant checks. Returns a human-readable summary.
+    Run pre-flight invariant checks. Returns a human-readable summary.
     Opus reads this section instead of reading source files to verify findings.
     Each check returns PASS / WARN / FAIL / SKIP with details on failure.
     """
@@ -440,11 +265,7 @@ def _static_analysis(root: Path = ROOT) -> str:
     checks = [
         check_test_syntax,
         check_utcnow,
-        check_eval_exec,
-        check_sql_mutations,
-        check_exception_swallowing,
         check_bash_blocks,
-        check_spec_status_enum,
     ]
     return "\n".join(fn(root) for fn in checks)
 

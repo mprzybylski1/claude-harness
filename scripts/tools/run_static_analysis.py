@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Run the 6 static-analysis checks and print a plain-text report.
+Run static-analysis checks and print a plain-text report.
 
 Exits 0 if all checks PASS.
 Exits 1 if any check produces WARN or FAIL.
@@ -21,23 +21,15 @@ from prepare_opus_context import (
     ROOT,
     check_test_syntax,
     check_utcnow,
-    check_eval_exec,
-    check_sql_mutations,
-    check_exception_swallowing,
     check_bash_blocks,
-    check_spec_status_enum,
 )
 import harness_config as _hc
 import workspace_config as _wc
 
 _ALL_CHECKS: dict[str, object] = {
-    "test_syntax":          check_test_syntax,
-    "utcnow":               check_utcnow,
-    "eval_exec":            check_eval_exec,
-    "sql_mutations":        check_sql_mutations,
-    "exception_swallowing": check_exception_swallowing,
-    "bash_blocks":          check_bash_blocks,
-    "spec_status_enum":     check_spec_status_enum,
+    "test_syntax": check_test_syntax,
+    "utcnow":      check_utcnow,
+    "bash_blocks": check_bash_blocks,
 }
 
 

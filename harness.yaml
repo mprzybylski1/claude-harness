@@ -19,14 +19,9 @@ tickets_dir: "docs/tickets/open"
 # Relative path to the workspaces directory (multi-project orchestration).
 workspaces_dir: "workspaces"
 
-# Static analysis checks to run at session close.
-# Available built-in checks: test_syntax, utcnow, eval_exec, sql_mutations,
-#                             exception_swallowing, bash_blocks, spec_status_enum
-# Remove checks that don't apply to your project (e.g. sql_mutations if no audit log,
-# spec_status_enum if no YAML strategy specs).
+# Static analysis checks run at session close (order = display order in context).
+# Available checks: test_syntax, utcnow, bash_blocks
 static_analysis_checks:
   - test_syntax
   - utcnow
-  - eval_exec
-  - exception_swallowing
   - bash_blocks
