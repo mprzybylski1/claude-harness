@@ -243,3 +243,98 @@ class TestRotateOpusNotesFlags:
         )
         if harness_mtime_before is not None:
             assert harness_opus.stat().st_mtime == harness_mtime_before
+
+
+# ── T027: classify_session.py --repo ─────────────────────────────────────────
+
+def _make_classify_repo(base: Path, code_paths: list[str] | None = None) -> Path:
+    """Create a minimal git repo with a session-close anchor commit."""
+    repo = base / "ws_repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", str(repo)], capture_output=True, check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.email", "t@t.com"],
+                   capture_output=True, check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"],
+                   capture_output=True, check=True)
+    # Optional workspace harness.yaml with custom code_paths
+    if code_paths is not None:
+        import yaml
+        (repo / "harness.yaml").write_text(
+            yaml.dump({"code_paths": code_paths, "session_close_prefix": "docs: S"})
+        )
+        subprocess.run(["git", "-C", str(repo), "add", "harness.yaml"],
+                       capture_output=True, check=True)
+    # Anchor commit (acts as "last session close")
+    (repo / "README.md").write_text("# WS Repo")
+    subprocess.run(["git", "-C", str(repo), "add", "."], capture_output=True, check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-m", "docs: S1 session close — init"],
+                   capture_output=True, check=True)
+    return repo
+
+
+class TestClassifySessionRepoFlag:
+    def test_docs_only_change_classified_docs(self, tmp_path):
+        """A commit touching only docs/ in a workspace repo → 'docs'."""
+        repo = _make_classify_repo(tmp_path, code_paths=["app/"])
+        (repo / "NOTES.md").write_text("some notes")
+        subprocess.run(["git", "-C", str(repo), "add", "NOTES.md"],
+                       capture_output=True, check=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "-m", "docs: update notes"],
+                       capture_output=True, check=True)
+        result = subprocess.run(
+            [sys.executable, str(TOOLS / "classify_session.py"), "--repo", str(repo)],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0
+        assert result.stdout.strip() == "docs"
+
+    def test_code_change_classified_code(self, tmp_path):
+        """A commit touching app/ (workspace code path) → 'code'."""
+        repo = _make_classify_repo(tmp_path, code_paths=["app/"])
+        app = repo / "app"
+        app.mkdir()
+        (app / "main.py").write_text("print('hello')")
+        subprocess.run(["git", "-C", str(repo), "add", "app/"], capture_output=True, check=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "-m", "feat: add main"],
+                       capture_output=True, check=True)
+        result = subprocess.run(
+            [sys.executable, str(TOOLS / "classify_session.py"), "--repo", str(repo)],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0
+        assert result.stdout.strip() == "code"
+
+    def test_no_anchor_falls_back_to_code(self, tmp_path):
+        """When no session-close commit exists in the repo, prints 'code' conservatively."""
+        repo = tmp_path / "fresh_repo"
+        repo.mkdir()
+        subprocess.run(["git", "init", str(repo)], capture_output=True, check=True)
+        subprocess.run(["git", "-C", str(repo), "config", "user.email", "t@t.com"],
+                       capture_output=True, check=True)
+        subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"],
+                       capture_output=True, check=True)
+        (repo / "README.md").write_text("init")
+        subprocess.run(["git", "-C", str(repo), "add", "."], capture_output=True, check=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "-m", "init"],
+                       capture_output=True, check=True)
+        result = subprocess.run(
+            [sys.executable, str(TOOLS / "classify_session.py"), "--repo", str(repo)],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0
+        assert result.stdout.strip() == "code"
+
+
+# ── T029: harness.yaml code_paths includes scripts/ ──────────────────────────
+
+class TestHarnessYamlCodePaths:
+    def test_scripts_prefix_triggers_code_classification(self):
+        """A scripts/ file must classify as 'code' with the updated harness.yaml."""
+        import sys
+        sys.path.insert(0, str(TOOLS))
+        import harness_config as _hc
+        harness = _hc.load()
+        prefixes = _hc.code_paths(harness)
+        assert any(p == "scripts/" or p.startswith("scripts") for p in prefixes), (
+            f"'scripts/' not in code_paths: {prefixes}"
+        )

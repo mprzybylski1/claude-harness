@@ -9,6 +9,7 @@ session_close_prefix: "docs: S"
 # File path prefixes that classify a session as code-touching → triggers full Opus review.
 # Add any path prefix that contains production code.
 code_paths:
+  - "scripts/"
   - "src/"
   - "lib/"
   - "tests/"
@@ -25,3 +26,9 @@ static_analysis_checks:
   - test_syntax
   - utcnow
   - bash_blocks
+
+# Opt-in workflow telemetry: logs each tool call to .git/session_tool_log.jsonl.
+# Analyze with: python scripts/tools/analyze_tool_log.py
+# Enable the hook in .claude/settings.json PostToolUse to activate.
+# workflow_telemetry: true
+# workflow_telemetry_max_lines: 5000

@@ -16,8 +16,8 @@ Exit codes: 0 always (classification itself never fails).
 If git is unavailable, prints 'code' conservatively.
 
 Production paths (any match → 'code'):
-    core/, data/, execution/, infra/, research/, strategies/,
-    main.py, dashboard/, tests/, config.yaml, requirements.txt
+    scripts/, src/, lib/, tests/ (harness defaults from harness.yaml)
+    Override per-repo by placing a harness.yaml in the repo root.
 """
 import re
 import subprocess
@@ -27,21 +27,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import harness_config as _hc
 
-_HARNESS = _hc.load()
-
-# Any changed file whose path starts with one of these prefixes → code session
-# Read from harness.yaml if present; fall back to trading-project defaults.
-CODE_PREFIXES = _hc.code_paths(_HARNESS)
-
 # Safety-adjacent governance files: trigger full Opus even in a docs session
 SAFETY_ADJACENT = (
     "docs/architecture_invariants.md",
     "config.yaml",
-    # compliance_engine.py is already caught by core/ prefix above
 )
 
 
-def _get_last_session_close_sha(cwd: Path | None = None) -> str:
+def _get_last_session_close_sha(close_prefix: str, cwd: Path | None = None) -> str:
     """Return the SHA of the most recent session-close commit."""
     result = subprocess.run(
         ["git", "log", "--oneline", "--format=%H %s"],
@@ -51,7 +44,7 @@ def _get_last_session_close_sha(cwd: Path | None = None) -> str:
     )
     if result.returncode != 0:
         return ""
-    prefix = re.escape(_hc.session_close_prefix(_HARNESS))
+    prefix = re.escape(close_prefix)
     pattern = re.compile(rf"^([0-9a-f]+) {prefix}\d+ session close")
     for line in result.stdout.splitlines():
         m = pattern.match(line.strip())
@@ -91,9 +84,9 @@ def _changed_files(since_sha: str, cwd: Path | None = None) -> list[str]:
     return sorted(files)
 
 
-def classify(files: list[str]) -> str:
+def classify(files: list[str], code_prefixes: tuple[str, ...]) -> str:
     for f in files:
-        if any(f.startswith(p) for p in CODE_PREFIXES):
+        if any(f.startswith(p) for p in code_prefixes):
             return "code"
         if f in SAFETY_ADJACENT:
             return "code"  # safety-adjacent → full Opus
@@ -108,14 +101,18 @@ def main() -> None:
     args = p.parse_args()
     cwd = Path(args.repo).resolve() if args.repo else None
 
-    sha = _get_last_session_close_sha(cwd=cwd)
+    harness = _hc.load_for_repo(cwd) if cwd else _hc.load()
+    code_prefixes = _hc.code_paths(harness)
+    close_prefix = _hc.session_close_prefix(harness)
+
+    sha = _get_last_session_close_sha(close_prefix, cwd=cwd)
     if not sha:
         # Can't find anchor — be conservative
         print("code")
         return
 
     files = _changed_files(sha, cwd=cwd)
-    print(classify(files))
+    print(classify(files, code_prefixes))
 
 
 if __name__ == "__main__":

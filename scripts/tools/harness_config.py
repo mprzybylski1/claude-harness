@@ -23,6 +23,23 @@ def load() -> dict:
         return {}
 
 
+def load_for_repo(repo: Path) -> dict:
+    """Return harness config for a workspace repo.
+
+    Tries <repo>/harness.yaml first; falls back to the harness-root harness.yaml.
+    This lets workspace repos declare their own code_paths / session_close_prefix
+    without requiring changes to the central harness config.
+    """
+    repo_yaml = Path(repo).resolve() / "harness.yaml"
+    if repo_yaml.exists():
+        try:
+            import yaml
+            return yaml.safe_load(repo_yaml.read_text(encoding="utf-8")) or {}
+        except Exception:
+            pass
+    return load()
+
+
 def session_close_prefix(harness: dict | None = None) -> str:
     """Return the session-close commit message prefix (default: 'docs: S')."""
     if harness is None:
@@ -73,7 +90,7 @@ def static_analysis_checks(harness: dict | None = None) -> list[str] | None:
     If harness.yaml specifies static_analysis_checks, only those named checks
     are run. If the key is absent, None is returned and all checks run (default).
     Check names correspond to prepare_opus_context.py function names without the
-    'check_' prefix, e.g. 'test_syntax', 'eval_exec', 'sql_mutations'.
+    'check_' prefix, e.g. 'test_syntax', 'utcnow', 'bash_blocks'.
     """
     if harness is None:
         harness = load()
