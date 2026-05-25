@@ -450,7 +450,7 @@ def main() -> None:
     current_session_script = os.path.join(project_root, "scripts", "tools", "current_session.py")
     session_id_for_artefacts = None
     if os.path.exists(current_session_script):
-        raw = run(["python", current_session_script], cwd=project_root)
+        raw = run(["python3", current_session_script], cwd=project_root)
         if raw.startswith("S"):
             session_id_for_artefacts = raw
         else:
