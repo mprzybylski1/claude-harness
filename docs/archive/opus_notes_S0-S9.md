@@ -866,4 +866,169 @@ live.
 
 ---
 
+# Opus Review — S6 2026-05-25
+
+Scope: closed T026 (telemetry hook + analyzer), T027 (classify_session `--repo`
+config), T028 (prepare_opus_context invariants/template per-repo), T029
+(`scripts/` in code_paths), T030 (batch consistency fixes). ~1061 insertions /
+32 deletions. New PostToolUse hook wired in `.claude/settings.json`, new
+`analyze_tool_log.py`, and 18 new telemetry tests.
+
+## Invariant Violations
+
+None new. S3 #6 / S4 #1 (dead `sessions_rel` path-based comparison) and the
+broader carry-forward backlog from S5 remain unchanged this session.
+
+## Concrete Bugs
+
+1. **`scripts/hooks/log_tool_usage.py:48-53` — session tag in the JSONL log is
+   wrong because the fast-path reads a bare integer and returns it as the
+   session ID.** `current_session.persist_session(n)` writes `str(n)` (e.g.
+   `"6"`) to `.git/CLAUDE_SESSION_ID`; the hook reads it via
+   `claude_id.read_text().strip()` and returns `"6"` unchanged. The slow path
+   (line 117) correctly returns `f"S{int(entries[-1]) + 1}"` (e.g. `"S6"`).
+   Result: when the cache file exists (the common case once
+   `current_session.py` has been run at session-start), every record gets
+   `"session": "6"` instead of `"session": "S6"`. The analyzer's
+   `--session S6` filter (`analyze_tool_log.py:48`,
+   `rec.get("session") != session_filter`) then returns zero records, and
+   `workflow-review`'s Step 1b call to `analyze_tool_log.py --session
+   S[CURRENT]` silently produces an empty report. Fix: prepend `"S"` in
+   `_current_session()` when the cached value is numeric, or change
+   `persist_session` to write `f"S{n}"`. Neither is covered by the 18 new
+   telemetry tests — every test in `tests/test_telemetry.py` either constructs
+   JSONL fixtures directly or runs the hook in isolation without populating
+   `.git/CLAUDE_SESSION_ID`, so the bug is invisible to CI.
+
+2. **`scripts/tools/harness_config.py:514-517` — `load_for_repo` silently falls
+   back to harness config when the workspace `harness.yaml` exists but is
+   malformed (YAMLError, IOError, etc.).** The `except Exception` block prints
+   a WARNING to stderr but still returns `load()` — the harness root config.
+   This is a fail-open: a workspace with a typo in its `harness.yaml` (e.g.
+   wrong indentation in `code_paths`) silently gets the harness's
+   classification config, producing wrong "code"/"docs" verdicts. Fix-closed
+   behavior: `sys.exit(2)` on parse failure of an existing file, so the user
+   sees the error before classification runs on the wrong rules. The current
+   warning is easy to miss in a long session-close output stream.
+
+3. **`scripts/hooks/log_tool_usage.py:89` — `_SESSION_CACHE` is declared but
+   never read or written.** Dead code introduced this session. Either remove
+   it or use it (presumably it was meant to cache the resolved session ID to
+   avoid the slow-path re-read on every tool call; if so, that's a separate
+   feature). At minimum, delete the unused module-level constant so it doesn't
+   mislead the next reader.
+
+4. **`scripts/hooks/log_tool_usage.py:134-142` — `_extract_exit` always returns
+   0 for non-Bash tools because only `tool_response["exit_code"]` is checked.**
+   Edit/Write/Read/NotebookEdit hook responses never include `exit_code`, so
+   the `exit` field in the JSONL is uniformly 0 for those tools — making the
+   field meaningless except as a Bash-vs-non-Bash signal. `analyze_tool_log.py`
+   doesn't currently use `exit` in any of its sections, so this is latent
+   noise rather than a downstream miscalculation, but the field name implies
+   data that isn't actually being captured. Either drop the field, document
+   "Bash only" in the docstring, or add Edit/Write success detection (the
+   `tool_response` payload typically has `success` or error keys for those).
+
+5. **`scripts/hooks/log_tool_usage.py:124-131` — Bash `command` is truncated to
+   120 chars and logged verbatim with no secret scrubbing.** Commands like
+   `psql -p hunter2 ...` or `curl -H 'Authorization: Bearer SECRET' ...` land
+   in `.git/session_tool_log.jsonl` in plaintext. The log is local to `.git/`
+   so confidentiality risk is bounded, but if a user ever shares the file
+   (e.g. uploading for a workflow-review consultation), credentials leak. At
+   minimum, document the risk in the hook docstring; ideally, scrub common
+   secret patterns (`-p \S+`, `Bearer \S+`, `password=\S+`) before logging.
+
+## Test Gaps
+
+6. **No test exercises `_current_session()` in `log_tool_usage.py`.** The
+   integration between `persist_session` (writes `"6"`) and `_current_session`
+   (returns it verbatim) — Bug #1 above — is the highest-leverage missing
+   test. A single test that writes `"6"` to a temp `.git/CLAUDE_SESSION_ID`,
+   invokes the hook, and asserts the log line has `"session": "S6"` would
+   catch the bug immediately.
+
+7. **No test for `load_for_repo` malformed-YAML fail-closed behavior** (Bug #2).
+   The new tests cover the happy path and the missing-file fallback but not
+   the corrupt-YAML case. A test that writes invalid YAML and asserts the
+   intended behavior (currently: silent fallback with WARNING; should-be:
+   `sys.exit(2)`) would lock in either decision.
+
+8. **No test that the PostToolUse hook self-gates correctly (exits 0 silently)
+   when `workflow_telemetry` is unset or False.** The hook is wired in
+   `.claude/settings.json` unconditionally, so every tool call spawns
+   `log_tool_usage.py`. If the early-exit gate ever regresses (e.g. someone
+   inverts a boolean), the hook would start writing logs on every harness
+   install with no opt-in. Easy guard: a test that runs the hook with
+   `workflow_telemetry: false` and asserts no log file is created.
+
+## Architectural Concerns
+
+9. **PostToolUse hook fires on every tool call regardless of telemetry-enabled
+   state**, spawning a Python subprocess that does an import + YAML load
+   before exiting. On a session with hundreds of tool calls, this adds
+   measurable overhead even when telemetry is off. Two cheap mitigations:
+   (a) check for a sentinel file (`.git/workflow_telemetry_on`) before any
+   Python import, exiting in <10ms; (b) gate the hook in `.claude/settings.json`
+   itself with a matcher that's only added when the feature is enabled (via
+   a setup script). The current architecture pays the subprocess cost
+   universally for an opt-in feature.
+
+10. **`analyze_tool_log.py` `_retry_sequences` (line 317-333) interleaves
+    sessions when computing "same tool ≤30s" pairs.** If session S5 ends at
+    timestamp T and session S6 starts at T+10s with the same tool, the pair
+    is flagged as a "retry" even though they're in different sessions. Easy
+    fix: split records by `session` first, then compute retries per-session,
+    then concatenate. Without this, multi-session aggregation reports are
+    polluted with false-positive retries at session boundaries.
+
+11. **`scripts/tools/prepare_opus_context.py` repo-local invariants/template
+    lookup is correct but doesn't surface which set was used in the output
+    context.** When `--repo` is provided and the repo has its own
+    `architecture_invariants.md`, that file is embedded; if not, the harness's
+    is embedded silently. Opus reviewing the context can't tell which it got
+    without re-reading the diff. Add a header line like `Source:
+    <repo>/docs/architecture_invariants.md` or `Source: harness fallback` to
+    the section so the review is explicit about which constraints apply.
+
+## SKILL / Consistency
+
+12. **`scripts/tools/README.md` `analyze_tool_log.py` row** (line 47) lists it
+    in the "Workspace-compatible scripts" table but the script reads only
+    `.git/session_tool_log.jsonl` from the harness root — it has no workspace
+    awareness at all. Strictly speaking it's harness-root-only because the
+    hook writes to harness `.git/`. If the intent is per-workspace telemetry,
+    the hook needs `--repo`-style scoping too. If single-harness telemetry is
+    the design, the README row should say so explicitly to avoid confusion
+    when a workspace user runs `analyze_tool_log.py` expecting workspace data.
+
+## Carry-forwards from S1–S5
+
+No carry-forward was addressed this session (S6 was a pure-ticket-closure
+session for T026–T030, all newly opened in S5). The backlog of ~18 carry-forwards
+remains unchanged from the S5 review. The Phase 1 gate dependency ("create
+first real workspace and use it") is still blocking — and worth doing before
+or in parallel with the carry-forward cleanup, since live use is the only way
+to validate the workspace-aware paths against real workloads.
+
+## Suggested Next Session Focus
+
+1. **Fix Bug #1 (session ID format mismatch in telemetry hook).** This makes
+   the entire T026 deliverable inert for the headline use-case
+   (`workflow-review` calling `--session S<N>`). One-line fix in
+   `_current_session()` plus one integration test (Test Gap #6). Without it,
+   T026 is shipped but functionally broken.
+
+2. **Fix Bug #2 (load_for_repo fail-open on malformed YAML)** with a test.
+   Small change but it closes a fail-closed invariant gap before the first
+   real workspace lands. Bundle with Bug #1 as a single "telemetry hardening"
+   ticket.
+
+3. **Then the carry-forward backlog session.** S5's recommendation #3 still
+   stands and is now more urgent — the backlog grew by zero this session
+   (good) but hasn't shrunk in three sessions (bad). Block out one full
+   session for S1 #3 + S1 #7 / S3 #6 + S1 #11 + S3 #3 as a coherent
+   workspace-scoped-paths cleanup, before any client workspace goes live.
+
+---
+
 
