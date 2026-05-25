@@ -1,0 +1,9 @@
+name: Scrabble Score
+type: personal
+status: active
+opened: '2026-05-25'
+repos:
+- name: scrabblescore
+  path: /Users/mprzybylski/Documents/Projects/ScrabbleScore
+  role: primary
+docs_path: /Users/mprzybylski/Documents/Projects/ScrabbleScore/.harness
