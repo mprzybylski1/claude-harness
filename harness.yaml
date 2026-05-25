@@ -29,6 +29,7 @@ static_analysis_checks:
 
 # Opt-in workflow telemetry: logs each tool call to .git/session_tool_log.jsonl.
 # Analyze with: python scripts/tools/analyze_tool_log.py
-# Enable the hook in .claude/settings.json PostToolUse to activate.
+# Toggle with:  python scripts/tools/toggle_telemetry.py on|off|status
+#   (creates/removes .git/workflow_telemetry_on sentinel + updates this file)
 # workflow_telemetry: true
 # workflow_telemetry_max_lines: 5000

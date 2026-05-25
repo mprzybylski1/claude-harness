@@ -50,6 +50,24 @@ def _make_log(log_path: Path, records: list[dict]) -> None:
 # ── Tests: log_tool_usage.py ──────────────────────────────────────────────────
 
 class TestLogToolUsageHook:
+    def test_exits_silently_when_sentinel_absent(self, tmp_path):
+        """Hook exits 0 immediately (stdlib-only path) when sentinel file is absent."""
+        import time
+        sentinel = ROOT / ".git" / "workflow_telemetry_on"
+        sentinel_existed = sentinel.exists()
+        if sentinel_existed:
+            sentinel.unlink()
+        try:
+            start = time.monotonic()
+            result = _run_hook({"tool_name": "Edit", "tool_input": {"file_path": "foo.py"}})
+            elapsed = time.monotonic() - start
+        finally:
+            if sentinel_existed:
+                sentinel.touch()
+        assert result.returncode == 0
+        # Sentinel-absent path must complete well under 1 s (no YAML load)
+        assert elapsed < 1.0, f"Expected fast exit, took {elapsed:.3f}s"
+
     def test_exits_silently_when_telemetry_disabled(self):
         """Hook must exit 0 and write nothing when workflow_telemetry is false/absent."""
         payload = {"tool_name": "Edit", "tool_input": {"file_path": "foo.py"}}

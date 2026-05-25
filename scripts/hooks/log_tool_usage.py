@@ -2,8 +2,8 @@
 """
 PostToolUse hook: append one JSON line per tool call to .git/session_tool_log.jsonl.
 
-Off by default — opt in via harness.yaml:
-    workflow_telemetry: true
+Off by default — enable via: python scripts/tools/toggle_telemetry.py on
+(creates .git/workflow_telemetry_on sentinel and sets harness.yaml flag)
 
 Log format (one JSON object per line):
     {"ts": 1700000000.0, "tool": "Edit", "path": "scripts/...", "exit": 0, "session": "S6"}
@@ -26,16 +26,11 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "scripts" / "tools"))
-import harness_config as _hc
+_SENTINEL = ROOT / ".git" / "workflow_telemetry_on"
 
 _LOG_PATH = ROOT / ".git" / "session_tool_log.jsonl"
 _ERR_PATH = ROOT / ".git" / "session_tool_log.errors"
 _DEFAULT_MAX_LINES = 5000
-
-
-def _telemetry_enabled(harness: dict) -> bool:
-    return bool(harness.get("workflow_telemetry", False))
 
 
 def _max_lines(harness: dict) -> int:
@@ -43,7 +38,7 @@ def _max_lines(harness: dict) -> int:
 
 
 def _current_session() -> str:
-    """Read session ID from .git cache, then fall back to current_session.py."""
+    """Read session ID from .git cache, then fall back to deriving from sessions.md."""
     # Fast path: .git/CLAUDE_SESSION_ID (written by session_close_commit_msg.py).
     # The file stores a bare integer (e.g. "6"); normalise to "S6".
     claude_id = ROOT / ".git" / "CLAUDE_SESSION_ID"
@@ -51,8 +46,8 @@ def _current_session() -> str:
         val = claude_id.read_text().strip()
         if val:
             return val if val.startswith("S") else f"S{val}"
-    # Slow path: re-derive from sessions.md — but don't spawn a subprocess;
-    # read the file directly with the same regex current_session.py uses.
+    # Slow path: re-derive from sessions.md — no subprocess; use the same regex
+    # current_session.py uses.
     try:
         import re
         sessions_md = ROOT / "docs" / "sessions.md"
@@ -80,7 +75,6 @@ def _extract_exit(payload: dict) -> int:
     """Best-effort exit code from tool_response; defaults to 0."""
     response = payload.get("tool_response", {})
     if isinstance(response, dict):
-        # Bash hooks may surface exit_code
         code = response.get("exit_code")
         if code is not None:
             return int(code)
@@ -113,15 +107,20 @@ def _log_error(msg: str) -> None:
 
 
 def main() -> None:
-    harness = _hc.load()
-    if not _telemetry_enabled(harness):
+    # Sentinel-file fast exit: check for .git/workflow_telemetry_on before
+    # importing harness_config (which pays a PyYAML + file-read cost).
+    # Sentinel is created/removed by scripts/tools/toggle_telemetry.py.
+    if not _SENTINEL.exists():
         sys.exit(0)
+
+    sys.path.insert(0, str(ROOT / "scripts" / "tools"))
+    import harness_config as _hc
+    harness = _hc.load()
 
     try:
         raw = sys.stdin.read()
         payload = json.loads(raw)
     except json.JSONDecodeError:
-        # Malformed payload — not our fault; exit silently
         sys.exit(0)
     except Exception as exc:
         _log_error(f"stdin read failed: {exc}")
