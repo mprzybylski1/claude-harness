@@ -19,24 +19,19 @@ Gate requirements before Phase 2:
 
 ## Active Work
 
-**S3 — implement T014: docs_path support so workspace docs can live inside the project repo**
+**S4 — fix all 5 Opus S3 findings (T015–T019) + implementation-review test tightenings**
 
 Files changed:
-- `scripts/tools/workspace_config.py` — `internal_dir(ws_dir, ws)` + `active_internal_dir()` helpers
-- `scripts/hooks/check_session_log.py` — use `internal_dir()` for docs root resolution
-- `scripts/hooks/check_ticket_acs.py` — use `internal_dir()` for closed/ dir resolution
-- `scripts/hooks/regenerate_ticket_index.py` — two-path workspace detection (fast + docs_path slow path)
-- `scripts/tools/portfolio.py` — use `internal_dir()` for tickets and sessions paths
-- `scripts/tools/generate_client_progress.py` — use `internal_dir()` for sessions and closed/ paths
-- `scripts/tools/workspace.py` — prompt for docs_path in create, scaffold at resolved location, Invariant 5 check
-- `scripts/tools/workspace_internal_path.py` (new) — CLI helper printing the internal docs dir
-- `.claude/skills/session-start/SKILL.md` — updated to use INTERNAL placeholder via new script
-- `.claude/skills/session-close/SKILL.md` — updated to use INTERNAL placeholder via new script
-- `tests/test_workspace_config.py` — 7 TestInternalDir tests
-- `tests/test_hooks_workspace_scoping.py` — 5 TestDocsPathRouting tests
+- `scripts/hooks/check_ticket_acs.py` — T015: Bash branch docs_path fix (docs_root resolution + bounds check)
+- `scripts/hooks/check_session_log.py` — T017: sessions_rel fallback uses actual path in docs_path mode
+- `scripts/tools/workspace_config.py` — T018: active_internal_dir exits 2 when docs_path dir is missing
+- `scripts/tools/workspace.py` — T016: reject docs_path inside workspaces_base(); T019: overwrite guard
+- `tests/test_hooks_workspace_scoping.py` — T015 Bash branch tests (2); T017 error message test (1)
+- `tests/test_workspace_config.py` — T018 missing-dir exit test; tightened to assert error message
+- `tests/test_workspace_extra.py` — T016 containment tests (2); T019 overwrite test (1); review fixes
 
-Tickets closed: T014
-Tickets opened: none
+Tickets opened: T015, T016, T017, T018, T019
+Tickets closed: T015, T016, T017, T018, T019
 
 Remaining open items: create first real workspace for live use (Phase 1 gate)
 
@@ -50,3 +45,4 @@ S000 2000-01-01: template initialized
 S1 2026-05-25: multi-workspace architecture (T001–T009) + fixed 20 Opus review findings
 S2 2026-05-25: fixed T010–T013 (all 4 Opus S1 findings) + 4 mid-session review fixes
 S3 2026-05-25: implemented T014 — docs_path support for project-repo workspace docs
+S4 2026-05-25: fixed T015–T019 (all 5 Opus S3 findings) + implementation-review test fixes
