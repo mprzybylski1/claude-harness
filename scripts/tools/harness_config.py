@@ -37,7 +37,12 @@ def load_for_repo(repo: Path) -> dict:
             return yaml.safe_load(repo_yaml.read_text(encoding="utf-8")) or {}
         except Exception as exc:
             import sys as _sys
-            print(f"WARNING: failed to load {repo_yaml}: {exc}", file=_sys.stderr)
+            print(
+                f"ERROR: {repo_yaml} exists but failed to parse: {exc}\n"
+                "Fix the YAML before running session-close to avoid wrong classification.",
+                file=_sys.stderr,
+            )
+            _sys.exit(2)
     return load()
 
 
