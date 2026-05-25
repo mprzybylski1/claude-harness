@@ -202,7 +202,12 @@ def _trim_sessions_md(content: str) -> str:
 
 def check_test_syntax(root: Path) -> str:
     """1. Compile every test_*.py — catches SyntaxErrors before Opus review."""
-    test_files = sorted((root / "tests").glob("test_*.py"))
+    tests_dir = root / "tests"
+    if not tests_dir.exists():
+        return "SKIP  no tests/ directory found"
+    test_files = sorted(tests_dir.glob("test_*.py"))
+    if not test_files:
+        return "SKIP  no test_*.py files found"
     errors = []
     for f in test_files:
         r = subprocess.run(
@@ -217,11 +222,11 @@ def check_test_syntax(root: Path) -> str:
 
 
 def check_utcnow(root: Path) -> str:
-    """2. Grep for deprecated datetime.utcnow() in scripts/."""
+    """2. Grep for deprecated datetime.utcnow() in scripts/ and tests/."""
     prod_dirs = ["scripts", "tests"]
     existing = [str(root / d) for d in prod_dirs if (root / d).exists()]
     if not existing:
-        return "SKIP  no production directories found"
+        return "SKIP  no production directories found (scripts/ and tests/ absent)"
     r = subprocess.run(
         ["grep", "-rn", "--include=*.py",
          "--exclude=prepare_opus_context.py",   # avoid self-match on grep pattern string
@@ -386,16 +391,25 @@ def main() -> None:
         parts.append(_section("docs/sessions.md (trimmed)", trimmed))
 
     # ── docs/opus_notes.md (when provided via --opus) ─────────────────────────
-    if opus_path and opus_path.exists():
-        parts.append(_section("docs/opus_notes.md (last review)", opus_path.read_text()))
+    if opus_path:
+        if opus_path.exists():
+            parts.append(_section("docs/opus_notes.md (last review)", opus_path.read_text()))
+        else:
+            print(f"WARNING: --opus {opus_path} not found, skipping", file=sys.stderr)
 
     # ── docs/architecture_invariants.md ──────────────────────────────────────
-    inv_path = ROOT / "docs" / "architecture_invariants.md"
+    # When --repo points at a workspace, prefer the repo's own invariants file.
+    inv_path = repo_root / "docs" / "architecture_invariants.md"
+    if not inv_path.exists():
+        inv_path = ROOT / "docs" / "architecture_invariants.md"
     if inv_path.exists():
         parts.append(_section("docs/architecture_invariants.md", inv_path.read_text()))
 
     # ── Ticket TEMPLATE.md (embedded — do not read docs/tickets/TEMPLATE.md) ─
-    template_path = ROOT / "docs" / "tickets" / "TEMPLATE.md"
+    # Prefer repo-local template; fall back to harness root.
+    template_path = repo_root / "docs" / "tickets" / "TEMPLATE.md"
+    if not template_path.exists():
+        template_path = ROOT / "docs" / "tickets" / "TEMPLATE.md"
     if template_path.exists():
         parts.append(_section(
             "Ticket template (use this when creating new tickets — "

@@ -128,3 +128,62 @@ class TestPrepareOpusContextRepoFlag:
         assert result.returncode == 0, result.stderr
         context = output.read_text()
         assert "OPUS-UNIQUE-MARKER" in context
+
+
+# ── T028: invariants / template path resolution ───────────────────────────────
+
+class TestPrepareOpusContextInvariantPaths:
+    def test_repo_invariants_used_when_present(self, tmp_path):
+        """When repo has its own architecture_invariants.md, it must appear in context."""
+        repo = _make_git_repo(tmp_path)
+        docs = repo / "docs"
+        docs.mkdir()
+        inv = docs / "architecture_invariants.md"
+        inv.write_text("# Architecture Invariants\n\nREPO-INVARIANTS-MARKER\n")
+        output = tmp_path / "ctx.md"
+
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT),
+             "--repo", str(repo),
+             "--output", str(output)],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        context = output.read_text()
+        assert "REPO-INVARIANTS-MARKER" in context
+
+    def test_harness_invariants_used_as_fallback(self, tmp_path):
+        """When repo has no architecture_invariants.md, harness root fallback is used."""
+        repo = _make_git_repo(tmp_path)
+        output = tmp_path / "ctx.md"
+        harness_inv = ROOT / "docs" / "architecture_invariants.md"
+
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT),
+             "--repo", str(repo),
+             "--output", str(output)],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        context = output.read_text()
+        # Either the harness invariant file content appears, or there's no crash
+        if harness_inv.exists():
+            # The harness invariants file exists — its content should be embedded
+            first_line = harness_inv.read_text().splitlines()[0]
+            assert first_line in context or "architecture_invariants" in context.lower()
+
+    def test_missing_opus_flag_warns_to_stderr(self, tmp_path):
+        """--opus pointing at a missing file must warn to stderr and not crash."""
+        repo = _make_git_repo(tmp_path)
+        output = tmp_path / "ctx.md"
+
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT),
+             "--repo", str(repo),
+             "--opus", str(tmp_path / "nonexistent_opus.md"),
+             "--output", str(output)],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "WARNING" in result.stderr
+        assert "nonexistent_opus.md" in result.stderr
