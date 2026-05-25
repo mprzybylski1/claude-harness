@@ -47,6 +47,10 @@ def rotate(notes: Path = NOTES, archive_dir: Path = ARCHIVE_DIR) -> None:
         decade_end = decade_start + 9
         return archive_dir / f"opus_notes_S{decade_start}-S{decade_end}.md"
 
+    if not notes.exists():
+        print(f"ERROR: {notes} not found", file=sys.stderr)
+        sys.exit(1)
+
     content = notes.read_text()
     initial_count = len(_SECTION_RE.findall(content))
 

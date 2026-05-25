@@ -21,7 +21,7 @@ import re
 import sys
 from pathlib import Path
 
-OPUS_NOTES = Path("docs/opus_notes.md")
+OPUS_NOTES = Path(__file__).resolve().parents[2] / "docs" / "opus_notes.md"
 
 KEEP_SECTIONS = {
     "invariant violations",
