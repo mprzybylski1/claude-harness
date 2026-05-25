@@ -1,7 +1,7 @@
 # scripts/tools — Workspace-Awareness Matrix
 
 This matrix documents which scripts in `scripts/tools/` honor workspace-specific
-paths and which operate only on harness-root data. Snapshot taken at S5 2026-05-25;
+paths and which operate only on harness-root data. Snapshot taken at S6 2026-05-25;
 update when adding new scripts.
 
 ## Workspace-aware scripts
@@ -19,7 +19,7 @@ sessions are unaffected.
 | `prepare_opus_context.py` | `--repo PATH`, `--sessions PATH`, `--opus PATH`, `--output PATH` | Git diff runs in `--repo`; static analysis skipped for non-Python repos |
 | `archive_session_log.py` | `--sessions PATH`, `--archive PATH` | Moves old session log entries to archive |
 | `rotate_opus_notes.py` | `--opus PATH`, `--archive PATH` | Archives old Opus review sections |
-| `classify_session.py` | `--repo PATH` | Git operations run in `--repo`; session-close SKILL should pass this for workspace sessions |
+| `classify_session.py` | `--repo PATH` | Git ops run in `--repo`; code paths and session-close prefix loaded from `<repo>/harness.yaml` (falls back to harness root). SKILL passes `--repo <primary-repo-path>` for workspace sessions. |
 | `generate_ticket_index.py` | `--sessions-file PATH` | Used by `regenerate_ticket_index.py` hook |
 
 ## Workspace-compatible scripts (no special flags needed)
@@ -44,7 +44,8 @@ sessions are unaffected.
 | `portfolio.py` | Cross-workspace overview; always reads all workspaces |
 | `surface_stale_tickets.py` | Reads harness-root `docs/tickets/INDEX.md`; needs workspace flag if workspace tickets are separate |
 | `repo_hygiene.py` | Harness-root hygiene checks |
-| `harness_config.py` | Library; loads `harness.yaml` |
+| `harness_config.py` | Library; loads `harness.yaml`; `load_for_repo(path)` for per-workspace config |
+| `analyze_tool_log.py` | Reads `.git/session_tool_log.jsonl`; produces workflow efficiency report; `--log`, `--session` flags; opt-in via `workflow_telemetry: true` in `harness.yaml` |
 
 ## Adding a new script
 

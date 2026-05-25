@@ -117,13 +117,18 @@ For any ticket being closed this session:
 
 ## Step 3 — Classify the session: code-touching or docs-only
 
+**Harness root sessions:**
 ```bash
 python scripts/tools/classify_session.py
 ```
 
-Prints `code` or `docs`. For workspace sessions, the check is against the workspace repos
-(not the harness root). If the script checks harness root by default, verify manually
-whether workspace repo files changed.
+**Workspace sessions** (pass the primary repo path):
+```bash
+python scripts/tools/classify_session.py --repo <primary-repo-path>
+```
+
+Prints `code` or `docs`. With `--repo`, code paths are read from `<repo>/harness.yaml`
+if present; otherwise falls back to harness-root defaults.
 
 ## Step 4 — Pre-rotate opus_notes.md
 
