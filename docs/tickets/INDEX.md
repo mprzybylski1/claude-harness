@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S1 2026-05-25. 5 open tickets.
+Generated S1 2026-05-25. 4 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (1)
@@ -9,11 +9,9 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 |----|-------|-------|-------|-----|
 | T005 | Script isolation enforcement — no cross-workspace data leakage | Ph2 | infra | -1 sessions |
 
-## High (1)
+## High (0)
 
-| ID | Title | Phase | Layer | Age |
-|----|-------|-------|-------|-----|
-| T004 | Session-close workspace integration | Ph2 | process | -1 sessions |
+*(none)*
 
 ## Medium (2)
 

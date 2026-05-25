@@ -28,6 +28,7 @@ from prepare_opus_context import (
     check_spec_status_enum,
 )
 import harness_config as _hc
+import workspace_config as _wc
 
 _ALL_CHECKS: dict[str, object] = {
     "test_syntax":          check_test_syntax,
@@ -61,8 +62,17 @@ def _resolve_checks() -> list:
 
 
 def main() -> None:
+    # Enforce workspace isolation: static analysis must only scan declared repos.
+    workspace = _wc.active_workspace()
+    scan_root = ROOT
+    if workspace:
+        primary = _wc.primary_repo(workspace)
+        if primary:
+            _wc.assert_workspace_boundary(primary, workspace)
+            scan_root = primary
+
     checks = _resolve_checks()
-    results = [fn(ROOT) for fn in checks]
+    results = [fn(scan_root) for fn in checks]
     for line in results:
         print(line)
 

@@ -179,7 +179,7 @@ Append a static-analysis summary to `workspaces/<slug>/internal/opus_notes.md`.
 For each workspace repo declared in `workspace.yaml`, check `git status`. If dirty,
 commit remaining changes (any not already committed per-ticket):
 
-```bash
+```
 cd <repo-path>
 git add <changed files>
 git commit -m "docs: S[CURRENT_SESSION] session close — <summary>"
