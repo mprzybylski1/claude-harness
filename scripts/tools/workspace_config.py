@@ -13,11 +13,13 @@ _ROOT = Path(__file__).resolve().parents[2]
 
 
 def _yaml_load(path: Path) -> dict:
+    import yaml
     try:
-        import yaml
         return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    except Exception:
+    except (FileNotFoundError, OSError):
         return {}
+    except yaml.YAMLError:
+        raise
 
 
 # ── Directory helpers ─────────────────────────────────────────────────────────

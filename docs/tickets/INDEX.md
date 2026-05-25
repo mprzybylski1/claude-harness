@@ -1,13 +1,12 @@
 # Ticket Index
 
-Generated S2 2026-05-25. 4 open tickets.
+Generated S2 2026-05-25. 3 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
-## Critical (2)
+## Critical (1)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
-| T010 | _yaml_load swallows YAML parse errors — workspace detection silently fails | process | infra | 1 session |
 | T011 | check_unstaged_code_changes workspace branch reads repos without boundary check | process | infra | 1 session |
 
 ## High (1)

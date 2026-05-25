@@ -2,11 +2,11 @@
 id: T010
 title: _yaml_load swallows YAML parse errors — workspace detection silently fails
 severity: critical
-status: open
+status: closed
 phase: process
 layer: infra
 opened: S1 2026-05-25
-closed:
+closed: S2 2026-05-25
 ---
 
 ## Problem
@@ -19,12 +19,12 @@ instead of being blocked. This is an Invariant 4 violation in the workspace-dete
 
 ## Acceptance Criteria
 
-- [ ] `_yaml_load` distinguishes `OSError` (file missing → return `{}`) from
+- [x] `_yaml_load` distinguishes `OSError` (file missing → return `{}`) from
   `yaml.YAMLError` (malformed → log to stderr and exit 2, or re-raise)
-- [ ] `ImportError` (yaml not installed) is not swallowed — propagates to caller
-- [ ] `test_workspace_config.py` — new test: feed malformed YAML to `load_workspace()`;
+- [x] `ImportError` (yaml not installed) is not swallowed — propagates to caller
+- [x] `test_workspace_config.py` — new test: feed malformed YAML to `load_workspace()`;
   assert it does NOT return `{}` silently (expect exception or sys.exit 2)
-- [ ] All existing workspace tests still pass
+- [x] All existing workspace tests still pass
 
 ## Notes
 
@@ -32,3 +32,5 @@ Opus S1 finding #1 and #5. Finding #5 is a subset — the bare `Exception` also 
 `ImportError` and `AttributeError`. Both are fixed by the same narrowing.
 
 ## Resolution
+
+Split `_yaml_load` exception handling: `import yaml` moved outside the try block (so `ImportError` is never caught), `except (FileNotFoundError, OSError): return {}` for missing files, `except yaml.YAMLError: raise` for malformed content. Added `tests/test_workspace_config.py` with 4 tests covering missing file, valid YAML, malformed YAML raises, and malformed YAML does not silently return `{}`. All 51 tests pass.
