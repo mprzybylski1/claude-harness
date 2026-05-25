@@ -165,8 +165,21 @@ def cmd_create(args: argparse.Namespace) -> None:
         except ValueError:
             pass  # Good — docs_path is outside workspaces_base
 
-    ws_dir.mkdir(parents=True)
     docs_dir = docs_path_resolved if docs_path_resolved else ws_dir / "internal"
+    # Refuse to overwrite an existing workspace at docs_path (data loss prevention).
+    if docs_path_resolved:
+        existing = [f for f in ("sessions.md", "opus_notes.md", "tickets/INDEX.md")
+                    if (docs_path_resolved / f).exists()]
+        if existing:
+            print(
+                f"Error: docs_path '{docs_path_resolved}' already contains workspace files: "
+                + ", ".join(existing)
+                + "\nRemove or migrate them first, or choose a different docs_path.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    ws_dir.mkdir(parents=True)
     _scaffold(ws_dir, docs_dir)
     _write_initial_files(ws_dir, docs_dir, name)
 

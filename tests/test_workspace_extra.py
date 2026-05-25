@@ -287,3 +287,43 @@ class TestDocsPathContainmentCheck:
                 mod.cmd_create(args)
             except SystemExit as e:
                 assert e.code != 1, f"Valid docs_path must not exit(1), got {e.code}"
+
+
+# ── T019: scaffold must not overwrite existing docs files ─────────────────────
+
+class TestScaffoldOverwriteGuard:
+    def test_create_refuses_when_sessions_md_exists_at_docs_path(self, tmp_path):
+        """cmd_create aborts when docs_path already contains sessions.md."""
+        repo_path = tmp_path / "myapp"
+        repo_path.mkdir()
+        ws_base = tmp_path / "harness" / "workspaces"
+        ws_base.mkdir(parents=True)
+
+        # Pre-existing workspace data at docs_path
+        docs_path = repo_path / ".harness"
+        docs_path.mkdir()
+        existing_sessions = docs_path / "sessions.md"
+        existing_sessions.write_text("# Existing sessions — do not overwrite\n", encoding="utf-8")
+
+        mod = _load_workspace_tool()
+        args = argparse.Namespace(slug="test-ws3")
+
+        inputs = iter([
+            "Test Workspace 3",
+            "personal",
+            "myapp",
+            str(repo_path),
+            "",
+            str(docs_path),
+        ])
+
+        with (
+            patch.object(mod, "_workspaces_base", return_value=ws_base),
+            patch("builtins.input", side_effect=inputs),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                mod.cmd_create(args)
+
+        assert exc_info.value.code == 1, "must abort when existing sessions.md would be overwritten"
+        # Existing file must be untouched
+        assert existing_sessions.read_text(encoding="utf-8") == "# Existing sessions — do not overwrite\n"
