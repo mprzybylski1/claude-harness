@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S7 2026-05-25. 0 open tickets.
+Generated S7 2026-05-25. 1 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -19,6 +19,8 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Unknown (0)
+## Unknown (1)
 
-*(none)*
+| ID | Title | Phase | Layer | Age |
+|----|-------|-------|-------|-----|
+| T000 | Short description (keep under 60 chars) | 2 | 3 | 4 | process | backend | frontend | fullstack | infra | process | 7 sessions |

@@ -8,9 +8,9 @@
 
 *(Rewritten each session)*
 
-**Phase 1 (Active):** Multi-workspace architecture build-out — harness evolves from single-project tool to multi-project orchestrator.
+**Phase 2 (Active):** Harness hardening and telemetry — fixing workspace session-start gaps, telemetry reliability, and tool correctness issues surfaced in first real workspace run.
 
-Gate requirements before Phase 2:
+Phase 1 gate: complete (S6 2026-05-25)
 - [x] Workspace model designed and implemented (T001–T009)
 - [x] All Opus review findings fixed
 - [x] First real workspace created and used for a live session (Scrabble Score)
@@ -19,29 +19,22 @@ Gate requirements before Phase 2:
 
 ## Active Work
 
-**S6 — close all open tickets (T026–T030) + impl-review hardening**
+**S7 — closed T031–T033 (workspace session-start gaps + telemetry hardening) + enabled telemetry by default**
 
 Files changed:
-- `harness.yaml` — T029: added `"scripts/"` to `code_paths`; T026: workflow_telemetry opt-in comments
-- `scripts/tools/classify_session.py` — T027: `CODE_PREFIXES`/`close_prefix` loaded per-repo via `load_for_repo()`; warns to stderr when no anchor found
-- `scripts/tools/harness_config.py` — T027: `load_for_repo()` added; T030c: stale docstring fixed; warns on YAML parse failure
-- `scripts/tools/prepare_opus_context.py` — T028: prefer `<repo>/docs/architecture_invariants.md` + `TEMPLATE.md` before harness root fallback; T030a: `check_test_syntax` returns SKIP when no files; T030e: warns to stderr on missing `--opus` path
-- `scripts/tools/archive_session_log.py` — T030d: docstring corrected to silent-success behavior
-- `scripts/tools/README.md` — T027: updated classify_session row; added `analyze_tool_log.py` row; snapshot date updated to S6
-- `scripts/hooks/log_tool_usage.py` — T026: new PostToolUse telemetry hook; impl-review: atomic rotation, error file, exit extraction, subprocess-free session ID
-- `scripts/tools/analyze_tool_log.py` — T026: new analysis script; impl-review: .get() on all fields, skipped-line count in header
-- `.claude/skills/session-close/SKILL.md` — T027/T030b: Step 3 updated to pass `--repo` for workspace sessions; angle-bracket placeholder fixed
-- `.claude/skills/workflow-review/SKILL.md` — T026: Step 1b calls analyze_tool_log when telemetry enabled
-- `.claude/settings.json` — T026: hook registered in PostToolUse `".*"` matcher
-- `tests/test_workspace_path_flags.py` — T027: 3 tests for classify_session --repo; T029: 1 test for scripts/ in code_paths
-- `tests/test_workspace_gitignore.py` — T030f: same-repo skip branch test added
-- `tests/test_prepare_opus_context_workspace.py` — T028: 3 tests for invariants/template path resolution
-- `tests/test_telemetry.py` — new: 18 tests for hook, analysis script, load_for_repo fallback (impl-review F9/F10/F11)
+- `scripts/tools/extract_opus_key_sections.py` — T031: regex matches #{1,2} Opus Review; sub_prefix derived from actual # count; error message uses path not constant; add_help=False removed; boundary line uses split() not find()
+- `.claude/skills/session-start/SKILL.md` — T032: current_session.py now invoked with --sessions in workspace mode
+- `.claude/skills/session-close/SKILL.md` — T032: current_session.py call updated to show optional flag
+- `scripts/hooks/log_tool_usage.py` — T033: sentinel-file fast exit before harness_config import; bootstrap from harness.yaml on fresh clone; logged sentinel creation failure; updated docstring
+- `scripts/tools/toggle_telemetry.py` — T033: new helper; _set_harness_yaml returns bool; misleading-success exit fixed; regex handles commented-out form
+- `harness.yaml` — telemetry enabled by default (workflow_telemetry: true uncommented)
+- `tests/test_workspace_path_flags.py` — T031: 3 new tests (level-2 header, error path, --help); level-1 regression test added
+- `tests/test_telemetry.py` — T033: sentinel tests; bootstrap test; timing tightened
 
 Tickets opened: (none)
-Tickets closed: T026, T027, T028, T029, T030
+Tickets closed: T031, T032, T033
 
-Remaining open items: create first real workspace for live use (Phase 1 gate); T000 stale template row in generate_ticket_index.py
+Remaining open items: T000 stale template row in generate_ticket_index.py (pre-existing)
 
 ---
 
@@ -56,3 +49,4 @@ S3 2026-05-25: implemented T014 — docs_path support for project-repo workspace
 S4 2026-05-25: fixed T015–T019 (all 5 Opus S3 findings) + implementation-review test fixes
 S5 2026-05-25: workspace-awareness flags (T020–T025) + dead trading-app code removal + /workflow-review skill
 S6 2026-05-25: closed T026–T030 (telemetry hook, classify_session fix, invariants path fix, code_paths fix, batch consistency) + impl-review hardening (14 findings fixed, 18 new tests)
+S7 2026-05-25: closed T031–T033 (workspace session-start gaps, telemetry overhead) + enabled telemetry by default + impl-review hardening (8 findings fixed)

@@ -1,206 +1,3 @@
-# Opus Review — S5
-
-Scope: workspace-awareness flags across `scripts/tools/`, dead trading-app code
-removal from `prepare_opus_context.py`, new `/workflow-review` skill, and a fresh
-`scrabble-score` workspace scaffold. ~1225 insertions / 269 deletions.
-
-## Invariant Violations
-
-None new. The S3 #6 carry-forward (dead `sessions_rel` path-based comparison in
-`check_session_log.py:262-271`) and S3 #4 (`internal_dir` no-existence-guard)
-remain — both addressable in a future cleanup pass but no regression from S5.
-
-## Concrete bugs
-
-1. **`scripts/tools/extract_opus_key_sections.py:24` — `OPUS_NOTES` is a
-   relative path, breaks the harness-root default.** The module uses
-   `OPUS_NOTES = Path("docs/opus_notes.md")` (relative), unlike every other
-   tool in this batch and unlike `extract_carry_forwards.py:18` which uses
-   `Path(__file__).resolve().parents[2] / "docs" / "opus_notes.md"` (absolute).
-   When invoked from any CWD other than the harness root (e.g. inside a
-   workspace where the SKILL is meant to fall back to harness defaults),
-   `main()` will try to read `./docs/opus_notes.md` from the wrong directory
-   and either fail or read the wrong file. Fix: replace line 24 with
-   `OPUS_NOTES = Path(__file__).resolve().parents[2] / "docs" / "opus_notes.md"`
-   and update line 77 to reference `path` instead of `OPUS_NOTES` (otherwise
-   the error message also prints the wrong path when `--opus` is provided).
-
-2. **`scripts/tools/rotate_opus_notes.py:50` — no existence guard on `notes`.**
-   `content = notes.read_text()` is called unconditionally. If a user passes
-   `--opus /nonexistent/path` the script crashes with `FileNotFoundError`
-   instead of the clean error message that `archive_session_log.py:103-105`
-   provides for the same scenario. Add `if not notes.exists(): print(
-   f"ERROR: {notes} not found", file=sys.stderr); sys.exit(1)` before the
-   `read_text()` call. Same inconsistency cost as S3 found in
-   `extract_opus_key_sections.py` — consistency matters when SKILLs hand
-   user-supplied paths to these scripts.
-
-3. **`scripts/tools/classify_session.py` — `--repo` flag swaps git CWD but
-   not the config that decides classification.** `CODE_PREFIXES` (line 34)
-   and `_SESSION_CLOSE_PREFIX` (resolved through `_hc.session_close_prefix`)
-   are loaded from the harness's own `harness.yaml`. With `--repo
-   /home/user/projects/myapp`, git ops correctly run in the workspace repo,
-   but the classifier looks for `src/`, `lib/`, `tests/` (harness values)
-   in workspace repos that may use entirely different prefixes. Worse,
-   `_get_last_session_close_sha` searches the workspace repo's git log for
-   "docs: S\d+ session close" — workspace projects almost never have this
-   commit pattern, so `sha = ""` triggers the conservative "code" fallback
-   at line 113-115, which means workspace sessions are always classified
-   "code" regardless of what changed. Fix: either accept `--code-paths`
-   and `--session-prefix` flags, or read these from a workspace-specific
-   config (e.g. workspace.yaml's `classify_config` block). Otherwise the
-   `--repo` flag is decorative.
-
-4. **`scripts/tools/prepare_opus_context.py:265 — `_is_python_project` gate
-   is too coarse, leading to misleading PASS results.** When `--repo PATH`
-   points at a Python project that has `pyproject.toml` but no `tests/`
-   directory, `check_test_syntax` returns `PASS  0 test files compile
-   cleanly` and `check_bash_blocks` returns `SKIP  check_skill_bash_blocks.py
-   not found`. The user sees "PASS" for tests but in fact zero coverage was
-   verified — a fail-open style positive. Tighten: in `check_test_syntax`,
-   return `SKIP` (not PASS) when no test files are found. Same for
-   `check_utcnow` when none of the searched directories exist.
-
-5. **`scripts/tools/prepare_opus_context.py:393-395 — architecture
-   invariants and ticket template always come from harness ROOT, even when
-   `--repo` targets a workspace.** Lines 393 (`inv_path = ROOT / "docs" /
-   "architecture_invariants.md"`) and 398 (`template_path = ROOT / "docs"
-   / "tickets" / "TEMPLATE.md"`) ignore the workspace context. For workspace
-   sessions, Opus is handed the harness's invariants and template, not the
-   workspace's. Invariants are project-specific by definition — sending the
-   wrong set silently degrades the review. Fix: when `--repo` is provided,
-   look in `<repo>/docs/architecture_invariants.md` and `<repo>/docs/tickets/
-   TEMPLATE.md` first, fall back to harness defaults only if missing. Or
-   add explicit `--invariants` / `--template` flags.
-
-6. **`docs/system_state.md` regression — current uncommitted file shows
-   `T000` as an open ticket.** The Open Tickets table reads
-   `| T000 | Short description (keep under 60 chars) | 2 | 3 | 4 | process |
-   backend | frontend | fullstack | infra | process | 5 sessions |`. T000 is
-   the TEMPLATE.md sentinel ID; current `docs/tickets/INDEX.md` correctly
-   shows only T026. Root cause: at some point during S5 the
-   `generate_ticket_index.py` script saw TEMPLATE.md as a ticket and
-   `update_system_state.py:_extract_open_tickets` (line 53-70) pulled the
-   resulting row by simple `line.startswith("| T")` matching. Two fixes
-   needed: (a) `generate_ticket_index.py:load_tickets` (line 100-102) should
-   skip any file with `id == "T000"` or filename `TEMPLATE.md`, and (b)
-   `update_system_state.py` should re-run before commit so a stale
-   `system_state.md` doesn't ship to the archive. The current uncommitted
-   diff will be embedded in tomorrow's review context unless cleaned.
-
-## Test gaps
-
-7. **No tests for `classify_session.py` at all** (`grep classify_session
-   tests/` returns empty), including the new `--repo` flag added in T022.
-   Combined with finding #3, this means the workspace classification path
-   has zero coverage — a regression that flips every workspace session to
-   "docs" (skipping full Opus review) would go undetected. Add a class
-   along the lines of the existing `TestArchiveSessionLogFlags` pattern in
-   `tests/test_workspace_path_flags.py`.
-
-8. **`tests/test_workspace_gitignore.py` has no test for the
-   `repo_root == ROOT.resolve()` skip branch** (`workspace.py:57`). Easy to
-   add: create a workspace whose docs_path lands inside the harness repo,
-   call `_add_opus_context_to_gitignore`, assert no write happened. Without
-   this test, a future refactor that removes the guard would re-add a
-   redundant gitignore line in the harness's own `.gitignore` (or worse,
-   point at a workspace path the harness doesn't actually own).
-
-## SKILL drift / consistency
-
-9. **`.claude/skills/session-close/SKILL.md:121` — bare `classify_session.py`
-   call, no `--repo` for workspace sessions.** The README workspace-awareness
-   matrix says "session-close SKILL should pass `--repo` for workspace
-   sessions" (scripts/tools/README.md:31), but the SKILL itself doesn't.
-   Lines 124-126 are advisory ("verify manually") instead of prescriptive.
-   Either bake the `--repo` invocation into the SKILL when in workspace
-   context, or drop the README claim. Today the SKILL drives behavior, so
-   the README is technically wrong.
-
-10. **`scripts/tools/harness_config.py:76` — stale docstring.** Lists
-    `'eval_exec', 'sql_mutations'` as example check names, but both were
-    deleted by T021. Update to mention the current set: `test_syntax`,
-    `utcnow`, `bash_blocks` (which `harness.yaml:23` already documents
-    correctly).
-
-11. **`harness.yaml:11-14` — `code_paths` does not include `scripts/`.**
-    The harness's own production code lives in `scripts/tools/` and
-    `scripts/hooks/`, but the configured `code_paths` only contains
-    `src/`, `lib/`, `tests/`. A session that touches only `scripts/tools/`
-    (no test changes) would be classified as "docs" and skip full Opus
-    review. This session is rescued only because `tests/` were also
-    modified. Add `"scripts/"` to the list.
-
-12. **`scripts/tools/archive_session_log.py:111-112` — docstring/behavior
-    mismatch.** Docstring lines 16-17 promise the script prints
-    "Session log has N entries (threshold M). No action needed." when
-    `count <= threshold`. The code silently returns 0 with no output.
-    Either restore the print (helpful for CLI visibility) or update the
-    docstring to match the actual silent-success behavior.
-
-13. **`scripts/tools/prepare_opus_context.py:389` — `--opus PATH` silently
-    skipped if path does not exist.** No warning on typo'd path; the user
-    thinks `opus_notes.md` was embedded in context but it was not. Add a
-    `print(f"WARNING: --opus {opus_path} not found, skipping", file=
-    sys.stderr)` when the path was provided but does not exist (distinct
-    from the omit-by-default case where `opus_path is None`).
-
-## Carry-forwards from S1–S4 (status check)
-
-- S1 #3 (workspace-isolation in `run_static_analysis` helpers) — STILL OPEN.
-- S1 #7 / S3 #6 / S4 #1 (dead `sessions_rel` path-based comparison) —
-  STILL OPEN. No change this session; S5 did not touch
-  `scripts/hooks/check_session_log.py`.
-- S1 #8 (header-line regex fragility) — STILL OPEN.
-- S1 #9 (portfolio stale-repo marking) — STILL OPEN.
-- S1 #10 (workspace.py warns-but-creates on missing repo) — STILL OPEN.
-- S1 #11 (`_is_closed_ticket` loose substring match) — STILL OPEN.
-- S1 #12 (`TRACKED_PREFIXES` filter missing in workspace branch) — STILL OPEN.
-- S1 #14 (no E2E test for `run_static_analysis` workspace mode) — STILL OPEN.
-- S1 #15 (no test for per-repo git-status iteration) — STILL OPEN.
-- S2 #15 (closed-ticket Resolution audit for client_progress safety) — STILL OPEN.
-- S2 #17 (`active_workspace_dir()` called twice per Bash command) — STILL OPEN.
-- S2 #18 (silent OSError swallow in AC pre-lint) — STILL OPEN.
-- S2 #19 (no test for `ImportError` propagation in `_yaml_load`) — STILL OPEN.
-- S2 #20 (no test for ws_dir branch of bounds check) — STILL OPEN.
-- S2 #21 (no regression test for boundary check ordering) — STILL OPEN.
-- S3 #3 (N YAML loads per hook in `regenerate_ticket_index.py` slow path) — STILL OPEN.
-- S3 #4 (`internal_dir` blindly resolves `docs_path` without `is_dir` check) —
-  PARTIALLY closed by T018 (which added the check in `active_internal_dir`
-  for `docs_path` mode). `internal_dir` itself remains unchecked for callers
-  bypassing `active_internal_dir`.
-- S3 #11 (perf test for `_detect_workspace_from_path`) — STILL OPEN.
-- S4 #3 (standard-workspace Bash branch in `check_ticket_acs` has no test) —
-  STILL OPEN.
-
-The backlog now stands at ~18 open carry-forwards. Several are individually
-small (test gaps, minor refactors); collectively they undermine the Phase 1
-gate. Suggest one full cleanup-pass session before any client workspace goes
-live.
-
-## Suggested Next Session Focus
-
-1. **Fix findings #3 and #11 (and add the test in #7) together** — they're
-   the same bug from two angles: workspace sessions get the wrong
-   classification config. Without this, `--repo` is a misleading API
-   surface. Estimated 1-ticket session.
-
-2. **Clean `docs/system_state.md` and add the T000 filter in
-   `generate_ticket_index.py:load_tickets` (finding #6).** Otherwise the
-   stale T000 row will keep regenerating. Also a 1-ticket session;
-   sequence it before the first real workspace is created so the dashboard
-   is correct.
-
-3. **Take a single dedicated session for the carry-forward backlog** — at
-   18 open items, a focused pass attacking S1 #3 + S1 #11 + S1 #12 + S3 #3
-   + S3 #6 (related to workspace-scoped path handling) is much more
-   efficient than piecemeal fixes across many sessions. The shared
-   infrastructure (workspace-aware `regenerate_ticket_index`, removal of
-   dead path comparisons) means a single context window can carry the
-   whole cleanup.
-
----
-
 # Opus Review — S6 2026-05-25
 
 Scope: closed T026 (telemetry hook + analyzer), T027 (classify_session `--repo`
@@ -363,3 +160,171 @@ to validate the workspace-aware paths against real workloads.
    (good) but hasn't shrunk in three sessions (bad). Block out one full
    session for S1 #3 + S1 #7 / S3 #6 + S1 #11 + S3 #3 as a coherent
    workspace-scoped-paths cleanup, before any client workspace goes live.
+
+---
+
+# Opus Review — S7 2026-05-25
+
+Scope: closed T031 (extract_opus_key_sections header-level bug), T032 (session-start
+skill workspace flag), T033 (telemetry hook off-state overhead) + enabled
+telemetry by default. ~440 insertions / 21 deletions across one tool, one
+hook, one new helper, and two skill docs.
+
+S6 inline-fix status check: Bug #1 (session ID `S<n>` normalisation) closed inline
+(commit bf1f00d). Bug #3 (`_SESSION_CACHE` dead code) closed inline.
+Bugs #2, #4, #5, and Concerns #10, #11, #12 from S6 remain open and unaddressed
+this session — they should be noted as carry-forward.
+
+## Invariant Violations
+
+None new. Architecture invariants 1-5 are placeholders/optional and Invariant 5
+(workspace isolation) is not touched by this diff. The fail-closed-on-exceptions
+invariant (#4) is still violated by `harness_config.load_for_repo` (S6 Bug #2,
+unchanged this session) — fail-open silent fallback on malformed YAML remains.
+
+## Architectural Concerns
+
+1. **`scripts/hooks/log_tool_usage.py:128-135` — the bootstrap-from-yaml path
+   subverts the T033 design goal.** T033's acceptance criterion was "OFF-state
+   hook completes in well under 10 ms". With the bootstrap logic, the
+   first-tool-call-after-fresh-clone (or after sentinel deletion outside
+   `toggle_telemetry.py`) does a stdlib regex read of `harness.yaml` AND then
+   touches the sentinel AND then proceeds to do the full slow path (PyYAML
+   import + load via `_hc.load()`). That's the worst of both worlds — the
+   user pays the cost they were trying to avoid, exactly when the cache is
+   cold. The intended fast-OFF path only works when telemetry is genuinely off
+   in `harness.yaml`. Fix options:
+   (a) drop the bootstrap entirely — require explicit `toggle_telemetry.py on`,
+       and remove the auto-touch logic; OR
+   (b) bootstrap-touch the sentinel but `sys.exit(0)` after — skip the slow
+       path on the very first call; the next call will hit the fast path. This
+       drops one record on fresh clone but eliminates the cost spike.
+   Current code does the bootstrap touch AND proceeds, which is the worst
+   choice.
+
+2. **`scripts/hooks/regenerate_ticket_index.py:127-134` — same workspace-flag
+   omission as T032, but in a hook (not a skill).** `get_current_session()`
+   at line 28-37 invokes `current_session.py` with no `--sessions` flag.
+   `check_closed_attribution` calls it to validate the `closed:` field of a
+   newly-written ticket. When the ticket lives under
+   `<workspace>/internal/tickets/closed/`, the hook compares the workspace's
+   `closed: S<workspace_session>` value against the **harness-global** session,
+   producing spurious "T016 attribution mismatch" warnings on every workspace
+   close. T032 fixed the user-facing skill but missed this hook — same root
+   cause (T020 made the script accept `--sessions` but consumers didn't
+   migrate). Fix: in `regenerate_ticket_index.py`, detect the workspace
+   (already done at line 82 via `_detect_workspace_from_path`) and pass
+   `--sessions <ws>/internal/sessions.md` to the subprocess.
+
+3. **`scripts/tools/toggle_telemetry.py:31-36` — regex `^#?\s*(workflow_telemetry\s*:\s*).*$`
+   only strips a single leading `#`.** A `# # workflow_telemetry: true` (double-
+   commented, as some users do when temporarily disabling) becomes
+   `# workflow_telemetry: false` after toggle off — still commented, and
+   `_yaml_telemetry_enabled()` in the hook treats it as false even when the
+   user toggles on. Minor edge case but trivially fixed by `^[#\s]*` or
+   `^(#\s*)*` in the prefix. Also note: the regex matches `workflow_telemetry:
+   trueblue` because `_yaml_telemetry_enabled` in the hook (line 118) has no
+   trailing `\s*$` or word boundary — same class of bug. Add `\b` or `\s*$`
+   to both.
+
+4. **`tests/test_telemetry.py:128-132` — `test_exits_silently_when_telemetry_disabled`
+   no longer tests what its name promises.** The pre-S7 version had a
+   comment about "Log must NOT have been written" but the assert never
+   verified it. S7 removed the comment but didn't add a check. With S7's
+   default-on state, this test runs with telemetry ON — so the hook *does*
+   write a log line. The test passes because it only asserts exit code 0.
+   Either rename to `test_exits_silently_with_any_state` (descriptive of
+   actual behaviour) or rebuild the test to set telemetry off, run the hook,
+   and assert no append to `.git/session_tool_log.jsonl`. The `test_exits_
+   silently_when_both_off` test (lines 88-109) does cover this case
+   properly, so this old test is now redundant noise.
+
+5. **`tests/test_telemetry.py:88-109` — `test_exits_silently_when_both_off`
+   mutates the real `harness.yaml` and `.git/workflow_telemetry_on` of the
+   running repository.** The `try/finally` restores state on success, but if
+   the test is interrupted (SIGINT, OOM, runner timeout), the user's actual
+   harness.yaml is left in `workflow_telemetry: false` state — silently
+   disabling telemetry until the next manual fix. A safer pattern is to
+   patch `ROOT` via monkeypatch (as the sibling `test_current_session_normalises_
+   bare_integer` does at lines 143-156). The existing isolated-root helper
+   `_make_fake_root` (lines 52-72) does exactly this but is unused. The test
+   should use it.
+
+6. **`scripts/hooks/log_tool_usage.py:75-82` — `_extract_exit` is still
+   Bash-only (S6 Concern #4, unaddressed).** S6 raised this and S7 deferred
+   it. The `exit` field is uniformly 0 for Edit/Write/Read records, making
+   it a misleading column in the JSONL. Either drop it from the record dict
+   at line 153-159, or rename to `bash_exit` and only emit for Bash records.
+   Current state ships latent noise.
+
+7. **`scripts/tools/analyze_tool_log.py:71-87` — `_retry_sequences` still
+   interleaves sessions (S6 Concern #10, unaddressed).** With telemetry now
+   default-on, multi-session aggregation (e.g. running
+   `analyze_tool_log.py` with no `--session` filter) will continue to flag
+   false-positive retries at session boundaries. The fix is ~5 lines: group
+   `records` by `session` first, run `_retry_sequences` per group, then
+   concatenate. The urgency goes up because the data starts accumulating
+   silently from S7 onward.
+
+## Bugs & Implementation Issues
+
+1. **Confirmed: `scripts/hooks/log_tool_usage.py:135` — bootstrap failure is
+   logged but not surfaced; the hook continues with a missing sentinel.**
+   If `.git/` is missing or write-protected, `_log_error` writes to
+   `.git/session_tool_log.errors` (which will also fail), and the hook
+   proceeds to the slow path. On every subsequent tool call the bootstrap
+   re-attempts and re-fails. There's no rate-limit on the error log either.
+   In an environment where `.git` is genuinely inaccessible, this could
+   inflate `session_tool_log.errors` to thousands of lines per session.
+   Either fail-fast (`sys.exit(0)` after first bootstrap failure within a
+   process — though hooks are per-tool-call subprocesses so this is moot)
+   or rate-limit via `mtime` check on the error file.
+
+2. **Confirmed: `harness.yaml:31-34` — `workflow_telemetry: true` default
+   means the harness ships hot-by-default for all consumers cloning it.**
+   This is a deliberate session decision (per the S7 active-work entry),
+   but it deserves a note: T026 was originally framed as "opt-in"; flipping
+   the default reverses that without a ticket explicitly authorizing the
+   change. The flip is logged in commit b6a82d9 but not tied to a ticket.
+   Either retroactively note the policy change in a ticket (T026 follow-up
+   or new ticket) or annotate the comment in `harness.yaml` itself
+   ("default-on as of S7; opt out via toggle_telemetry.py off"). Without
+   that, future readers will see the S6 ticket description ("Off by default
+   — opt in via harness.yaml") in `git log` and be confused.
+
+3. **Suspected: `scripts/tools/extract_opus_key_sections.py:118-121` —
+   `argparse.ArgumentParser()` (default `add_help=True`) combined with the
+   `--with-carry-forwards` flag means `--help` exits with code 0 BEFORE the
+   `if _args.with_carry_forwards:` branch at line 124 ever runs.** The test
+   `test_help_flag_exits_zero` asserts exit 0 and `"usage" in stdout` —
+   which passes — but the help text doesn't document `--with-carry-forwards`
+   behavior (just that the flag exists). Minor docstring gap, not a bug.
+   More importantly: `--with-carry-forwards` is undocumented in the SKILL
+   and only mentioned in the source. If session-start skill ever wants
+   carry-forwards in the briefing, the option is invisible.
+
+## Suggested Next Session Focus
+
+1. **Fix Concern #2 (`regenerate_ticket_index.py` workspace flag omission).**
+   This is the exact same bug class as T032 just closed, in a noisier
+   location: the PostToolUse hook fires on every workspace ticket Edit.
+   With telemetry default-on, the false-positive T016 warnings will start
+   spamming stderr on every workspace session. One-line fix + one test in
+   `tests/test_workspace_path_flags.py`. Prioritise before next workspace
+   session because it produces user-visible noise.
+
+2. **Address Concern #1 (telemetry bootstrap kills the off-state perf goal)
+   OR document the change.** The current implementation defeats T033's
+   stated acceptance criterion on first-call-after-fresh-clone. Either
+   (a) change the bootstrap to early-exit after touch (one extra `sys.exit(0)`),
+   or (b) drop the bootstrap entirely and require explicit toggle. Either
+   way, update the docstring to reflect actual behaviour. ~10 LoC; bundle
+   with a fast-exit timing test in `test_telemetry.py`.
+
+3. **Begin the carry-forward backlog session.** The backlog is now ~21 items
+   (S5's ~18 plus four S6 concerns deferred). Two consecutive sessions
+   (S6, S7) have closed only newly-opened tickets without touching the
+   backlog. With Phase 1 gate complete and the first real workspace live,
+   the workspace-scoped-paths cleanup (S1 #3 + S1 #7 / S3 #6 + S1 #11 +
+   S3 #3) is now blocking confident expansion to a second workspace. One
+   focused session, no new feature work.

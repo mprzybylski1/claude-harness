@@ -663,4 +663,207 @@ CLI helper, two SKILL.md docs, and two test files. ~440 lines insertions.
 
 ---
 
+# Opus Review — S5
+
+Scope: workspace-awareness flags across `scripts/tools/`, dead trading-app code
+removal from `prepare_opus_context.py`, new `/workflow-review` skill, and a fresh
+`scrabble-score` workspace scaffold. ~1225 insertions / 269 deletions.
+
+## Invariant Violations
+
+None new. The S3 #6 carry-forward (dead `sessions_rel` path-based comparison in
+`check_session_log.py:262-271`) and S3 #4 (`internal_dir` no-existence-guard)
+remain — both addressable in a future cleanup pass but no regression from S5.
+
+## Concrete bugs
+
+1. **`scripts/tools/extract_opus_key_sections.py:24` — `OPUS_NOTES` is a
+   relative path, breaks the harness-root default.** The module uses
+   `OPUS_NOTES = Path("docs/opus_notes.md")` (relative), unlike every other
+   tool in this batch and unlike `extract_carry_forwards.py:18` which uses
+   `Path(__file__).resolve().parents[2] / "docs" / "opus_notes.md"` (absolute).
+   When invoked from any CWD other than the harness root (e.g. inside a
+   workspace where the SKILL is meant to fall back to harness defaults),
+   `main()` will try to read `./docs/opus_notes.md` from the wrong directory
+   and either fail or read the wrong file. Fix: replace line 24 with
+   `OPUS_NOTES = Path(__file__).resolve().parents[2] / "docs" / "opus_notes.md"`
+   and update line 77 to reference `path` instead of `OPUS_NOTES` (otherwise
+   the error message also prints the wrong path when `--opus` is provided).
+
+2. **`scripts/tools/rotate_opus_notes.py:50` — no existence guard on `notes`.**
+   `content = notes.read_text()` is called unconditionally. If a user passes
+   `--opus /nonexistent/path` the script crashes with `FileNotFoundError`
+   instead of the clean error message that `archive_session_log.py:103-105`
+   provides for the same scenario. Add `if not notes.exists(): print(
+   f"ERROR: {notes} not found", file=sys.stderr); sys.exit(1)` before the
+   `read_text()` call. Same inconsistency cost as S3 found in
+   `extract_opus_key_sections.py` — consistency matters when SKILLs hand
+   user-supplied paths to these scripts.
+
+3. **`scripts/tools/classify_session.py` — `--repo` flag swaps git CWD but
+   not the config that decides classification.** `CODE_PREFIXES` (line 34)
+   and `_SESSION_CLOSE_PREFIX` (resolved through `_hc.session_close_prefix`)
+   are loaded from the harness's own `harness.yaml`. With `--repo
+   /home/user/projects/myapp`, git ops correctly run in the workspace repo,
+   but the classifier looks for `src/`, `lib/`, `tests/` (harness values)
+   in workspace repos that may use entirely different prefixes. Worse,
+   `_get_last_session_close_sha` searches the workspace repo's git log for
+   "docs: S\d+ session close" — workspace projects almost never have this
+   commit pattern, so `sha = ""` triggers the conservative "code" fallback
+   at line 113-115, which means workspace sessions are always classified
+   "code" regardless of what changed. Fix: either accept `--code-paths`
+   and `--session-prefix` flags, or read these from a workspace-specific
+   config (e.g. workspace.yaml's `classify_config` block). Otherwise the
+   `--repo` flag is decorative.
+
+4. **`scripts/tools/prepare_opus_context.py:265 — `_is_python_project` gate
+   is too coarse, leading to misleading PASS results.** When `--repo PATH`
+   points at a Python project that has `pyproject.toml` but no `tests/`
+   directory, `check_test_syntax` returns `PASS  0 test files compile
+   cleanly` and `check_bash_blocks` returns `SKIP  check_skill_bash_blocks.py
+   not found`. The user sees "PASS" for tests but in fact zero coverage was
+   verified — a fail-open style positive. Tighten: in `check_test_syntax`,
+   return `SKIP` (not PASS) when no test files are found. Same for
+   `check_utcnow` when none of the searched directories exist.
+
+5. **`scripts/tools/prepare_opus_context.py:393-395 — architecture
+   invariants and ticket template always come from harness ROOT, even when
+   `--repo` targets a workspace.** Lines 393 (`inv_path = ROOT / "docs" /
+   "architecture_invariants.md"`) and 398 (`template_path = ROOT / "docs"
+   / "tickets" / "TEMPLATE.md"`) ignore the workspace context. For workspace
+   sessions, Opus is handed the harness's invariants and template, not the
+   workspace's. Invariants are project-specific by definition — sending the
+   wrong set silently degrades the review. Fix: when `--repo` is provided,
+   look in `<repo>/docs/architecture_invariants.md` and `<repo>/docs/tickets/
+   TEMPLATE.md` first, fall back to harness defaults only if missing. Or
+   add explicit `--invariants` / `--template` flags.
+
+6. **`docs/system_state.md` regression — current uncommitted file shows
+   `T000` as an open ticket.** The Open Tickets table reads
+   `| T000 | Short description (keep under 60 chars) | 2 | 3 | 4 | process |
+   backend | frontend | fullstack | infra | process | 5 sessions |`. T000 is
+   the TEMPLATE.md sentinel ID; current `docs/tickets/INDEX.md` correctly
+   shows only T026. Root cause: at some point during S5 the
+   `generate_ticket_index.py` script saw TEMPLATE.md as a ticket and
+   `update_system_state.py:_extract_open_tickets` (line 53-70) pulled the
+   resulting row by simple `line.startswith("| T")` matching. Two fixes
+   needed: (a) `generate_ticket_index.py:load_tickets` (line 100-102) should
+   skip any file with `id == "T000"` or filename `TEMPLATE.md`, and (b)
+   `update_system_state.py` should re-run before commit so a stale
+   `system_state.md` doesn't ship to the archive. The current uncommitted
+   diff will be embedded in tomorrow's review context unless cleaned.
+
+## Test gaps
+
+7. **No tests for `classify_session.py` at all** (`grep classify_session
+   tests/` returns empty), including the new `--repo` flag added in T022.
+   Combined with finding #3, this means the workspace classification path
+   has zero coverage — a regression that flips every workspace session to
+   "docs" (skipping full Opus review) would go undetected. Add a class
+   along the lines of the existing `TestArchiveSessionLogFlags` pattern in
+   `tests/test_workspace_path_flags.py`.
+
+8. **`tests/test_workspace_gitignore.py` has no test for the
+   `repo_root == ROOT.resolve()` skip branch** (`workspace.py:57`). Easy to
+   add: create a workspace whose docs_path lands inside the harness repo,
+   call `_add_opus_context_to_gitignore`, assert no write happened. Without
+   this test, a future refactor that removes the guard would re-add a
+   redundant gitignore line in the harness's own `.gitignore` (or worse,
+   point at a workspace path the harness doesn't actually own).
+
+## SKILL drift / consistency
+
+9. **`.claude/skills/session-close/SKILL.md:121` — bare `classify_session.py`
+   call, no `--repo` for workspace sessions.** The README workspace-awareness
+   matrix says "session-close SKILL should pass `--repo` for workspace
+   sessions" (scripts/tools/README.md:31), but the SKILL itself doesn't.
+   Lines 124-126 are advisory ("verify manually") instead of prescriptive.
+   Either bake the `--repo` invocation into the SKILL when in workspace
+   context, or drop the README claim. Today the SKILL drives behavior, so
+   the README is technically wrong.
+
+10. **`scripts/tools/harness_config.py:76` — stale docstring.** Lists
+    `'eval_exec', 'sql_mutations'` as example check names, but both were
+    deleted by T021. Update to mention the current set: `test_syntax`,
+    `utcnow`, `bash_blocks` (which `harness.yaml:23` already documents
+    correctly).
+
+11. **`harness.yaml:11-14` — `code_paths` does not include `scripts/`.**
+    The harness's own production code lives in `scripts/tools/` and
+    `scripts/hooks/`, but the configured `code_paths` only contains
+    `src/`, `lib/`, `tests/`. A session that touches only `scripts/tools/`
+    (no test changes) would be classified as "docs" and skip full Opus
+    review. This session is rescued only because `tests/` were also
+    modified. Add `"scripts/"` to the list.
+
+12. **`scripts/tools/archive_session_log.py:111-112` — docstring/behavior
+    mismatch.** Docstring lines 16-17 promise the script prints
+    "Session log has N entries (threshold M). No action needed." when
+    `count <= threshold`. The code silently returns 0 with no output.
+    Either restore the print (helpful for CLI visibility) or update the
+    docstring to match the actual silent-success behavior.
+
+13. **`scripts/tools/prepare_opus_context.py:389` — `--opus PATH` silently
+    skipped if path does not exist.** No warning on typo'd path; the user
+    thinks `opus_notes.md` was embedded in context but it was not. Add a
+    `print(f"WARNING: --opus {opus_path} not found, skipping", file=
+    sys.stderr)` when the path was provided but does not exist (distinct
+    from the omit-by-default case where `opus_path is None`).
+
+## Carry-forwards from S1–S4 (status check)
+
+- S1 #3 (workspace-isolation in `run_static_analysis` helpers) — STILL OPEN.
+- S1 #7 / S3 #6 / S4 #1 (dead `sessions_rel` path-based comparison) —
+  STILL OPEN. No change this session; S5 did not touch
+  `scripts/hooks/check_session_log.py`.
+- S1 #8 (header-line regex fragility) — STILL OPEN.
+- S1 #9 (portfolio stale-repo marking) — STILL OPEN.
+- S1 #10 (workspace.py warns-but-creates on missing repo) — STILL OPEN.
+- S1 #11 (`_is_closed_ticket` loose substring match) — STILL OPEN.
+- S1 #12 (`TRACKED_PREFIXES` filter missing in workspace branch) — STILL OPEN.
+- S1 #14 (no E2E test for `run_static_analysis` workspace mode) — STILL OPEN.
+- S1 #15 (no test for per-repo git-status iteration) — STILL OPEN.
+- S2 #15 (closed-ticket Resolution audit for client_progress safety) — STILL OPEN.
+- S2 #17 (`active_workspace_dir()` called twice per Bash command) — STILL OPEN.
+- S2 #18 (silent OSError swallow in AC pre-lint) — STILL OPEN.
+- S2 #19 (no test for `ImportError` propagation in `_yaml_load`) — STILL OPEN.
+- S2 #20 (no test for ws_dir branch of bounds check) — STILL OPEN.
+- S2 #21 (no regression test for boundary check ordering) — STILL OPEN.
+- S3 #3 (N YAML loads per hook in `regenerate_ticket_index.py` slow path) — STILL OPEN.
+- S3 #4 (`internal_dir` blindly resolves `docs_path` without `is_dir` check) —
+  PARTIALLY closed by T018 (which added the check in `active_internal_dir`
+  for `docs_path` mode). `internal_dir` itself remains unchecked for callers
+  bypassing `active_internal_dir`.
+- S3 #11 (perf test for `_detect_workspace_from_path`) — STILL OPEN.
+- S4 #3 (standard-workspace Bash branch in `check_ticket_acs` has no test) —
+  STILL OPEN.
+
+The backlog now stands at ~18 open carry-forwards. Several are individually
+small (test gaps, minor refactors); collectively they undermine the Phase 1
+gate. Suggest one full cleanup-pass session before any client workspace goes
+live.
+
+## Suggested Next Session Focus
+
+1. **Fix findings #3 and #11 (and add the test in #7) together** — they're
+   the same bug from two angles: workspace sessions get the wrong
+   classification config. Without this, `--repo` is a misleading API
+   surface. Estimated 1-ticket session.
+
+2. **Clean `docs/system_state.md` and add the T000 filter in
+   `generate_ticket_index.py:load_tickets` (finding #6).** Otherwise the
+   stale T000 row will keep regenerating. Also a 1-ticket session;
+   sequence it before the first real workspace is created so the dashboard
+   is correct.
+
+3. **Take a single dedicated session for the carry-forward backlog** — at
+   18 open items, a focused pass attacking S1 #3 + S1 #11 + S1 #12 + S3 #3
+   + S3 #6 (related to workspace-scoped path handling) is much more
+   efficient than piecemeal fixes across many sessions. The shared
+   infrastructure (workspace-aware `regenerate_ticket_index`, removal of
+   dead path comparisons) means a single context window can carry the
+   whole cleanup.
+
+---
+
 

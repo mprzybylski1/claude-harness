@@ -1,6 +1,6 @@
 # System State
 
-_Last updated: S6 2026-05-25_
+_Last updated: S7 2026-05-25_
 
 ---
 
@@ -12,9 +12,9 @@ _config.yaml not present — deployment details unavailable._
 
 ## Phase & Gate Status
 
-**Phase 1 (Active):** Multi-workspace architecture build-out — harness evolves from single-project tool to multi-project orchestrator.
+**Phase 2 (Active):** Harness hardening and telemetry — fixing workspace session-start gaps, telemetry reliability, and tool correctness issues surfaced in first real workspace run.
 
-Gate requirements before Phase 2:
+Phase 1 gate: complete (S6 2026-05-25)
 - [x] Workspace model designed and implemented (T001–T009)
 - [x] All Opus review findings fixed
 - [x] First real workspace created and used for a live session (Scrabble Score)
@@ -27,7 +27,7 @@ Gate requirements before Phase 2:
 
 | ID | Title | Phase | Age |
 |----|-------|-------|-----|
-| T000 | Short description (keep under 60 chars) | 2 | 3 | 4 | process | backend | frontend | fullstack | infra | process | 6 sessions |
+| T000 | Short description (keep under 60 chars) | 2 | 3 | 4 | process | backend | frontend | fullstack | infra | process | 7 sessions |
 
 ---
 
