@@ -400,10 +400,15 @@ def main() -> None:
     # ── docs/architecture_invariants.md ──────────────────────────────────────
     # When --repo points at a workspace, prefer the repo's own invariants file.
     inv_path = repo_root / "docs" / "architecture_invariants.md"
+    inv_source = "repo-local"
     if not inv_path.exists():
         inv_path = ROOT / "docs" / "architecture_invariants.md"
+        inv_source = "harness fallback"
     if inv_path.exists():
-        parts.append(_section("docs/architecture_invariants.md", inv_path.read_text()))
+        parts.append(_section(
+            f"docs/architecture_invariants.md  [Source: {inv_source} — {inv_path}]",
+            inv_path.read_text(),
+        ))
 
     # ── Ticket TEMPLATE.md (embedded — do not read docs/tickets/TEMPLATE.md) ─
     # Prefer repo-local template; fall back to harness root.
