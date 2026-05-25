@@ -33,6 +33,11 @@ import re
 import subprocess
 import sys
 import os
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts" / "tools"))
+from workspace_config import active_workspace_dir
 
 TRACKED_PREFIXES = (
     "core/",
@@ -47,6 +52,18 @@ TRACKED_PREFIXES = (
 
 SESSIONS_MD = "docs/sessions.md"
 CLOSED_TICKETS_DIR = "docs/tickets/closed"
+
+
+def _resolve_paths(project_root: str) -> tuple[str, str]:
+    """Return (sessions_md_path, closed_tickets_dir) based on workspace context."""
+    ws_dir = active_workspace_dir()
+    if ws_dir:
+        sessions = str(ws_dir / "internal" / "sessions.md")
+        closed = str(ws_dir / "internal" / "tickets" / "closed")
+    else:
+        sessions = os.path.join(project_root, SESSIONS_MD)
+        closed = os.path.join(project_root, CLOSED_TICKETS_DIR)
+    return sessions, closed
 
 
 def run(cmd: list[str], cwd: str) -> str:
@@ -81,10 +98,10 @@ def extract_session_id_from_active_work(sessions_content: str) -> str | None:
     return None
 
 
-def _parse_newly_closed_paths(git_diff_output: str) -> list[str]:
+def _parse_newly_closed_paths(git_diff_output: str, closed_dir: str) -> list[str]:
     """
     Parse `git diff --name-status` output and return paths of files that were
-    Added (A) or Renamed-into (R) inside docs/tickets/closed/.
+    Added (A) or Renamed-into (R) inside closed_dir.
 
     Handles both:
       A\tdocs/tickets/closed/T036-foo.md
@@ -98,21 +115,21 @@ def _parse_newly_closed_paths(git_diff_output: str) -> list[str]:
         status = parts[0]
         if status.startswith("A") and len(parts) >= 2:
             path = parts[1]
-            if path.startswith(CLOSED_TICKETS_DIR):
+            if path.startswith(closed_dir):
                 paths.append(path)
         elif status.startswith("R") and len(parts) >= 3:
             path = parts[2]
-            if path.startswith(CLOSED_TICKETS_DIR):
+            if path.startswith(closed_dir):
                 paths.append(path)
     return paths
 
 
-def get_newly_closed_ticket_paths(project_root: str) -> list[str]:
+def get_newly_closed_ticket_paths(project_root: str, sessions_path: str, closed_dir: str) -> list[str]:
     """
     Return paths of ticket files newly moved into closed/ that belong to the
     current session:
 
-    1. Tickets moved IN the most recent commit that touched docs/sessions.md
+    1. Tickets moved IN the most recent commit that touched sessions.md
        (i.e. the session-close commit).  This catches wrong attribution written
        by session-close itself.
     2. Tickets in uncommitted staged changes (pre-commit, for interactive use).
@@ -124,25 +141,25 @@ def get_newly_closed_ticket_paths(project_root: str) -> list[str]:
     """
     # Part 1: tickets moved inside the session-close commit
     sessions_commit = run(
-        ["git", "log", "--follow", "-1", "--format=%H", "--", SESSIONS_MD],
+        ["git", "log", "--follow", "-1", "--format=%H", "--", sessions_path],
         cwd=project_root,
     )
     committed: list[str] = []
     if sessions_commit:
         diff_output = run(
             ["git", "diff-tree", "--no-commit-id", "-r", "--name-status",
-             sessions_commit, "--", CLOSED_TICKETS_DIR + "/"],
+             sessions_commit, "--", closed_dir + "/"],
             cwd=project_root,
         )
-        committed = _parse_newly_closed_paths(diff_output)
+        committed = _parse_newly_closed_paths(diff_output, closed_dir)
 
     # Part 2: tickets staged but not yet committed
     staged_output = run(
         ["git", "diff", "--cached", "--name-status", "--",
-         CLOSED_TICKETS_DIR + "/"],
+         closed_dir + "/"],
         cwd=project_root,
     )
-    staged = _parse_newly_closed_paths(staged_output)
+    staged = _parse_newly_closed_paths(staged_output, closed_dir)
 
     # Deduplicate while preserving order
     seen: set[str] = set()
@@ -200,7 +217,7 @@ def run_attribution_check(project_root: str) -> list[str]:
     Full attribution check pipeline.
     Returns list of error strings; empty list = pass.
     """
-    sessions_path = os.path.join(project_root, SESSIONS_MD)
+    sessions_path, closed_dir = _resolve_paths(project_root)
     if not os.path.exists(sessions_path):
         return []
 
@@ -212,7 +229,7 @@ def run_attribution_check(project_root: str) -> list[str]:
         # No Active Work header found — docs-only or question-only session; skip.
         return []
 
-    newly_closed = get_newly_closed_ticket_paths(project_root)
+    newly_closed = get_newly_closed_ticket_paths(project_root, sessions_path, closed_dir)
     if not newly_closed:
         return []
 
@@ -237,12 +254,14 @@ def run_session_log_check(project_root: str, all_changed: set[str]) -> bool:
     if not has_core_changes:
         return True
 
+    sessions_path, _ = _resolve_paths(project_root)
+    sessions_rel = SESSIONS_MD
+
     # Check if sessions.md was modified
-    if SESSIONS_MD in all_changed:
+    if sessions_rel in all_changed or sessions_path in all_changed:
         return True
 
     # Last resort: check if sessions.md content has today's date in Session Log
-    sessions_path = os.path.join(project_root, SESSIONS_MD)
     if os.path.exists(sessions_path):
         with open(sessions_path) as f:
             content = f.read()
@@ -397,7 +416,7 @@ def main() -> None:
     attribution_errors = run_attribution_check(project_root)
     if attribution_errors:
         session_id = "(unknown)"
-        sessions_path = os.path.join(project_root, SESSIONS_MD)
+        sessions_path, _ = _resolve_paths(project_root)
         if os.path.exists(sessions_path):
             with open(sessions_path) as f:
                 sid = extract_session_id_from_active_work(f.read())

@@ -190,14 +190,41 @@ def main() -> None:
         "--session", type=int, default=None,
         help="Override the current session number (use when sessions.md hasn't been updated yet)",
     )
+    parser.add_argument(
+        "--tickets-dir", default=None,
+        help="Override the open tickets directory (absolute path)",
+    )
+    parser.add_argument(
+        "--output", default=None,
+        help="Override the INDEX.md output path (absolute path)",
+    )
+    parser.add_argument(
+        "--sessions-file", default=None,
+        help="Override the sessions.md path (absolute path)",
+    )
     args = parser.parse_args()
 
     project_root = os.getcwd()
-    open_dir = os.path.join(project_root, OPEN_DIR)
-    output_path = os.path.join(project_root, OUTPUT_FILE)
+    open_dir = args.tickets_dir if args.tickets_dir else os.path.join(project_root, OPEN_DIR)
+    output_path = args.output if args.output else os.path.join(project_root, OUTPUT_FILE)
     today = datetime.date.today().isoformat()
 
-    current_session = args.session if args.session is not None else get_current_session(project_root)
+    if args.session is not None:
+        current_session = args.session
+    elif args.sessions_file:
+        if not os.path.exists(args.sessions_file):
+            print(f"ERROR: {args.sessions_file} not found", file=sys.stderr)
+            sys.exit(1)
+        with open(args.sessions_file) as f:
+            content_s = f.read()
+        matches = re.findall(r"^S(\d+) \d{4}-\d{2}-\d{2}:", content_s, re.MULTILINE)
+        if not matches:
+            current_session = 1
+        else:
+            current_session = int(matches[-1]) + 1
+    else:
+        current_session = get_current_session(project_root)
+
     tickets = load_tickets(open_dir)
 
     content = render_index(tickets, current_session, today)

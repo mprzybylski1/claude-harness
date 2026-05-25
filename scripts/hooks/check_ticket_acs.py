@@ -23,15 +23,27 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "scripts" / "tools"))
+from workspace_config import active_workspace_dir
+
 CLOSED_DIR = REPO_ROOT / "docs" / "tickets" / "closed"
 
 EXEMPT_PATTERNS = re.compile(r"\bDEFERRED\b|\bN/A\b|\bNOT APPLICABLE\b", re.IGNORECASE)
 
 
+def _get_closed_dir() -> Path:
+    """Return the effective closed/ directory based on workspace context."""
+    ws_dir = active_workspace_dir()
+    if ws_dir:
+        return ws_dir / "internal" / "tickets" / "closed"
+    return CLOSED_DIR
+
+
 def _target_in_closed(file_path: str) -> bool:
     try:
         resolved = Path(file_path).resolve()
-        return resolved == CLOSED_DIR or CLOSED_DIR in resolved.parents
+        closed_dir = _get_closed_dir()
+        return resolved == closed_dir or closed_dir in resolved.parents
     except Exception as e:
         print(f"AC pre-lint: path resolution failed for {file_path!r}: {e}", file=sys.stderr)
         return False
