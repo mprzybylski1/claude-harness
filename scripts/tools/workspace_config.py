@@ -49,11 +49,25 @@ def internal_dir(ws_dir: Path, ws: dict) -> Path:
 
 
 def active_internal_dir() -> Path | None:
-    """Return the internal docs dir for the active workspace, or None."""
+    """Return the internal docs dir for the active workspace, or None.
+
+    Exits 2 when docs_path is configured but the directory does not exist —
+    a missing docs_path silently produces empty results everywhere that reads
+    from it, so we fail loudly here instead.
+    """
     ws_dir = active_workspace_dir()
     ws = active_workspace()
     if ws_dir is not None and ws is not None:
-        return internal_dir(ws_dir, ws)
+        result = internal_dir(ws_dir, ws)
+        if ws.get("docs_path") and not result.is_dir():
+            print(
+                f"Error: workspace docs_path directory does not exist: {result}\n"
+                f"Restore the directory or update docs_path in "
+                f"{ws_dir}/workspace.yaml to fix this.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        return result
     return None
 
 

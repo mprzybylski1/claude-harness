@@ -101,10 +101,21 @@ class TestInternalDir:
         assert result == tmp_path / "internal"
 
     def test_active_internal_dir_with_docs_path(self, tmp_path):
-        """active_internal_dir returns docs_path when configured."""
+        """active_internal_dir returns docs_path when configured and directory exists."""
         harness_dir = tmp_path / "project" / ".harness"
+        harness_dir.mkdir(parents=True)
         ws = {"name": "test", "repos": [], "docs_path": str(harness_dir)}
         with patch.object(workspace_config, "active_workspace_dir", return_value=tmp_path):
             with patch.object(workspace_config, "active_workspace", return_value=ws):
                 result = active_internal_dir()
         assert result == harness_dir.resolve()
+
+    def test_active_internal_dir_missing_docs_path_exits(self, tmp_path):
+        """active_internal_dir exits 2 when docs_path is configured but directory is missing."""
+        nonexistent = tmp_path / "does_not_exist"
+        ws = {"name": "test", "repos": [], "docs_path": str(nonexistent)}
+        with patch.object(workspace_config, "active_workspace_dir", return_value=tmp_path):
+            with patch.object(workspace_config, "active_workspace", return_value=ws):
+                with pytest.raises(SystemExit) as exc_info:
+                    active_internal_dir()
+        assert exc_info.value.code == 2
