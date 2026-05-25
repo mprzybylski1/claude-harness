@@ -71,7 +71,7 @@ Skip this prompt for purely docs-only sessions.
 
 Run all three commands:
 ```
-python scripts/tools/current_session.py
+python scripts/tools/current_session.py [--sessions <INTERNAL>/sessions.md]
 python scripts/tools/generate_ticket_index.py --session <N> --tickets-dir <INTERNAL>/tickets
 python scripts/tools/archive_session_log.py --sessions <INTERNAL>/sessions.md
 ```

@@ -97,7 +97,9 @@ Use the `## Invariant Violations` output from Step 1.3.
 
 ## Step 3 — Produce a session briefing
 
-Run `python scripts/tools/current_session.py` to get the session ID.
+Run the appropriate command to get the session ID:
+- **Workspace session:** `python scripts/tools/current_session.py --sessions <INTERNAL>/sessions.md`
+- **Harness root:** `python scripts/tools/current_session.py`
 
 ---
 **Session:** S[CURRENT_SESSION]  
