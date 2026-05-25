@@ -20,9 +20,15 @@ python scripts/tools/workspace.py list
 - **If the list is empty** and no `workspace.yaml` exists in CWD: you are at harness root
   with no workspaces yet. Proceed to Step 1 using global harness paths.
 - **If workspaces exist** and CWD does not contain `workspace.yaml`: you are at harness
-  root. Show the workspace list to the user and ask: **"Which workspace are you working
-  in today?"** Record the chosen slug as `WORKSPACE_SLUG`. All subsequent path references
-  use `workspaces/<WORKSPACE_SLUG>/internal/` as the base.
+  root. Also run:
+  ```
+  python scripts/tools/portfolio.py
+  ```
+  Show the portfolio output to the user before the workspace selection prompt. This gives
+  the user a cross-workspace overview before choosing where to focus. Then show the
+  workspace list and ask: **"Which workspace are you working in today?"** Record the
+  chosen slug as `WORKSPACE_SLUG`. All subsequent path references use
+  `workspaces/<WORKSPACE_SLUG>/internal/` as the base.
 - **If `workspace.yaml` exists in CWD**: you are already inside a workspace. Read it to
   get the workspace name and repos. Set `WORKSPACE_SLUG` to the current directory name.
   Skip the selection prompt.
