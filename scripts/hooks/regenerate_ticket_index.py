@@ -25,13 +25,15 @@ sys.path.insert(0, str(ROOT / "scripts" / "tools"))
 from workspace_config import active_workspace_dir, workspaces_base, load_workspace, internal_dir as _internal_dir
 
 
-def get_current_session(project_root: str) -> str | None:
+def get_current_session(project_root: str, sessions_file: str | None = None) -> str | None:
     """Get current session ID from current_session.py."""
     script = os.path.join(project_root, "scripts", "tools", "current_session.py")
     if not os.path.exists(script):
         return None
-    r = subprocess.run([sys.executable, script], cwd=project_root,
-                       capture_output=True, text=True)
+    cmd = [sys.executable, script]
+    if sessions_file:
+        cmd += ["--sessions", sessions_file]
+    r = subprocess.run(cmd, cwd=project_root, capture_output=True, text=True)
     if r.returncode == 0:
         return r.stdout.strip()
     return None
@@ -102,8 +104,12 @@ def _detect_sessions_file(file_path: str, project_root: str) -> str:
 
 
 def _is_closed_ticket(file_path: str) -> bool:
-    """Return True if the file is under any closed/ tickets directory."""
-    return "/tickets/closed/" in file_path or file_path.endswith("/tickets/closed")
+    """Return True if the file is under a tickets/closed/ directory."""
+    parts = Path(file_path).resolve().parts
+    for i in range(1, len(parts)):
+        if parts[i - 1] == "tickets" and parts[i] == "closed":
+            return True
+    return False
 
 
 def check_closed_attribution(file_path: str, project_root: str) -> None:
@@ -124,7 +130,8 @@ def check_closed_attribution(file_path: str, project_root: str) -> None:
     if not closed_value:
         return  # empty — skip
 
-    current = get_current_session(project_root)
+    sessions_file = _detect_sessions_file(file_path, project_root)
+    current = get_current_session(project_root, sessions_file)
     if current and not closed_value.startswith(current):
         print(
             f"WARNING (T016): {os.path.basename(file_path)} has closed: '{closed_value}' "
