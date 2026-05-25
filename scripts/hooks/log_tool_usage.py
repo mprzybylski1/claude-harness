@@ -31,7 +31,6 @@ import harness_config as _hc
 
 _LOG_PATH = ROOT / ".git" / "session_tool_log.jsonl"
 _ERR_PATH = ROOT / ".git" / "session_tool_log.errors"
-_SESSION_CACHE = ROOT / ".git" / "session_tool_log.session_cache"
 _DEFAULT_MAX_LINES = 5000
 
 
@@ -45,12 +44,13 @@ def _max_lines(harness: dict) -> int:
 
 def _current_session() -> str:
     """Read session ID from .git cache, then fall back to current_session.py."""
-    # Fast path: .git/CLAUDE_SESSION_ID (written by session_close_commit_msg.py)
+    # Fast path: .git/CLAUDE_SESSION_ID (written by session_close_commit_msg.py).
+    # The file stores a bare integer (e.g. "6"); normalise to "S6".
     claude_id = ROOT / ".git" / "CLAUDE_SESSION_ID"
     if claude_id.exists():
         val = claude_id.read_text().strip()
         if val:
-            return val
+            return val if val.startswith("S") else f"S{val}"
     # Slow path: re-derive from sessions.md — but don't spawn a subprocess;
     # read the file directly with the same regex current_session.py uses.
     try:

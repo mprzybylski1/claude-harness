@@ -69,6 +69,31 @@ class TestLogToolUsageHook:
         )
         assert result.returncode == 0
 
+    def test_current_session_normalises_bare_integer(self, tmp_path, monkeypatch):
+        """_current_session prepends 'S' when CLAUDE_SESSION_ID contains a bare integer."""
+        sys.path.insert(0, str(ROOT / "scripts" / "hooks"))
+        import log_tool_usage as ltu
+        fake_id = tmp_path / "CLAUDE_SESSION_ID"
+        fake_id.write_text("6")
+        monkeypatch.setattr(ltu, "_LOG_PATH", tmp_path / "log.jsonl")
+        # Patch ROOT-relative path inside the function
+        import unittest.mock as mock
+        with mock.patch.object(ltu, "ROOT", tmp_path):
+            (tmp_path / ".git").mkdir(exist_ok=True)
+            (tmp_path / ".git" / "CLAUDE_SESSION_ID").write_text("6")
+            result = ltu._current_session()
+        assert result == "S6", f"Expected 'S6', got {result!r}"
+
+    def test_current_session_accepts_s_prefix(self, tmp_path):
+        """_current_session passes through already-prefixed values unchanged."""
+        import log_tool_usage as ltu
+        import unittest.mock as mock
+        with mock.patch.object(ltu, "ROOT", tmp_path):
+            (tmp_path / ".git").mkdir(exist_ok=True)
+            (tmp_path / ".git" / "CLAUDE_SESSION_ID").write_text("S42")
+            result = ltu._current_session()
+        assert result == "S42"
+
     def test_extract_path_for_edit(self):
         """_extract_path returns file_path for Edit tool."""
         sys.path.insert(0, str(ROOT / "scripts" / "hooks"))
