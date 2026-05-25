@@ -124,7 +124,7 @@ python scripts/tools/classify_session.py
 
 **Workspace sessions** (pass the primary repo path):
 ```bash
-python scripts/tools/classify_session.py --repo <primary-repo-path>
+python scripts/tools/classify_session.py --repo /path/to/primary/repo
 ```
 
 Prints `code` or `docs`. With `--repo`, code paths are read from `<repo>/harness.yaml`

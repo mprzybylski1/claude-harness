@@ -35,8 +35,9 @@ def load_for_repo(repo: Path) -> dict:
         try:
             import yaml
             return yaml.safe_load(repo_yaml.read_text(encoding="utf-8")) or {}
-        except Exception:
-            pass
+        except Exception as exc:
+            import sys as _sys
+            print(f"WARNING: failed to load {repo_yaml}: {exc}", file=_sys.stderr)
     return load()
 
 

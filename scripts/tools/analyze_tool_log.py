@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -30,10 +29,12 @@ _DEFAULT_LOG = ROOT / ".git" / "session_tool_log.jsonl"
 _RETRY_WINDOW_S = 30.0
 
 
-def _load(log_path: Path, session_filter: str | None) -> list[dict]:
+def _load(log_path: Path, session_filter: str | None) -> tuple[list[dict], int]:
+    """Return (records, skipped_count) where skipped_count counts malformed lines."""
     if not log_path.exists():
-        return []
+        return [], 0
     records = []
+    skipped = 0
     for line in log_path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line:
@@ -41,15 +42,16 @@ def _load(log_path: Path, session_filter: str | None) -> list[dict]:
         try:
             rec = json.loads(line)
         except json.JSONDecodeError:
+            skipped += 1
             continue
         if session_filter and rec.get("session") != session_filter:
             continue
         records.append(rec)
-    return records
+    return records, skipped
 
 
 def _frequency(records: list[dict]) -> str:
-    counts: Counter[str] = Counter(r["tool"] for r in records)
+    counts: Counter[str] = Counter(r.get("tool", "") for r in records)
     if not counts:
         return "(no data)"
     lines = [f"  {tool:<20} {count}" for tool, count in counts.most_common()]
@@ -58,8 +60,8 @@ def _frequency(records: list[dict]) -> str:
 
 def _top_files(records: list[dict], tool_names: set[str], n: int = 10) -> str:
     counts: Counter[str] = Counter(
-        r["path"] for r in records
-        if r["tool"] in tool_names and r["path"]
+        r.get("path", "") for r in records
+        if r.get("tool") in tool_names and r.get("path")
     )
     if not counts:
         return "  (none)"
@@ -73,12 +75,15 @@ def _retry_sequences(records: list[dict]) -> str:
     retries: list[str] = []
     for i in range(1, len(records)):
         prev, cur = records[i - 1], records[i]
-        if (prev["tool"] == cur["tool"]
+        prev_tool = prev.get("tool") or ""
+        cur_tool = cur.get("tool") or ""
+        if not prev_tool or not cur_tool:
+            continue
+        if (prev_tool == cur_tool
                 and cur.get("ts", 0) - prev.get("ts", 0) <= _RETRY_WINDOW_S):
-            retries.append(
-                f"  {cur['tool']} × 2 within {cur['ts'] - prev['ts']:.1f}s"
-                f"  path={cur['path'][:60]!r}"
-            )
+            delta = cur.get("ts", 0) - prev.get("ts", 0)
+            path = (cur.get("path") or "")[:60]
+            retries.append(f"  {cur_tool} × 2 within {delta:.1f}s  path={path!r}")
     return "\n".join(retries) if retries else "  (none)"
 
 
@@ -97,18 +102,25 @@ def _session_costs(records: list[dict]) -> str:
 
 
 def report(log_path: Path, session_filter: str | None) -> str:
-    records = _load(log_path, session_filter)
-    if not records:
-        return f"No telemetry data found in {log_path}.\nEnable via harness.yaml: workflow_telemetry: true"
+    records, skipped = _load(log_path, session_filter)
+    if not records and not skipped:
+        return (
+            f"No telemetry data found in {log_path}.\n"
+            "Enable via harness.yaml: workflow_telemetry: true"
+        )
 
     read_tools = {"Read", "WebFetch", "WebSearch"}
     edit_tools = {"Edit", "Write", "NotebookEdit"}
 
-    sections = [
-        f"# Workflow Telemetry Report",
+    header = (
+        f"# Workflow Telemetry Report\n"
         f"Log: {log_path}  |  Records: {len(records)}"
-        + (f"  |  Session: {session_filter}" if session_filter else ""),
-        "",
+        + (f"  |  Session: {session_filter}" if session_filter else "")
+        + (f"  |  Skipped (malformed): {skipped}" if skipped else "")
+    )
+
+    sections = [
+        header,
         "## Tool call frequency\n" + _frequency(records),
         "## Top-10 most-read files\n" + _top_files(records, read_tools),
         "## Top-10 most-edited files\n" + _top_files(records, edit_tools),

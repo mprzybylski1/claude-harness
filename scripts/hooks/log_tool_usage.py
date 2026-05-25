@@ -13,13 +13,16 @@ Log location: <harness-root>/.git/session_tool_log.jsonl
   - Rotated (oldest entries discarded) when it exceeds the line threshold.
 
 Rotation threshold: configured via harness.yaml workflow_telemetry_max_lines (default 5000).
+
+Errors (non-JSON-parse failures) are written to .git/session_tool_log.errors
+so they surface without breaking tool calls.
 """
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
-import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -27,6 +30,8 @@ sys.path.insert(0, str(ROOT / "scripts" / "tools"))
 import harness_config as _hc
 
 _LOG_PATH = ROOT / ".git" / "session_tool_log.jsonl"
+_ERR_PATH = ROOT / ".git" / "session_tool_log.errors"
+_SESSION_CACHE = ROOT / ".git" / "session_tool_log.session_cache"
 _DEFAULT_MAX_LINES = 5000
 
 
@@ -39,11 +44,26 @@ def _max_lines(harness: dict) -> int:
 
 
 def _current_session() -> str:
-    script = ROOT / "scripts" / "tools" / "current_session.py"
-    if not script.exists():
-        return ""
-    r = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, cwd=ROOT)
-    return r.stdout.strip() if r.returncode == 0 else ""
+    """Read session ID from .git cache, then fall back to current_session.py."""
+    # Fast path: .git/CLAUDE_SESSION_ID (written by session_close_commit_msg.py)
+    claude_id = ROOT / ".git" / "CLAUDE_SESSION_ID"
+    if claude_id.exists():
+        val = claude_id.read_text().strip()
+        if val:
+            return val
+    # Slow path: re-derive from sessions.md — but don't spawn a subprocess;
+    # read the file directly with the same regex current_session.py uses.
+    try:
+        import re
+        sessions_md = ROOT / "docs" / "sessions.md"
+        if sessions_md.exists():
+            text = sessions_md.read_text(encoding="utf-8")
+            entries = re.findall(r"^S(\d+)\s+\d{4}-\d{2}-\d{2}:", text, re.MULTILINE)
+            if entries:
+                return f"S{int(entries[-1]) + 1}"
+    except Exception:
+        pass
+    return ""
 
 
 def _extract_path(tool_name: str, tool_input: dict) -> str:
@@ -56,13 +76,40 @@ def _extract_path(tool_name: str, tool_input: dict) -> str:
     return ""
 
 
+def _extract_exit(payload: dict) -> int:
+    """Best-effort exit code from tool_response; defaults to 0."""
+    response = payload.get("tool_response", {})
+    if isinstance(response, dict):
+        # Bash hooks may surface exit_code
+        code = response.get("exit_code")
+        if code is not None:
+            return int(code)
+    return 0
+
+
 def _rotate_if_needed(path: Path, max_lines: int) -> None:
     if not path.exists():
         return
-    lines = path.read_bytes().splitlines()
-    if len(lines) > max_lines:
-        # Keep only the most recent max_lines entries
-        path.write_bytes(b"\n".join(lines[-max_lines:]) + b"\n")
+    try:
+        content = path.read_bytes()
+        lines = content.splitlines()
+        if len(lines) <= max_lines:
+            return
+        trimmed = b"\n".join(lines[-max_lines:]) + b"\n"
+        # Write atomically via temp file + rename
+        tmp = path.with_suffix(".tmp")
+        tmp.write_bytes(trimmed)
+        os.replace(str(tmp), str(path))
+    except Exception as exc:
+        _log_error(f"rotation failed: {exc}")
+
+
+def _log_error(msg: str) -> None:
+    try:
+        with _ERR_PATH.open("a", encoding="utf-8") as f:
+            f.write(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} {msg}\n")
+    except Exception:
+        pass
 
 
 def main() -> None:
@@ -71,8 +118,13 @@ def main() -> None:
         sys.exit(0)
 
     try:
-        payload = json.loads(sys.stdin.read())
-    except Exception:
+        raw = sys.stdin.read()
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        # Malformed payload — not our fault; exit silently
+        sys.exit(0)
+    except Exception as exc:
+        _log_error(f"stdin read failed: {exc}")
         sys.exit(0)
 
     tool_name = payload.get("tool_name", "")
@@ -82,13 +134,17 @@ def main() -> None:
         "ts": time.time(),
         "tool": tool_name,
         "path": _extract_path(tool_name, tool_input),
-        "exit": 0,
+        "exit": _extract_exit(payload),
         "session": _current_session(),
     }
 
-    _LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with _LOG_PATH.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(record) + "\n")
+    try:
+        _LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with _LOG_PATH.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record) + "\n")
+    except Exception as exc:
+        _log_error(f"append failed: {exc}")
+        sys.exit(0)
 
     _rotate_if_needed(_LOG_PATH, _max_lines(harness))
 

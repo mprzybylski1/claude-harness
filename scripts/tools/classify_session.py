@@ -107,7 +107,12 @@ def main() -> None:
 
     sha = _get_last_session_close_sha(close_prefix, cwd=cwd)
     if not sha:
-        # Can't find anchor — be conservative
+        repo_label = str(cwd) if cwd else "CWD"
+        print(
+            f"WARNING: no session-close anchor found in {repo_label}; defaulting to 'code'. "
+            f"Check session_close_prefix in harness.yaml or ensure a session-close commit exists.",
+            file=sys.stderr,
+        )
         print("code")
         return
 
