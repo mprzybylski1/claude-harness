@@ -19,31 +19,29 @@ Gate requirements before Phase 2:
 
 ## Active Work
 
-**S5 — workspace-awareness flags for all harness scripts + dead code removal + /workflow-review skill**
+**S6 — close all open tickets (T026–T030) + impl-review hardening**
 
 Files changed:
-- `scripts/tools/current_session.py` — T020: added `--sessions PATH` flag
-- `scripts/tools/extract_session_brief.py` — T020: added `--sessions PATH` flag
-- `scripts/tools/extract_opus_key_sections.py` — T020: added `--opus PATH` flag; parameterized carry-forwards
-- `scripts/tools/extract_carry_forwards.py` — T020: threaded `notes_file` param through `extract()`/`main()`
-- `scripts/tools/prepare_opus_context.py` — T021: `--repo/--sessions/--opus/--output` flags; removed 4 dead trading-app static checks (~212 lines); tightened `_is_python_project`; `check_utcnow`/`check_bash_blocks` now cover `scripts/` + `tests/`
-- `scripts/tools/archive_session_log.py` — T022: `--sessions/--archive` flags; missing-file guard (impl-review F3)
-- `scripts/tools/rotate_opus_notes.py` — T022: `--opus/--archive` flags; `rotate()` parameterized; deleted dead `_archive_path()` (impl-review F5)
-- `scripts/tools/classify_session.py` — T022: `--repo` flag; git ops use repo cwd; `parse_args()` not `parse_known_args()` (impl-review F9)
-- `scripts/tools/workspace.py` — T023: `_add_opus_context_to_gitignore()` on workspace create; `.resolve()` path equality (impl-review F7)
-- `scripts/tools/run_static_analysis.py` — updated imports to match 3 remaining checks
-- `scripts/tools/README.md` — T024: new workspace-awareness matrix for all scripts in scripts/tools/
-- `.claude/skills/workflow-review/SKILL.md` — T025: new manual retrospective skill (5 steps)
-- `.claude/skills/session-close/SKILL.md` — T025: added /workflow-review pre-check prompt
-- `harness.yaml` — `static_analysis_checks` trimmed to `[test_syntax, utcnow, bash_blocks]`
-- `tests/test_workspace_path_flags.py` — new: 13 tests for T020 + T022 flags
-- `tests/test_prepare_opus_context_workspace.py` — new: 5 tests for T021
-- `tests/test_workspace_gitignore.py` — new: 5 tests for T023
+- `harness.yaml` — T029: added `"scripts/"` to `code_paths`; T026: workflow_telemetry opt-in comments
+- `scripts/tools/classify_session.py` — T027: `CODE_PREFIXES`/`close_prefix` loaded per-repo via `load_for_repo()`; warns to stderr when no anchor found
+- `scripts/tools/harness_config.py` — T027: `load_for_repo()` added; T030c: stale docstring fixed; warns on YAML parse failure
+- `scripts/tools/prepare_opus_context.py` — T028: prefer `<repo>/docs/architecture_invariants.md` + `TEMPLATE.md` before harness root fallback; T030a: `check_test_syntax` returns SKIP when no files; T030e: warns to stderr on missing `--opus` path
+- `scripts/tools/archive_session_log.py` — T030d: docstring corrected to silent-success behavior
+- `scripts/tools/README.md` — T027: updated classify_session row; added `analyze_tool_log.py` row; snapshot date updated to S6
+- `scripts/hooks/log_tool_usage.py` — T026: new PostToolUse telemetry hook; impl-review: atomic rotation, error file, exit extraction, subprocess-free session ID
+- `scripts/tools/analyze_tool_log.py` — T026: new analysis script; impl-review: .get() on all fields, skipped-line count in header
+- `.claude/skills/session-close/SKILL.md` — T027/T030b: Step 3 updated to pass `--repo` for workspace sessions; angle-bracket placeholder fixed
+- `.claude/skills/workflow-review/SKILL.md` — T026: Step 1b calls analyze_tool_log when telemetry enabled
+- `.claude/settings.json` — T026: hook registered in PostToolUse `".*"` matcher
+- `tests/test_workspace_path_flags.py` — T027: 3 tests for classify_session --repo; T029: 1 test for scripts/ in code_paths
+- `tests/test_workspace_gitignore.py` — T030f: same-repo skip branch test added
+- `tests/test_prepare_opus_context_workspace.py` — T028: 3 tests for invariants/template path resolution
+- `tests/test_telemetry.py` — new: 18 tests for hook, analysis script, load_for_repo fallback (impl-review F9/F10/F11)
 
-Tickets opened: T020, T021, T022, T023, T024, T025, T026
-Tickets closed: T020, T021, T022, T023, T024, T025
+Tickets opened: (none)
+Tickets closed: T026, T027, T028, T029, T030
 
-Remaining open items: T026 (hook-logged telemetry, low priority); create first real workspace for live use (Phase 1 gate)
+Remaining open items: create first real workspace for live use (Phase 1 gate); T000 stale template row in generate_ticket_index.py
 
 ---
 
@@ -57,3 +55,4 @@ S2 2026-05-25: fixed T010–T013 (all 4 Opus S1 findings) + 4 mid-session review
 S3 2026-05-25: implemented T014 — docs_path support for project-repo workspace docs
 S4 2026-05-25: fixed T015–T019 (all 5 Opus S3 findings) + implementation-review test fixes
 S5 2026-05-25: workspace-awareness flags (T020–T025) + dead trading-app code removal + /workflow-review skill
+S6 2026-05-25: closed T026–T030 (telemetry hook, classify_session fix, invariants path fix, code_paths fix, batch consistency) + impl-review hardening (14 findings fixed, 18 new tests)
