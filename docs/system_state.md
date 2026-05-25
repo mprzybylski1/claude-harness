@@ -17,7 +17,7 @@ _config.yaml not present — deployment details unavailable._
 Gate requirements before Phase 2:
 - [x] Workspace model designed and implemented (T001–T009)
 - [x] All Opus review findings fixed
-- [ ] First real workspace created and used for a live session
+- [x] First real workspace created and used for a live session (Scrabble Score)
 
 ---
 
