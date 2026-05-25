@@ -90,3 +90,15 @@ class TestAddOpusContextToGitignore:
         _add_opus_context_to_gitignore(docs_path)
 
         assert not (tmp_path / ".gitignore").exists()
+
+    def test_skips_when_docs_path_is_inside_harness_repo(self):
+        """docs_path inside the harness root itself must not write to harness .gitignore."""
+        harness_gitignore = ROOT / ".gitignore"
+        before = harness_gitignore.read_text() if harness_gitignore.exists() else None
+
+        # Use a real subdirectory of the harness repo as docs_path
+        docs_path = ROOT / "docs"
+        _add_opus_context_to_gitignore(docs_path)
+
+        after = harness_gitignore.read_text() if harness_gitignore.exists() else None
+        assert before == after, "harness .gitignore must not change for same-repo docs_path"

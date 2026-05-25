@@ -13,8 +13,7 @@ Defaults:
 
 Behaviour:
     - Reads docs/sessions.md and counts Session Log entries (lines starting with S<digits>)
-    - If count <= threshold: prints "Session log has N entries (threshold M). No action needed."
-      and exits 0
+    - If count <= threshold: exits 0 silently (no output)
     - If count > threshold: moves the oldest (count - keep) entries to
       docs/archive/session_log_archive.md (appended, not overwritten), removes them from
       sessions.md, and prints "Archived N entries; K remain."
