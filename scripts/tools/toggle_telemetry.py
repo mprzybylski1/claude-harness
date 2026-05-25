@@ -24,9 +24,11 @@ def _set_harness_yaml(enabled: bool) -> None:
     text = harness_yaml.read_text(encoding="utf-8")
     import re
     new_val = "true" if enabled else "false"
-    # Replace existing setting
+    # Match both active and commented-out forms:
+    #   workflow_telemetry: false
+    #   # workflow_telemetry: true
     updated, count = re.subn(
-        r"^(workflow_telemetry\s*:\s*).*$",
+        r"^#?\s*(workflow_telemetry\s*:\s*).*$",
         rf"\g<1>{new_val}",
         text,
         flags=re.MULTILINE,
