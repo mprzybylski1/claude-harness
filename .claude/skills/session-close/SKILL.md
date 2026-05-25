@@ -15,21 +15,27 @@ commit workspace repo changes, then commit harness docs.
 
 Before proceeding, confirm which workspace is active (set in Step 0 of `/session-start`).
 If `workspace.yaml` exists in CWD, read it to get workspace name and repos.
-All path references below use `workspaces/<WORKSPACE_SLUG>/internal/` unless marked
-"harness root". If no workspace is active (harness root session), all paths are the
-original global paths (`docs/sessions.md`, `docs/opus_notes.md`, etc.).
+If no workspace is active (harness root session), all paths are the original global paths
+(`docs/sessions.md`, `docs/opus_notes.md`, etc.).
+
+For workspace sessions, resolve the docs root first — it may be inside the project repo if
+`docs_path` is configured:
+```
+python scripts/tools/workspace_internal_path.py <WORKSPACE_SLUG>
+```
+Record the output as `INTERNAL`. Use `INTERNAL` wherever `<INTERNAL>` appears below.
 
 **Path substitution:**
 
 | File | Non-workspace | Workspace |
 |---|---|---|
-| sessions.md | `docs/sessions.md` | `workspaces/<slug>/internal/sessions.md` |
-| opus_notes.md | `docs/opus_notes.md` | `workspaces/<slug>/internal/opus_notes.md` |
-| Tickets open | `docs/tickets/open/` | `workspaces/<slug>/internal/tickets/open/` |
-| Tickets closed | `docs/tickets/closed/` | `workspaces/<slug>/internal/tickets/closed/` |
-| INDEX.md | `docs/tickets/INDEX.md` | `workspaces/<slug>/internal/tickets/INDEX.md` |
-| archive/ | `docs/archive/` | `workspaces/<slug>/internal/archive/` |
-| opus_review_context.md | `docs/opus_review_context.md` | `workspaces/<slug>/internal/opus_review_context.md` |
+| sessions.md | `docs/sessions.md` | `<INTERNAL>/sessions.md` |
+| opus_notes.md | `docs/opus_notes.md` | `<INTERNAL>/opus_notes.md` |
+| Tickets open | `docs/tickets/open/` | `<INTERNAL>/tickets/open/` |
+| Tickets closed | `docs/tickets/closed/` | `<INTERNAL>/tickets/closed/` |
+| INDEX.md | `docs/tickets/INDEX.md` | `<INTERNAL>/tickets/INDEX.md` |
+| archive/ | `docs/archive/` | `<INTERNAL>/archive/` |
+| opus_review_context.md | `docs/opus_review_context.md` | `<INTERNAL>/opus_review_context.md` |
 
 `docs/system_state.md` and `docs/architecture_invariants.md` are always at harness root.
 
@@ -43,7 +49,7 @@ first with a `fix:` prefix, then proceed with the docs commit.
 
 The pattern for every ticket closed during a session:
 1. Implementation done, tests pass
-2. Move ticket file to `workspaces/<slug>/internal/tickets/closed/`
+2. Move ticket file to `<INTERNAL>/tickets/closed/`
 3. **Immediately commit in the workspace repo:** the commit targets the workspace's primary repo
 4. Only then move to the next ticket
 
@@ -58,8 +64,8 @@ If they decline, proceed normally.
 Run all three commands:
 ```
 python scripts/tools/current_session.py
-python scripts/tools/generate_ticket_index.py --session <N> --tickets-dir workspaces/<slug>/internal/tickets
-python scripts/tools/archive_session_log.py --sessions workspaces/<slug>/internal/sessions.md
+python scripts/tools/generate_ticket_index.py --session <N> --tickets-dir <INTERNAL>/tickets
+python scripts/tools/archive_session_log.py --sessions <INTERNAL>/sessions.md
 ```
 
 Record the session ID as `CURRENT_SESSION` and numeric part as `N`.
@@ -69,7 +75,7 @@ run them without flags and adjust paths manually — note the gap for a follow-u
 
 ## Step 1 — Update sessions.md (workspace-scoped)
 
-Update **two sections** of `workspaces/<WORKSPACE_SLUG>/internal/sessions.md`:
+Update **two sections** of `<INTERNAL>/sessions.md`:
 
 ### Active Work section
 - List files changed and what changed. Derive from `git diff` across workspace repos.
@@ -95,7 +101,7 @@ If the workspace's session data should also update global state, do so manually.
 
 For any ticket being closed this session:
 1. Tick all satisfied ACs. For incomplete items add `— DEFERRED to T[N]` or `— N/A: <reason>`.
-2. Move file from `workspaces/<slug>/internal/tickets/open/` to `workspaces/<slug>/internal/tickets/closed/`.
+2. Move file from `<INTERNAL>/tickets/open/` to `<INTERNAL>/tickets/closed/`.
 3. Set frontmatter: `closed: S[CURRENT_SESSION] YYYY-MM-DD`
 4. Write Resolution section. First token must be `S[CURRENT_SESSION] YYYY-MM-DD:`.
 
@@ -115,14 +121,14 @@ whether workspace repo files changed.
 
 ```bash
 python scripts/tools/rotate_opus_notes.py \
-  --opus workspaces/<slug>/internal/opus_notes.md \
-  --archive workspaces/<slug>/internal/archive/
+  --opus <INTERNAL>/opus_notes.md \
+  --archive <INTERNAL>/archive/
 ```
 
 Archives the oldest review section to the workspace archive. If the script does not yet
 support these flags, run the rotation manually: move the oldest `# Opus Review` section
-from `workspaces/<slug>/internal/opus_notes.md` to a dated file in
-`workspaces/<slug>/internal/archive/`.
+from `<INTERNAL>/opus_notes.md` to a dated file in
+`<INTERNAL>/archive/`.
 
 ## Step 5 — Review: full Opus (code sessions) or static-only (docs sessions)
 
@@ -133,9 +139,9 @@ Generate context targeting the workspace primary repo:
 ```bash
 python scripts/tools/prepare_opus_context.py \
   --repo <primary-repo-path> \
-  --sessions workspaces/<slug>/internal/sessions.md \
-  --opus workspaces/<slug>/internal/opus_notes.md \
-  --output workspaces/<slug>/internal/opus_review_context.md
+  --sessions <INTERNAL>/sessions.md \
+  --opus <INTERNAL>/opus_notes.md \
+  --output <INTERNAL>/opus_review_context.md
 ```
 
 Then spawn the **Opus review agent** (`subagent_type: "general-purpose"`, `model: "opus"`,
@@ -147,13 +153,13 @@ Session: S[CURRENT_SESSION]
 
 ## Start here — read these two files first, in order
 
-1. `workspaces/<slug>/internal/opus_review_context.md`
-2. `workspaces/<slug>/internal/opus_notes.md`
+1. `<INTERNAL>/opus_review_context.md`
+2. `<INTERNAL>/opus_notes.md`
 
 Do NOT read files outside workspaces/<slug>/ or the workspace's declared repos.
 [... rest of Opus review instructions unchanged ...]
 
-Append your review to `workspaces/<slug>/internal/opus_notes.md`.
+Append your review to `<INTERNAL>/opus_notes.md`.
 ```
 
 **Multi-repo Opus context (when workspace has secondary repos):**
@@ -212,7 +218,7 @@ The push to `client_remote` is best-effort — if it fails, log the error and co
 python scripts/tools/run_static_analysis.py
 ```
 
-Append a static-analysis summary to `workspaces/<slug>/internal/opus_notes.md`.
+Append a static-analysis summary to `<INTERNAL>/opus_notes.md`.
 
 ## Step 6 — Commit changes
 
@@ -259,7 +265,7 @@ gitignored and stays local.
 - sessions.md Active Work header says `**S[CURRENT_SESSION] — ...**`
 - sessions.md Session Log has a new entry for S[CURRENT_SESSION]
 - opus_notes.md contains exactly 2 `# Opus Review` sections after rotation
-- New Opus findings have ticket files in `workspaces/<slug>/internal/tickets/open/`
+- New Opus findings have ticket files in `<INTERNAL>/tickets/open/`
 - Workspace repo commits happened before the harness docs commit
 - No workspace internal data in the harness repo git history
 

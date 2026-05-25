@@ -16,6 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "tools"))
+from workspace_config import internal_dir as _internal_dir
 
 
 def parse_frontmatter(content: str) -> dict[str, str]:
@@ -250,11 +251,14 @@ def main() -> None:
     try:
         import yaml
         ws_yaml = ws_dir / "workspace.yaml"
-        workspace_name = yaml.safe_load(ws_yaml.read_text(encoding="utf-8")).get("name", ws_dir.name) if ws_yaml.exists() else ws_dir.name
+        ws_cfg = yaml.safe_load(ws_yaml.read_text(encoding="utf-8")) if ws_yaml.exists() else {}
+        workspace_name = ws_cfg.get("name", ws_dir.name) if ws_cfg else ws_dir.name
     except Exception:
+        ws_cfg = {}
         workspace_name = ws_dir.name
 
-    sessions_path = ws_dir / "internal" / "sessions.md"
+    docs = _internal_dir(ws_dir, ws_cfg)
+    sessions_path = docs / "sessions.md"
     sessions_content = ""
     if sessions_path.exists():
         sessions_content = sessions_path.read_text(encoding="utf-8")
@@ -264,7 +268,7 @@ def main() -> None:
     body = extract_active_work(sessions_content, session_label) if sessions_content else ""
     next_focus = extract_next_focus(body) if body else "See open tickets."
 
-    closed_dir = ws_dir / "internal" / "tickets" / "closed"
+    closed_dir = docs / "tickets" / "closed"
     closed_tickets = load_closed_tickets_for_session(closed_dir, session_label)
 
     client_dir = ws_dir / "client"

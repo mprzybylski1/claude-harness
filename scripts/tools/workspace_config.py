@@ -34,6 +34,29 @@ def workspace_dir(slug: str) -> Path:
     return workspaces_base() / slug
 
 
+# ── Internal docs directory ───────────────────────────────────────────────────
+
+def internal_dir(ws_dir: Path, ws: dict) -> Path:
+    """Return the docs root for a workspace.
+
+    Returns the resolved docs_path from workspace.yaml if configured, otherwise
+    falls back to ws_dir/internal (the harness-local default).
+    """
+    docs_path = ws.get("docs_path")
+    if docs_path:
+        return Path(docs_path).expanduser().resolve()
+    return ws_dir / "internal"
+
+
+def active_internal_dir() -> Path | None:
+    """Return the internal docs dir for the active workspace, or None."""
+    ws_dir = active_workspace_dir()
+    ws = active_workspace()
+    if ws_dir is not None and ws is not None:
+        return internal_dir(ws_dir, ws)
+    return None
+
+
 # ── Loading ───────────────────────────────────────────────────────────────────
 
 def load_workspace(ws_dir: Path) -> dict:

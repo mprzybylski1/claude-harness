@@ -37,7 +37,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "tools"))
-from workspace_config import active_workspace_dir, active_workspace, all_repos as _all_repos, assert_workspace_boundary
+from workspace_config import active_workspace_dir, active_workspace, all_repos as _all_repos, assert_workspace_boundary, internal_dir as _internal_dir, load_workspace
 
 TRACKED_PREFIXES = (
     "core/",
@@ -58,8 +58,10 @@ def _resolve_paths(project_root: str) -> tuple[str, str]:
     """Return (sessions_md_path, closed_tickets_dir) based on workspace context."""
     ws_dir = active_workspace_dir()
     if ws_dir:
-        sessions = str(ws_dir / "internal" / "sessions.md")
-        closed = str(ws_dir / "internal" / "tickets" / "closed")
+        ws = load_workspace(ws_dir)
+        docs = _internal_dir(ws_dir, ws)
+        sessions = str(docs / "sessions.md")
+        closed = str(docs / "tickets" / "closed")
     else:
         sessions = os.path.join(project_root, SESSIONS_MD)
         closed = os.path.join(project_root, CLOSED_TICKETS_DIR)

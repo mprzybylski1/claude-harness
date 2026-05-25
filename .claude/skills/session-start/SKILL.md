@@ -27,21 +27,28 @@ python scripts/tools/workspace.py list
   Show the portfolio output to the user before the workspace selection prompt. This gives
   the user a cross-workspace overview before choosing where to focus. Then show the
   workspace list and ask: **"Which workspace are you working in today?"** Record the
-  chosen slug as `WORKSPACE_SLUG`. All subsequent path references use
-  `workspaces/<WORKSPACE_SLUG>/internal/` as the base.
+  chosen slug as `WORKSPACE_SLUG`.
+
+  Then resolve the workspace docs root — this may be inside the project repo if `docs_path`
+  is configured:
+  ```
+  python scripts/tools/workspace_internal_path.py <WORKSPACE_SLUG>
+  ```
+  Record the output as `INTERNAL`. All subsequent path references use `INTERNAL` as the base.
 - **If `workspace.yaml` exists in CWD**: you are already inside a workspace. Read it to
   get the workspace name and repos. Set `WORKSPACE_SLUG` to the current directory name.
+  Run `python scripts/tools/workspace_internal_path.py <WORKSPACE_SLUG>` and record as `INTERNAL`.
   Skip the selection prompt.
 
 **Path substitution for workspace sessions:**
 
 | Context file | Non-workspace path | Workspace path |
 |---|---|---|
-| Session brief | `docs/sessions.md` | `workspaces/<slug>/internal/sessions.md` |
-| Opus notes | `docs/opus_notes.md` | `workspaces/<slug>/internal/opus_notes.md` |
-| Tickets INDEX | `docs/tickets/INDEX.md` | `workspaces/<slug>/internal/tickets/INDEX.md` |
-| Tickets open | `docs/tickets/open/` | `workspaces/<slug>/internal/tickets/open/` |
-| Archive | `docs/archive/` | `workspaces/<slug>/internal/archive/` |
+| Session brief | `docs/sessions.md` | `<INTERNAL>/sessions.md` |
+| Opus notes | `docs/opus_notes.md` | `<INTERNAL>/opus_notes.md` |
+| Tickets INDEX | `docs/tickets/INDEX.md` | `<INTERNAL>/tickets/INDEX.md` |
+| Tickets open | `docs/tickets/open/` | `<INTERNAL>/tickets/open/` |
+| Archive | `docs/archive/` | `<INTERNAL>/archive/` |
 
 `docs/architecture_invariants.md` is always read from harness root — invariants are global.
 
@@ -54,18 +61,18 @@ Read these files **sequentially** (use workspace-scoped paths if in a workspace)
    and read its output — prints Current Phase & Status, Active Work, and last 5 Session Log entries.
    If in a workspace, pass the workspace path:
    ```
-   python scripts/tools/extract_session_brief.py --sessions workspaces/<slug>/internal/sessions.md
+   python scripts/tools/extract_session_brief.py --sessions <INTERNAL>/sessions.md
    ```
    Do not read sessions.md directly.
 3. Run `python scripts/tools/extract_opus_key_sections.py --with-carry-forwards` with the
    correct opus_notes.md path:
    ```
    python scripts/tools/extract_opus_key_sections.py --with-carry-forwards \
-     --opus workspaces/<slug>/internal/opus_notes.md
+     --opus <INTERNAL>/opus_notes.md
    ```
    Prints `## Invariant Violations`, `## Architectural Concerns`, and
    `## Suggested Next Session Focus`. Do not read opus_notes.md directly.
-4. Workspace tickets INDEX (`workspaces/<slug>/internal/tickets/INDEX.md`) — ticket overview
+4. Workspace tickets INDEX (`<INTERNAL>/tickets/INDEX.md`) — ticket overview
 5. Run `python scripts/tools/surface_stale_tickets.py` — prints tickets over triage threshold.
    Empty if none qualify.
 6. Run `python scripts/tools/repo_hygiene.py --warn-only` — WARN-level hygiene findings.
@@ -76,7 +83,7 @@ or --opus flags:** read the files directly as a fallback and note the gap.
 
 **Do not read individual ticket files at session start.** The INDEX has everything needed.
 
-If the workspace's `internal/archive/` contains relevant reviews, search with `grep`.
+If the workspace's archive contains relevant reviews, search with `grep` in `<INTERNAL>/archive/`.
 
 ## Step 2 — Check for outstanding invariant violations
 

@@ -24,7 +24,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "tools"))
-from workspace_config import active_workspace_dir
+from workspace_config import active_workspace_dir, load_workspace, internal_dir as _internal_dir
 
 CLOSED_DIR = REPO_ROOT / "docs" / "tickets" / "closed"
 
@@ -35,7 +35,8 @@ def _get_closed_dir() -> Path:
     """Return the effective closed/ directory based on workspace context."""
     ws_dir = active_workspace_dir()
     if ws_dir:
-        return ws_dir / "internal" / "tickets" / "closed"
+        ws = load_workspace(ws_dir)
+        return _internal_dir(ws_dir, ws) / "tickets" / "closed"
     return CLOSED_DIR
 
 

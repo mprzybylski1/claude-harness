@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import harness_config as _hc
+from workspace_config import internal_dir as _internal_dir
 
 
 def _workspaces_base() -> Path:
@@ -97,8 +98,9 @@ def main() -> None:
         name = cfg.get("name", slug)
         ws_type = cfg.get("type", "?")
         repo_count = len(cfg.get("repos", []))
-        ticket_counts = _ticket_counts(ws_dir / "internal" / "tickets" / "open")
-        last = _last_session(ws_dir / "internal" / "sessions.md")
+        docs = _internal_dir(ws_dir, cfg)
+        ticket_counts = _ticket_counts(docs / "tickets" / "open")
+        last = _last_session(docs / "sessions.md")
 
         rows.append(dict(
             slug=slug,

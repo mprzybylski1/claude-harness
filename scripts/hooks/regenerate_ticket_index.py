@@ -22,7 +22,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "tools"))
-from workspace_config import active_workspace_dir, workspaces_base
+from workspace_config import active_workspace_dir, workspaces_base, load_workspace, internal_dir as _internal_dir
 
 
 def get_current_session(project_root: str) -> str | None:
@@ -38,24 +38,50 @@ def get_current_session(project_root: str) -> str | None:
 
 
 def _detect_workspace_from_path(file_path: str) -> Path | None:
-    """Return the workspace dir if file_path is under workspaces/<slug>/internal/tickets/."""
+    """Return workspace dir if file_path is under any workspace's internal/tickets/."""
     try:
         ws_base = workspaces_base()
         resolved = Path(file_path).resolve()
-        rel = resolved.relative_to(ws_base)
-        parts = rel.parts
-        if len(parts) >= 3 and parts[1] == "internal" and parts[2] == "tickets":
-            return ws_base / parts[0]
-    except ValueError:
+
+        # Fast path: standard harness-local layout (workspaces/<slug>/internal/tickets/)
+        try:
+            rel = resolved.relative_to(ws_base)
+            parts = rel.parts
+            if len(parts) >= 3 and parts[1] == "internal" and parts[2] == "tickets":
+                return ws_base / parts[0]
+        except ValueError:
+            pass
+
+        # Slow path: file may be under a custom docs_path in a workspace repo.
+        if ws_base.exists():
+            for ws_dir in sorted(ws_base.iterdir()):
+                if not ws_dir.is_dir() or ws_dir.name == "archive":
+                    continue
+                cfg = load_workspace(ws_dir)
+                if not cfg or not cfg.get("docs_path"):
+                    continue
+                docs = _internal_dir(ws_dir, cfg)
+                try:
+                    resolved.relative_to(docs / "tickets")
+                    return ws_dir
+                except ValueError:
+                    pass
+    except Exception:
         pass
     return None
+
+
+def _docs_for_workspace(ws_dir: Path) -> Path:
+    """Return the docs root for a workspace dir."""
+    cfg = load_workspace(ws_dir)
+    return _internal_dir(ws_dir, cfg)
 
 
 def _detect_index_path(file_path: str, project_root: str) -> str:
     """Return the INDEX.md path to regenerate based on the written file's location."""
     ws_dir = _detect_workspace_from_path(file_path)
     if ws_dir:
-        return str(ws_dir / "internal" / "tickets" / "INDEX.md")
+        return str(_docs_for_workspace(ws_dir) / "tickets" / "INDEX.md")
     return str(Path(project_root) / "docs" / "tickets" / "INDEX.md")
 
 
@@ -63,7 +89,7 @@ def _detect_open_dir(file_path: str, project_root: str) -> str:
     """Return the open tickets directory based on the written file's location."""
     ws_dir = _detect_workspace_from_path(file_path)
     if ws_dir:
-        return str(ws_dir / "internal" / "tickets" / "open")
+        return str(_docs_for_workspace(ws_dir) / "tickets" / "open")
     return str(Path(project_root) / "docs" / "tickets" / "open")
 
 
@@ -71,7 +97,7 @@ def _detect_sessions_file(file_path: str, project_root: str) -> str:
     """Return the sessions.md path based on the written file's location."""
     ws_dir = _detect_workspace_from_path(file_path)
     if ws_dir:
-        return str(ws_dir / "internal" / "sessions.md")
+        return str(_docs_for_workspace(ws_dir) / "sessions.md")
     return str(Path(project_root) / "docs" / "sessions.md")
 
 
@@ -110,7 +136,12 @@ def check_closed_attribution(file_path: str, project_root: str) -> None:
 
 def _is_ticket_file(file_path: str) -> bool:
     """Return True if file_path is under any tickets/ directory."""
-    return "docs/tickets/" in file_path or "/internal/tickets/" in file_path
+    if "docs/tickets/" in file_path or "/internal/tickets/" in file_path:
+        return True
+    # Support custom docs_path — check workspace scan only when "/tickets/" appears
+    if "/tickets/" not in file_path:
+        return False
+    return _detect_workspace_from_path(file_path) is not None
 
 
 def main() -> None:

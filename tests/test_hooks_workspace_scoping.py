@@ -420,3 +420,112 @@ class TestCheckUnstagedWorkspaceIsolation:
                     hook.check_unstaged_code_changes(str(tmp_path))
 
         assert exc_info.value.code == 2
+
+
+# ---------------------------------------------------------------------------
+# docs_path routing — hooks and detection respect custom docs_path
+# ---------------------------------------------------------------------------
+
+class TestDocsPathRouting:
+    """Verify that a workspace configured with docs_path routes all hook paths
+    to that custom directory rather than the default ws_dir/internal."""
+
+    def _make_workspace_yaml(self, ws_dir: Path, docs_path: Path) -> None:
+        import yaml
+        cfg = {
+            "name": "test-ws",
+            "type": "personal",
+            "status": "active",
+            "repos": [{"name": "main", "path": str(docs_path.parent), "role": "primary"}],
+            "docs_path": str(docs_path),
+        }
+        ws_dir.mkdir(parents=True, exist_ok=True)
+        (ws_dir / "workspace.yaml").write_text(
+            yaml.dump(cfg, default_flow_style=False), encoding="utf-8"
+        )
+
+    def test_resolve_paths_uses_docs_path(self, tmp_path):
+        """_resolve_paths returns docs_path/sessions.md when docs_path is configured."""
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        harness_dir = project_dir / ".harness"
+        ws_dir = tmp_path / "workspaces" / "myws"
+        self._make_workspace_yaml(ws_dir, harness_dir)
+
+        hook = _load_hook("check_session_log")
+
+        with patch.object(hook, "active_workspace_dir", return_value=ws_dir):
+            sessions, closed = hook._resolve_paths(str(tmp_path))
+
+        assert sessions == str(harness_dir / "sessions.md")
+        assert closed == str(harness_dir / "tickets" / "closed")
+
+    def test_resolve_paths_falls_back_without_docs_path(self, tmp_path):
+        """Without docs_path, _resolve_paths returns ws_dir/internal paths."""
+        import yaml
+        ws_dir = tmp_path / "workspaces" / "myws"
+        ws_dir.mkdir(parents=True)
+        cfg = {"name": "test", "repos": []}
+        (ws_dir / "workspace.yaml").write_text(
+            yaml.dump(cfg, default_flow_style=False), encoding="utf-8"
+        )
+
+        hook = _load_hook("check_session_log")
+
+        with patch.object(hook, "active_workspace_dir", return_value=ws_dir):
+            sessions, closed = hook._resolve_paths(str(tmp_path))
+
+        assert sessions == str(ws_dir / "internal" / "sessions.md")
+        assert closed == str(ws_dir / "internal" / "tickets" / "closed")
+
+    def test_get_closed_dir_uses_docs_path(self, tmp_path):
+        """_get_closed_dir returns docs_path/tickets/closed when docs_path is configured."""
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        harness_dir = project_dir / ".harness"
+        ws_dir = tmp_path / "workspaces" / "myws"
+        self._make_workspace_yaml(ws_dir, harness_dir)
+
+        hook = _load_hook("check_ticket_acs")
+
+        with patch.object(hook, "active_workspace_dir", return_value=ws_dir):
+            result = hook._get_closed_dir()
+
+        assert result == harness_dir / "tickets" / "closed"
+
+    def test_detect_workspace_from_docs_path_tickets(self, tmp_path):
+        """_detect_workspace_from_path finds a workspace via its docs_path/tickets/ dir."""
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        harness_dir = project_dir / ".harness"
+        ws_dir = tmp_path / "workspaces" / "myws"
+        self._make_workspace_yaml(ws_dir, harness_dir)
+
+        ticket_file = harness_dir / "tickets" / "open" / "T001.md"
+        ticket_file.parent.mkdir(parents=True)
+        ticket_file.write_text("---\nid: T001\n---\n")
+
+        hook = _load_hook("regenerate_ticket_index")
+
+        # Patch the hook's own imported workspaces_base reference
+        with patch.object(hook, "workspaces_base", return_value=tmp_path / "workspaces"):
+            result = hook._detect_workspace_from_path(str(ticket_file))
+
+        assert result == ws_dir
+
+    def test_is_ticket_file_recognizes_docs_path(self, tmp_path):
+        """_is_ticket_file returns True for a ticket under docs_path/tickets/."""
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        harness_dir = project_dir / ".harness"
+        ws_dir = tmp_path / "workspaces" / "myws"
+        self._make_workspace_yaml(ws_dir, harness_dir)
+
+        ticket_path = str(harness_dir / "tickets" / "open" / "T001.md")
+
+        hook = _load_hook("regenerate_ticket_index")
+
+        with patch.object(hook, "workspaces_base", return_value=tmp_path / "workspaces"):
+            result = hook._is_ticket_file(ticket_path)
+
+        assert result is True
