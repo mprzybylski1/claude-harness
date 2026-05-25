@@ -599,3 +599,49 @@ class TestDocsPathRouting:
             sys.stdin = orig_stdin
 
         assert exc_info.value.code == 0, "all ACs checked in docs_path ticket must pass"
+
+
+# ---------------------------------------------------------------------------
+# T017: sessions_rel error message must use correct path in docs_path mode
+# ---------------------------------------------------------------------------
+
+class TestSessionsRelDocsPathMode:
+    def test_error_message_uses_actual_sessions_path_not_default(self, tmp_path):
+        """run_session_log_check error message names the actual sessions_path in docs_path mode.
+
+        When sessions.md is outside the harness repo root (docs_path workspace),
+        Path(sessions_path).relative_to(project_root) raises ValueError. The fallback
+        must use sessions_path itself — not the hardcoded 'docs/sessions.md'.
+        """
+        project_root = str(tmp_path / "harness")
+        harness_dir = tmp_path / "project" / ".harness"
+        harness_dir.mkdir(parents=True)
+        sessions_file = harness_dir / "sessions.md"
+        # Write sessions.md WITHOUT today's date → will trigger error path
+        sessions_file.write_text("## Session Log\n\nS1 2000-01-01: old session\n", encoding="utf-8")
+
+        closed_dir = str(tmp_path / "project" / ".harness" / "tickets" / "closed")
+        sessions_path = str(sessions_file)
+
+        hook = _load_hook("check_session_log")
+
+        # A tracked file changed (triggers the session log check)
+        all_changed = {"core/some_module.py"}
+
+        captured_stderr = io.StringIO()
+        with (
+            patch.object(hook, "_resolve_paths", return_value=(sessions_path, closed_dir)),
+            patch("sys.stderr", captured_stderr),
+        ):
+            result = hook.run_session_log_check(project_root, all_changed)
+
+        assert result is False
+        stderr = captured_stderr.getvalue()
+        assert sessions_path in stderr, (
+            f"Error message must name the actual sessions path, not the default. "
+            f"Got: {stderr!r}"
+        )
+        assert "docs/sessions.md" not in stderr, (
+            f"Error message must not fall back to hardcoded 'docs/sessions.md'. "
+            f"Got: {stderr!r}"
+        )

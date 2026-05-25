@@ -262,7 +262,10 @@ def run_session_log_check(project_root: str, all_changed: set[str]) -> bool:
     try:
         sessions_rel = str(Path(sessions_path).relative_to(project_root))
     except ValueError:
-        sessions_rel = SESSIONS_MD
+        # docs_path workspace: sessions.md is outside harness root — it is gitignored
+        # from the harness repo, so the git-path comparison below will not match.
+        # Fall through to the content-based check; use the full path in any error message.
+        sessions_rel = sessions_path
 
     # Check if sessions.md was modified (git-visible path)
     if sessions_rel in all_changed or sessions_path in all_changed:
