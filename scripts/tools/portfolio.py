@@ -28,8 +28,15 @@ def _yaml_get(path: Path, key: str) -> str:
         text = path.read_text(encoding="utf-8")
     except OSError:
         return ""
+    # Limit search to YAML frontmatter (between --- delimiters) to avoid matching body text
+    if text.startswith("---"):
+        end = text.find("---", 3)
+        text = text[3:end] if end != -1 else text[3:]
     m = re.search(rf"^{re.escape(key)}:\s*(.+)$", text, re.MULTILINE)
     return m.group(1).strip() if m else ""
+
+
+_KNOWN_SEVERITIES = frozenset({"critical", "high", "medium", "low"})
 
 
 def _ticket_counts(open_dir: Path) -> dict[str, int]:
@@ -37,9 +44,10 @@ def _ticket_counts(open_dir: Path) -> dict[str, int]:
     if not open_dir.exists():
         return counts
     for f in open_dir.glob("T*.md"):
-        sev = _yaml_get(f, "severity")
+        sev = _yaml_get(f, "severity").lower()
         if sev:
-            counts[sev] = counts.get(sev, 0) + 1
+            key = sev if sev in _KNOWN_SEVERITIES else "other"
+            counts[key] = counts.get(key, 0) + 1
     return counts
 
 
@@ -55,7 +63,7 @@ def _format_ticket_cell(counts: dict[str, int]) -> str:
     if total == 0:
         return "0"
     parts = []
-    for sev, abbr in [("critical", "crit"), ("high", "high"), ("medium", "med"), ("low", "low")]:
+    for sev, abbr in [("critical", "crit"), ("high", "high"), ("medium", "med"), ("low", "low"), ("other", "other")]:
         n = counts.get(sev, 0)
         if n:
             parts.append(f"{n} {abbr}")
@@ -79,7 +87,8 @@ def main() -> None:
         try:
             import yaml
             cfg = yaml.safe_load(ws_yaml.read_text(encoding="utf-8")) or {}
-        except Exception:
+        except Exception as e:
+            print(f"WARNING: Could not parse {ws_yaml}: {e}", file=sys.stderr)
             continue
         if not cfg or cfg.get("status") == "archived":
             continue

@@ -14,6 +14,9 @@ import sys
 from datetime import date
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts" / "tools"))
+
 
 def parse_frontmatter(content: str) -> dict[str, str]:
     if not content.startswith("---"):
@@ -154,10 +157,13 @@ def load_existing_previous(client_progress: Path) -> str:
     if not client_progress.exists():
         return ""
     content = client_progress.read_text(encoding="utf-8")
-    sep = content.find("\n---\n")
-    if sep == -1:
+    sep_match = re.search(r"^---+\s*$", content, re.MULTILINE)
+    if not sep_match:
         return ""
-    return content[sep + 5:].strip()
+    after = content[sep_match.end():]
+    if after.startswith("\n"):
+        after = after[1:]
+    return after.strip()
 
 
 def build_progress_md(
@@ -221,13 +227,25 @@ def main() -> None:
         print(f"Error: workspace directory not found: {ws_dir}", file=sys.stderr)
         sys.exit(1)
 
+    # Boundary check: workspace must be inside the harness workspaces/ directory
+    import harness_config as _hc
+    ws_base = (ROOT / _hc.workspaces_dir()).resolve()
+    try:
+        ws_dir.relative_to(ws_base)
+    except ValueError:
+        print(
+            f"Error: {ws_dir} is outside the harness workspaces directory ({ws_base}).",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
     session_arg = args.session.lstrip("Ss")
     try:
         session_n = int(session_arg)
     except ValueError:
         print(f"Error: invalid session '{args.session}'", file=sys.stderr)
         sys.exit(1)
-    session_label = f"S{session_n:03d}"
+    session_label = f"S{session_n}"
 
     try:
         import yaml

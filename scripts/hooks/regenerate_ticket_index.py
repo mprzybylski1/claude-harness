@@ -46,7 +46,7 @@ def _detect_workspace_from_path(file_path: str) -> Path | None:
         parts = rel.parts
         if len(parts) >= 3 and parts[1] == "internal" and parts[2] == "tickets":
             return ws_base / parts[0]
-    except (ValueError, Exception):
+    except ValueError:
         pass
     return None
 

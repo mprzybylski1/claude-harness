@@ -37,7 +37,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "tools"))
-from workspace_config import active_workspace_dir
+from workspace_config import active_workspace_dir, active_workspace, all_repos as _all_repos
 
 TRACKED_PREFIXES = (
     "core/",
@@ -255,9 +255,14 @@ def run_session_log_check(project_root: str, all_changed: set[str]) -> bool:
         return True
 
     sessions_path, _ = _resolve_paths(project_root)
-    sessions_rel = SESSIONS_MD
+    # Compute relative path; workspace internal/ files are gitignored so this
+    # check typically falls through to the content-based fallback below.
+    try:
+        sessions_rel = str(Path(sessions_path).relative_to(project_root))
+    except ValueError:
+        sessions_rel = SESSIONS_MD
 
-    # Check if sessions.md was modified
+    # Check if sessions.md was modified (git-visible path)
     if sessions_rel in all_changed or sessions_path in all_changed:
         return True
 
@@ -273,9 +278,9 @@ def run_session_log_check(project_root: str, all_changed: set[str]) -> bool:
 
     today = datetime.date.today().isoformat()
     print(
-        f"\n[STOP HOOK] Core Python files were modified but docs/sessions.md "
+        f"\n[STOP HOOK] Core Python files were modified but {sessions_rel} "
         f"has no Session Log entry for today ({today}).\n"
-        f"\nUpdate docs/sessions.md before ending the session:\n"
+        f"\nUpdate {sessions_rel} before ending the session:\n"
         f"  1. Update the 'Active Work' section with what changed.\n"
         f"  2. Append to 'Session Log': S[N] {today}: <one-line summary>\n",
         file=sys.stderr,
@@ -291,11 +296,28 @@ def check_unstaged_code_changes(project_root: str) -> list[str]:
     """
     Return paths of tracked code files that have unstaged worktree modifications.
 
-    git status --porcelain format: XY path
-      X = index (staged) status
-      Y = worktree (unstaged) status
-    We care about Y in {M, D} for files under TRACKED_PREFIXES.
+    In workspace context: checks each declared workspace repo for unstaged .py files.
+    At harness root: checks TRACKED_PREFIXES in the harness git.
     """
+    ws = active_workspace()
+    if ws:
+        unstaged = []
+        for repo in _all_repos(ws):
+            repo_path = Path(repo["path"]).expanduser().resolve()
+            if not repo_path.exists():
+                continue
+            porcelain_out = run(["git", "status", "--porcelain"], cwd=str(repo_path))
+            for line in porcelain_out.splitlines():
+                if len(line) < 4:
+                    continue
+                if line[1] not in ("M", "D"):
+                    continue
+                path = line[3:].split(" -> ")[-1].strip()
+                if path.endswith(".py"):
+                    repo_name = repo.get("name", repo_path.name)
+                    unstaged.append(f"{repo_name}/{path}")
+        return unstaged
+
     porcelain_out = run(["git", "status", "--porcelain"], cwd=project_root)
     unstaged = []
     for line in porcelain_out.splitlines():
@@ -326,6 +348,8 @@ def check_uncommitted_research_artefacts(project_root: str, session_id: str) -> 
     """
     if not session_id:
         return []
+    if active_workspace_dir() is not None:
+        return []  # research/results/ is harness-specific; skip in workspace context
 
     results_dir = os.path.join(project_root, RESEARCH_RESULTS_DIR)
     if not os.path.exists(results_dir):
@@ -377,6 +401,8 @@ def check_overwritten_research_artefacts(project_root: str, session_id: str) -> 
     """
     if not session_id:
         return []
+    if active_workspace_dir() is not None:
+        return []  # research/results/ is harness-specific; skip in workspace context
 
     results_dir = os.path.join(project_root, RESEARCH_RESULTS_DIR)
     if not os.path.exists(results_dir):
@@ -410,7 +436,7 @@ def check_overwritten_research_artefacts(project_root: str, session_id: str) -> 
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    project_root = os.getcwd()
+    project_root = str(ROOT)
 
     # Check 1: Ticket attribution (independent of Python changes)
     attribution_errors = run_attribution_check(project_root)

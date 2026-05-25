@@ -137,8 +137,13 @@ def main() -> None:
 
         for src in _bash_ticket_sources(command):
             try:
-                # Resolve relative to REPO_ROOT if not absolute
-                resolved = src if src.is_absolute() else REPO_ROOT / src
+                if src.is_absolute():
+                    resolved = src
+                else:
+                    # In workspace context the Bash command may use workspace-relative paths
+                    ws_dir = active_workspace_dir()
+                    candidate = ws_dir / src if ws_dir else None
+                    resolved = candidate if (candidate and candidate.exists()) else REPO_ROOT / src
                 content = resolved.read_text()
             except Exception:
                 continue
