@@ -196,12 +196,14 @@ def cmd_list(args: argparse.Namespace) -> None:
             if matches:
                 last_session = matches[-1]
 
+        raw_repos = cfg.get("repos", [])
         workspaces.append(
             dict(
                 slug=ws_dir.name,
                 name=cfg.get("name", ws_dir.name),
                 ws_type=cfg.get("type", "?"),
-                repos=len(cfg.get("repos", [])),
+                repos=len(raw_repos),
+                repo_list=raw_repos,
                 tickets=ticket_count,
                 last=last_session,
             )
@@ -218,6 +220,13 @@ def cmd_list(args: argparse.Namespace) -> None:
             f"{w['slug']:<25} {w['name']:<35} {w['ws_type']:<10}"
             f" {w['repos']:>5} {w['tickets']:>7}  {w['last']}"
         )
+        for r in w["repo_list"]:
+            role = r.get("role", "secondary")
+            repo_name = r.get("name", "?")
+            repo_path = str(Path(r.get("path", "")).expanduser()).replace(
+                str(Path.home()), "~", 1
+            )
+            print(f"  [{role:>9}] {repo_name}: {repo_path}")
 
 
 def cmd_archive(args: argparse.Namespace) -> None:

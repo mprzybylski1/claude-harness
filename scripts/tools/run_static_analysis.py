@@ -61,28 +61,45 @@ def _resolve_checks() -> list:
     return resolved
 
 
-def main() -> None:
-    # Enforce workspace isolation: static analysis must only scan declared repos.
-    workspace = _wc.active_workspace()
-    scan_root = ROOT
-    if workspace:
-        primary = _wc.primary_repo(workspace)
-        if primary:
-            _wc.assert_workspace_boundary(primary, workspace)
-            scan_root = primary
-
+def _run_checks_for_repo(scan_root: Path, label: str) -> list[str]:
+    print(f"--- [{label}] ---")
     checks = _resolve_checks()
     results = [fn(scan_root) for fn in checks]
     for line in results:
         print(line)
+    return results
 
-    failed = [r for r in results if r.startswith("WARN") or r.startswith("FAIL")]
+
+def main() -> None:
+    workspace = _wc.active_workspace()
+    all_results: list[str] = []
+
+    if workspace:
+        primary = _wc.primary_repo(workspace)
+        if primary:
+            _wc.assert_workspace_boundary(primary, workspace)
+            ws_name = workspace.get("name", "primary")
+            all_results.extend(_run_checks_for_repo(primary, f"{ws_name}: primary"))
+
+        for sec_path in _wc.secondary_repos(workspace):
+            _wc.assert_workspace_boundary(sec_path, workspace)
+            sec_name = sec_path.name
+            for repo in _wc.all_repos(workspace):
+                if Path(repo["path"]).expanduser().resolve() == sec_path:
+                    sec_name = repo.get("name", sec_path.name)
+                    break
+            print()
+            all_results.extend(_run_checks_for_repo(sec_path, f"{sec_name}: secondary"))
+    else:
+        all_results.extend(_run_checks_for_repo(ROOT, "harness"))
+
+    failed = [r for r in all_results if r.startswith("WARN") or r.startswith("FAIL")]
     if failed:
         print(f"\n{len(failed)} check(s) need attention — escalate to full Opus review.",
               file=sys.stderr)
         sys.exit(1)
     else:
-        print(f"\nAll {len(results)} checks PASS.")
+        print(f"\nAll {len(all_results)} checks PASS.")
 
 
 if __name__ == "__main__":

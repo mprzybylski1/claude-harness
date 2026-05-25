@@ -5,6 +5,7 @@ severity: low | medium | high | critical
 status: open
 phase: 2 | 3 | 4 | process
 layer: backend | frontend | fullstack | infra | process
+# repo: <name from workspace.yaml repos list> — omit if ticket spans all repos or no workspace
 opened: S00 YYYY-MM-DD
 closed:
 ---
