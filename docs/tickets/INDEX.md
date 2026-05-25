@@ -1,29 +1,30 @@
 # Ticket Index
 
-Generated S1 2026-05-25. 4 open tickets.
+Generated S2 2026-05-25. 4 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
-## Critical (0)
-
-*(none)*
-
-## High (0)
-
-*(none)*
-
-## Medium (3)
+## Critical (2)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
-| T006 | Multi-repo workspace support | Ph2 | infra | -1 sessions |
-| T007 | Client-facing workspace repo and progress.md generation | Ph2 | fullstack | -1 sessions |
-| T009 | Hooks workspace scoping — session log and ticket hooks | Ph2 | infra | -1 sessions |
+| T010 | _yaml_load swallows YAML parse errors — workspace detection silently fails | process | infra | 1 session |
+| T011 | check_unstaged_code_changes workspace branch reads repos without boundary check | process | infra | 1 session |
 
-## Low (1)
+## High (1)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
-| T008 | Global portfolio mode — cross-workspace metadata view | Ph2 | process | -1 sessions |
+| T013 | check_ticket_acs.py Bash source path fallback not bounded to repo or harness root | process | infra | 1 session |
+
+## Medium (1)
+
+| ID | Title | Phase | Layer | Age |
+|----|-------|-------|-------|-----|
+| T012 | Define and enforce Resolution text sanitization policy for client progress | process | process | 1 session |
+
+## Low (0)
+
+*(none)*
 
 ## Unknown (0)
 
