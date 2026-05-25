@@ -16,6 +16,9 @@ code_paths:
 # Relative path to the open tickets directory.
 tickets_dir: "docs/tickets/open"
 
+# Relative path to the workspaces directory (multi-project orchestration).
+workspaces_dir: "workspaces"
+
 # Static analysis checks to run at session close.
 # Available built-in checks: test_syntax, utcnow, eval_exec, sql_mutations,
 #                             exception_swallowing, bash_blocks, spec_status_enum

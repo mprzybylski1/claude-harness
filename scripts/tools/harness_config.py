@@ -60,6 +60,13 @@ def tickets_dir(harness: dict | None = None) -> str:
     return harness.get("tickets_dir", "docs/tickets/open")
 
 
+def workspaces_dir(harness: dict | None = None) -> str:
+    """Return the relative path to the workspaces directory."""
+    if harness is None:
+        harness = load()
+    return harness.get("workspaces_dir", "workspaces")
+
+
 def static_analysis_checks(harness: dict | None = None) -> list[str] | None:
     """Return the list of check names to run, or None to run all checks.
 

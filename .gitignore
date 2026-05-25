@@ -8,3 +8,8 @@ venv/
 *.log
 docs/opus_review_context.md
 .git/CLAUDE_SESSION_ID
+
+# Workspace runtime data — local only, never committed to harness repo
+workspaces/*/internal/
+workspaces/*/client/
+workspaces/archive/

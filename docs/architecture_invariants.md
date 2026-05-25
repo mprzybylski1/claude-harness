@@ -48,5 +48,21 @@ exception-catch-with-fallback patterns.
 
 ---
 
+## Invariant 5 — Workspace isolation
+
+**Rule:** Scripts that access repo content must only read paths declared in the active
+workspace's `workspace.yaml` repos list. No script may read from a repo belonging to
+a different workspace.
+
+**Why:** The harness manages multiple client and personal projects simultaneously. Client
+code must never appear in another workspace's Opus review context, session log, or static
+analysis output. Cross-workspace data leakage is a confidentiality violation.
+
+**Verification:** `workspace_config.assert_workspace_boundary(path, workspace)` must be
+called before any file read targeting a workspace repo path. The function exits with code 2
+if the path falls outside all declared repos.
+
+---
+
 *Add project-specific invariants above. Remove placeholder sections that don't apply.*
 *Keep invariants tightly scoped — each should be checkable by a specific grep or test.*
