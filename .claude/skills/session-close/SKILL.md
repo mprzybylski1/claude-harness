@@ -181,6 +181,10 @@ Do NOT commit yet — wait for Opus to finish writing to opus_notes.md.
 
 ### Step 5c — Generate client progress
 
+> **Note:** The first sentence of each ticket's `## Resolution` is copied verbatim
+> to `client/progress.md`. Ensure it is written as a client-facing statement before
+> closing the ticket.
+
 If the workspace has a `client_remote` configured in `workspace.yaml`:
 
 1. Generate the client progress summary:

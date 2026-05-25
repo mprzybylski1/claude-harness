@@ -20,4 +20,8 @@ What "done" looks like. Make it testable.
 Additional context, links to related tickets, prior Opus references.
 
 ## Resolution
+> **Client-visible:** The first sentence of this section is copied verbatim into
+> `client/progress.md`. Write it as a user-facing statement — no internal paths,
+> @-handles, ticket IDs, or internal URLs.
+
 (Fill in on close: what was done and in which session/commit.)
