@@ -529,3 +529,73 @@ class TestDocsPathRouting:
             result = hook._is_ticket_file(ticket_path)
 
         assert result is True
+
+    def test_bash_mv_docs_path_blocked_with_unchecked_ac(self, tmp_path):
+        """Bash mv into docs_path closed/ is blocked (exit 2) when source has unchecked ACs."""
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        harness_dir = project_dir / ".harness"
+        ws_dir = tmp_path / "workspaces" / "myws"
+        self._make_workspace_yaml(ws_dir, harness_dir)
+
+        open_dir = harness_dir / "tickets" / "open"
+        open_dir.mkdir(parents=True)
+        closed_dir = harness_dir / "tickets" / "closed"
+        closed_dir.mkdir(parents=True)
+        src_ticket = open_dir / "T001.md"
+        src_ticket.write_text("# T001\n\n- [ ] unchecked AC\n")
+
+        hook = _load_hook("check_ticket_acs")
+
+        command = f"mv {src_ticket} {closed_dir / 'T001.md'}"
+        payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": command}})
+
+        orig_stdin = sys.stdin
+        try:
+            with (
+                patch.object(hook, "REPO_ROOT", tmp_path / "harness_root"),
+                patch.object(hook, "CLOSED_DIR", tmp_path / "harness_root" / "docs" / "tickets" / "closed"),
+                patch.object(hook, "active_workspace_dir", return_value=ws_dir),
+            ):
+                with pytest.raises(SystemExit) as exc_info:
+                    sys.stdin = io.StringIO(payload)
+                    hook.main()
+        finally:
+            sys.stdin = orig_stdin
+
+        assert exc_info.value.code == 2, "unchecked AC in docs_path ticket must be blocked"
+
+    def test_bash_mv_docs_path_passes_with_checked_ac(self, tmp_path):
+        """Bash mv into docs_path closed/ passes (exit 0) when all ACs are ticked."""
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        harness_dir = project_dir / ".harness"
+        ws_dir = tmp_path / "workspaces" / "myws"
+        self._make_workspace_yaml(ws_dir, harness_dir)
+
+        open_dir = harness_dir / "tickets" / "open"
+        open_dir.mkdir(parents=True)
+        closed_dir = harness_dir / "tickets" / "closed"
+        closed_dir.mkdir(parents=True)
+        src_ticket = open_dir / "T001.md"
+        src_ticket.write_text("# T001\n\n- [x] checked AC\n")
+
+        hook = _load_hook("check_ticket_acs")
+
+        command = f"mv {src_ticket} {closed_dir / 'T001.md'}"
+        payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": command}})
+
+        orig_stdin = sys.stdin
+        try:
+            with (
+                patch.object(hook, "REPO_ROOT", tmp_path / "harness_root"),
+                patch.object(hook, "CLOSED_DIR", tmp_path / "harness_root" / "docs" / "tickets" / "closed"),
+                patch.object(hook, "active_workspace_dir", return_value=ws_dir),
+            ):
+                with pytest.raises(SystemExit) as exc_info:
+                    sys.stdin = io.StringIO(payload)
+                    hook.main()
+        finally:
+            sys.stdin = orig_stdin
+
+        assert exc_info.value.code == 0, "all ACs checked in docs_path ticket must pass"

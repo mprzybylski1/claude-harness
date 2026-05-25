@@ -136,36 +136,46 @@ def main() -> None:
         if "closed" not in command:
             sys.exit(0)
 
+        # docs_root covers docs_path workspaces; for standard workspaces it is a
+        # subdirectory of REPO_ROOT, so adding it to the allowlist is always safe.
+        docs_root = _get_closed_dir().parent.parent
+        ws_dir = active_workspace_dir()
+
         for src in _bash_ticket_sources(command):
             try:
                 if src.is_absolute():
                     resolved = src
                 else:
-                    # In workspace context the Bash command may use workspace-relative paths
-                    ws_dir = active_workspace_dir()
-                    candidate = ws_dir / src if ws_dir else None
-                    resolved = candidate if (candidate and candidate.exists()) else REPO_ROOT / src
+                    # Resolution order: docs_root-relative (docs_path workspaces),
+                    # ws_dir-relative, then REPO_ROOT-relative fallback.
+                    docs_candidate = docs_root / src
+                    ws_candidate = ws_dir / src if ws_dir else None
+                    if docs_candidate.exists():
+                        resolved = docs_candidate
+                    elif ws_candidate and ws_candidate.exists():
+                        resolved = ws_candidate
+                    else:
+                        resolved = REPO_ROOT / src
                 resolved = resolved.resolve()
-                # Bounds check: resolved path must stay within REPO_ROOT or ws_dir
-                in_repo_root = False
-                try:
-                    resolved.relative_to(REPO_ROOT)
-                    in_repo_root = True
-                except ValueError:
-                    pass
-                in_ws_dir = False
-                if not in_repo_root:
-                    ws_dir = active_workspace_dir()
-                    if ws_dir:
-                        try:
-                            resolved.relative_to(ws_dir)
-                            in_ws_dir = True
-                        except ValueError:
-                            pass
-                if not in_repo_root and not in_ws_dir:
+                # Bounds check: resolved path must stay within an allowed root.
+                in_allowed = False
+                for allowed in (REPO_ROOT, docs_root):
+                    try:
+                        resolved.relative_to(allowed)
+                        in_allowed = True
+                        break
+                    except ValueError:
+                        pass
+                if not in_allowed and ws_dir:
+                    try:
+                        resolved.relative_to(ws_dir)
+                        in_allowed = True
+                    except ValueError:
+                        pass
+                if not in_allowed:
                     print(
                         f"AC pre-lint WARNING: source path {src!r} resolves outside "
-                        f"REPO_ROOT and workspace — skipping read.",
+                        f"REPO_ROOT, docs root, and workspace — skipping read.",
                         file=sys.stderr,
                     )
                     continue
