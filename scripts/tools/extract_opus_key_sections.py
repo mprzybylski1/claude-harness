@@ -69,12 +69,14 @@ def main(opus_notes_path: Path | None = None) -> None:
 
     text = path.read_text(encoding="utf-8")
 
-    # Split into top-level review sections (## Opus Review — ...)
-    review_pattern = re.compile(r"^# Opus Review", re.MULTILINE)
+    # Split into top-level review sections — harness-root uses level-1 headers
+    # ("# Opus Review"), workspace files use level-2 ("## Opus Review") because
+    # the workspace file has a "# Opus Notes — <Project>" title at the top.
+    review_pattern = re.compile(r"^#{1,2} Opus Review", re.MULTILINE)
     boundaries = [m.start() for m in review_pattern.finditer(text)]
 
     if not boundaries:
-        print(f"ERROR: no '# Opus Review' sections found in {OPUS_NOTES}", file=sys.stderr)
+        print(f"ERROR: no '# Opus Review' sections found in {path}", file=sys.stderr)
         sys.exit(1)
 
     # Take the LAST review section
@@ -86,8 +88,12 @@ def main(opus_notes_path: Path | None = None) -> None:
     print(latest_section[:header_end])
     print()
 
-    # Walk through subsections (## ...) and print only the kept ones
-    sub_pattern = re.compile(r"^## (.+)$", re.MULTILINE)
+    # Subsections are one level deeper than the review header:
+    #   harness-root: "# Opus Review" → subsections are "## ..."
+    #   workspace:    "## Opus Review" → subsections are "### ..."
+    boundary_line = latest_section[:latest_section.find("\n")]
+    sub_prefix = "###" if boundary_line.startswith("## ") else "##"
+    sub_pattern = re.compile(rf"^{sub_prefix} (.+)$", re.MULTILINE)
     sub_matches = list(sub_pattern.finditer(latest_section))
 
     for i, match in enumerate(sub_matches):
@@ -109,10 +115,10 @@ def main(opus_notes_path: Path | None = None) -> None:
 
 if __name__ == "__main__":
     import argparse
-    _parser = argparse.ArgumentParser(add_help=False)
+    _parser = argparse.ArgumentParser()
     _parser.add_argument("--with-carry-forwards", action="store_true")
     _parser.add_argument("--opus", default=None, metavar="PATH")
-    _args, _ = _parser.parse_known_args()
+    _args = _parser.parse_args()
     _opus_path = Path(_args.opus) if _args.opus else None
     main(_opus_path)
     if _args.with_carry_forwards:

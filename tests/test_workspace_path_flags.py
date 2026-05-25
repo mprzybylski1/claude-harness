@@ -338,3 +338,62 @@ class TestHarnessYamlCodePaths:
         assert any(p == "scripts/" or p.startswith("scripts") for p in prefixes), (
             f"'scripts/' not in code_paths: {prefixes}"
         )
+
+
+# ── T031: extract_opus_key_sections.py — workspace level-2 header support ────
+
+WORKSPACE_OPUS_NOTES_MD = """\
+# Opus Notes — My Project
+
+## Opus Review — S5 2026-03-01
+
+### Invariant Violations
+
+None.
+
+### Architectural Concerns
+
+One concern here.
+
+### Suggested Next Session Focus
+
+1. Fix the thing.
+"""
+
+
+class TestExtractOpusKeySectionsWorkspaceFormat:
+    def test_parses_level2_review_header(self, tmp_path):
+        """Workspace opus_notes.md uses ## Opus Review (level 2) — must parse correctly."""
+        opus = tmp_path / "opus_notes.md"
+        opus.write_text(WORKSPACE_OPUS_NOTES_MD)
+        result = subprocess.run(
+            [sys.executable, str(TOOLS / "extract_opus_key_sections.py"),
+             "--opus", str(opus)],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        assert "S5" in result.stdout
+        assert "Invariant Violations" in result.stdout
+
+    def test_error_message_shows_actual_path(self, tmp_path):
+        """Error message must name the --opus path, not the hardcoded OPUS_NOTES constant."""
+        fake = tmp_path / "no_reviews_here.md"
+        fake.write_text("# Opus Notes — Project\n\nNo reviews yet.\n")
+        result = subprocess.run(
+            [sys.executable, str(TOOLS / "extract_opus_key_sections.py"),
+             "--opus", str(fake)],
+            capture_output=True, text=True,
+        )
+        assert result.returncode != 0
+        assert str(fake) in result.stderr, (
+            f"Expected path {fake} in stderr, got: {result.stderr!r}"
+        )
+
+    def test_help_flag_exits_zero(self):
+        """--help must exit 0 with usage text (Bug C: add_help=False was removing this)."""
+        result = subprocess.run(
+            [sys.executable, str(TOOLS / "extract_opus_key_sections.py"), "--help"],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0
+        assert "usage" in result.stdout.lower()
