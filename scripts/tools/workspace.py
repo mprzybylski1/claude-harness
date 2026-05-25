@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import re
 import shutil
+import subprocess
 import sys
 from datetime import date
 from pathlib import Path
@@ -42,6 +43,36 @@ def _load_cfg(ws_dir: Path) -> dict:
     if not ws_yaml.exists():
         return {}
     return yaml.safe_load(ws_yaml.read_text(encoding="utf-8")) or {}
+
+
+def _add_opus_context_to_gitignore(docs_path: Path) -> None:
+    """Append opus_review_context.md to the project repo's .gitignore (idempotent)."""
+    result = subprocess.run(
+        ["git", "-C", str(docs_path), "rev-parse", "--show-toplevel"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        return  # not a git repo
+    repo_root = Path(result.stdout.strip())
+    if repo_root == ROOT:
+        return  # same repo as harness — already gitignored
+    try:
+        rel = docs_path.relative_to(repo_root) / "opus_review_context.md"
+    except ValueError:
+        return
+    entry = str(rel)
+    gitignore = repo_root / ".gitignore"
+    if gitignore.exists():
+        lines = gitignore.read_text(encoding="utf-8").splitlines()
+        if entry in lines:
+            return
+        gitignore.write_text(
+            gitignore.read_text(encoding="utf-8").rstrip() + f"\n{entry}\n",
+            encoding="utf-8",
+        )
+    else:
+        gitignore.write_text(f"{entry}\n", encoding="utf-8")
+    print(f"Added {entry} to {repo_root.name}/.gitignore")
 
 
 def _scaffold(ws_dir: Path, docs_dir: Path | None = None) -> None:
@@ -187,6 +218,8 @@ def cmd_create(args: argparse.Namespace) -> None:
     ws_dir.mkdir(parents=True)
     _scaffold(ws_dir, docs_dir)
     _write_initial_files(ws_dir, docs_dir, name)
+    if docs_path_resolved:
+        _add_opus_context_to_gitignore(docs_path_resolved)
 
     cfg: dict = {
         "name": name,
