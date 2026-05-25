@@ -50,11 +50,18 @@ def _make_log(log_path: Path, records: list[dict]) -> None:
 # ── Tests: log_tool_usage.py ──────────────────────────────────────────────────
 
 class TestLogToolUsageHook:
-    def test_exits_silently_when_sentinel_absent(self, tmp_path):
-        """Hook exits 0 immediately (stdlib-only path) when sentinel file is absent."""
+    def test_exits_silently_when_both_off(self, tmp_path):
+        """Hook exits 0 when sentinel absent AND harness.yaml has telemetry false."""
         import time
+        import harness_config as _hc
         sentinel = ROOT / ".git" / "workflow_telemetry_on"
         sentinel_existed = sentinel.exists()
+        harness_yaml = ROOT / "harness.yaml"
+        original_yaml = harness_yaml.read_text(encoding="utf-8")
+        # Write a minimal harness.yaml with telemetry off
+        harness_yaml.write_text(original_yaml.replace(
+            "workflow_telemetry: true", "workflow_telemetry: false"
+        ), encoding="utf-8")
         if sentinel_existed:
             sentinel.unlink()
         try:
@@ -62,11 +69,28 @@ class TestLogToolUsageHook:
             result = _run_hook({"tool_name": "Edit", "tool_input": {"file_path": "foo.py"}})
             elapsed = time.monotonic() - start
         finally:
+            harness_yaml.write_text(original_yaml, encoding="utf-8")
             if sentinel_existed:
                 sentinel.touch()
         assert result.returncode == 0
-        # Sentinel-absent path must complete well under 1 s (no YAML load)
         assert elapsed < 1.0, f"Expected fast exit, took {elapsed:.3f}s"
+
+    def test_bootstrap_creates_sentinel_from_yaml(self):
+        """Sentinel-absent + yaml true → sentinel created, hook proceeds."""
+        sentinel = ROOT / ".git" / "workflow_telemetry_on"
+        sentinel_existed = sentinel.exists()
+        if sentinel_existed:
+            sentinel.unlink()
+        try:
+            # harness.yaml already has workflow_telemetry: true in this repo
+            result = _run_hook({"tool_name": "Read", "tool_input": {"file_path": "x.py"}})
+            assert result.returncode == 0
+            assert sentinel.exists(), "Bootstrap must have created the sentinel"
+        finally:
+            if not sentinel_existed and sentinel.exists():
+                pass  # leave it — we want telemetry on
+            elif sentinel_existed and not sentinel.exists():
+                sentinel.touch()
 
     def test_exits_silently_when_telemetry_disabled(self):
         """Hook must exit 0 and write nothing when workflow_telemetry is false/absent."""

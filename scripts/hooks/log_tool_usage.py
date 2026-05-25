@@ -106,12 +106,32 @@ def _log_error(msg: str) -> None:
         pass
 
 
+def _yaml_telemetry_enabled() -> bool:
+    """Stdlib-only check: is workflow_telemetry: true in harness.yaml?"""
+    import re
+    harness_yaml = ROOT / "harness.yaml"
+    if not harness_yaml.exists():
+        return False
+    try:
+        text = harness_yaml.read_text(encoding="utf-8")
+        return bool(re.search(r"^\s*workflow_telemetry\s*:\s*true", text, re.MULTILINE))
+    except Exception:
+        return False
+
+
 def main() -> None:
-    # Sentinel-file fast exit: check for .git/workflow_telemetry_on before
-    # importing harness_config (which pays a PyYAML + file-read cost).
-    # Sentinel is created/removed by scripts/tools/toggle_telemetry.py.
+    # Fast path: sentinel present → telemetry on, skip YAML check.
+    # Bootstrap: sentinel absent but harness.yaml says true → create sentinel,
+    # then proceed.  This makes telemetry self-activating on a fresh clone
+    # without requiring a manual toggle_telemetry.py on.
     if not _SENTINEL.exists():
-        sys.exit(0)
+        if not _yaml_telemetry_enabled():
+            sys.exit(0)
+        try:
+            _SENTINEL.parent.mkdir(parents=True, exist_ok=True)
+            _SENTINEL.touch()
+        except Exception:
+            pass  # proceed anyway — sentinel is an optimisation, not a gate
 
     sys.path.insert(0, str(ROOT / "scripts" / "tools"))
     import harness_config as _hc
