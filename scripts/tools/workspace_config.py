@@ -86,6 +86,11 @@ def list_active_workspaces() -> list[tuple[str, dict]]:
 
 # ── Repo accessors ────────────────────────────────────────────────────────────
 
+def client_remote(workspace: dict) -> str | None:
+    """Return the client git remote URL, or None if not configured."""
+    return workspace.get("client_remote") or None
+
+
 def all_repos(workspace: dict) -> list[dict]:
     """Return the repos list from a workspace config."""
     return workspace.get("repos", [])

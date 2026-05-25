@@ -156,6 +156,21 @@ Do NOT read files outside workspaces/<slug>/ or the workspace's declared repos.
 Append your review to `workspaces/<slug>/internal/opus_notes.md`.
 ```
 
+**Multi-repo Opus context (when workspace has secondary repos):**
+
+- **Primary repo:** full context as above — `prepare_opus_context.py` targets this path.
+- **Secondary repos:** for each secondary repo in `workspace.yaml`, run `git diff HEAD` in
+  that repo. If the diff is non-empty (dirty — changes made this session), include a brief
+  summary block in the Opus prompt:
+  ```
+  ## Secondary repo: <name> (<path>)
+  <paste the git diff or a condensed summary of changed files and their purpose>
+  ```
+  If the secondary repo is clean (no diff), mention it by name only:
+  ```
+  Secondary repo <name> had no changes this session.
+  ```
+
 **Isolation rule for Opus:** Opus must not read files from other workspaces or from repos
 not declared in `workspace.yaml`. State this explicitly in the prompt.
 
@@ -163,6 +178,29 @@ not declared in `workspace.yaml`. State this explicitly in the prompt.
 
 Verify sessions.md, system_state.md, closed ticket files, and INDEX.md are correct.
 Do NOT commit yet — wait for Opus to finish writing to opus_notes.md.
+
+### Step 5c — Generate client progress
+
+If the workspace has a `client_remote` configured in `workspace.yaml`:
+
+1. Generate the client progress summary:
+   ```
+   python scripts/tools/generate_client_progress.py \
+     --workspace workspaces/<slug>/ \
+     --session N
+   ```
+2. If `client_remote` is set, push the `client/` directory to the remote:
+   ```
+   cd workspaces/<slug>/client/
+   git init  # if not already a git repo
+   git add .
+   git commit -m "progress: S[CURRENT_SESSION] update"
+   git push <client_remote> main --force
+   ```
+   Note: `client/` is gitignored from the harness repo — this push goes to a separate private repo.
+3. If `client_remote` is not set, generate `client/progress.md` locally only (no push, no error).
+
+The push to `client_remote` is best-effort — if it fails, log the error and continue with Step 6.
 
 ### If SESSION_TYPE = docs
 
