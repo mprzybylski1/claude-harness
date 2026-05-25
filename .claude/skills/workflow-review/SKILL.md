@@ -44,6 +44,19 @@ cat <INTERNAL>/tickets/INDEX.md
 
 ---
 
+## Step 1b — Telemetry data (when available)
+
+If `workflow_telemetry: true` is set in `harness.yaml`, run the analysis script and
+include its output in the retrospective as objective signal alongside qualitative findings:
+
+```bash
+python scripts/tools/analyze_tool_log.py --session S[CURRENT_SESSION]
+```
+
+If telemetry is disabled or the log is empty, skip this step and note it in the verdict.
+
+---
+
 ## Step 2 — Systematic reflection
 
 Work through each category below. For each one, recall specific moments from this

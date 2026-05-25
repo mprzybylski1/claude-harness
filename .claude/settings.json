@@ -24,6 +24,15 @@
             "command": "python3 scripts/hooks/check_skill_bash_blocks_hook.py"
           }
         ]
+      },
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/hooks/log_tool_usage.py"
+          }
+        ]
       }
     ],
     "Stop": [
