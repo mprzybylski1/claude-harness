@@ -1,4 +1,19 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(xcodebuild *)",
+      "Bash(xcrun devicectl *)",
+      "Bash(python scripts/tools/generate_ticket_index.py *)",
+      "Bash(python scripts/tools/extract_opus_key_sections.py *)",
+      "Bash(python scripts/tools/extract_session_brief.py *)",
+      "Bash(python scripts/tools/surface_stale_tickets.py *)",
+      "Bash(python scripts/tools/repo_hygiene.py *)",
+      "Bash(python scripts/tools/workspace.py *)",
+      "Bash(python scripts/tools/workspace_internal_path.py *)",
+      "Bash(python scripts/tools/current_session.py *)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
