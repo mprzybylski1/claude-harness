@@ -251,7 +251,9 @@ def check_bash_blocks(root: Path) -> str:
 
 
 def _is_python_project(root: Path) -> bool:
-    return any((root / d).exists() for d in ("tests", "scripts"))
+    return any((root / f).exists() for f in (
+        "pyproject.toml", "setup.py", "setup.cfg", "requirements.txt",
+    )) or bool(list(root.glob("*.py")))
 
 
 def _static_analysis(root: Path = ROOT) -> str:
@@ -328,15 +330,23 @@ def main() -> None:
         diff = run(["git", "diff", f"{base_sha}..HEAD"]).stdout
         diff_stat = run(["git", "diff", f"{base_sha}..HEAD", "--stat"]).stdout
     else:
-        diff = run(["git", "diff", "main...HEAD"]).stdout
+        r_diff = run(["git", "diff", "main...HEAD"])
+        diff = r_diff.stdout
         diff_stat = run(["git", "diff", "main...HEAD", "--stat"]).stdout
+        if r_diff.returncode != 0 or not diff.strip():
+            print(
+                "WARNING: no session-close anchor found and 'git diff main...HEAD' returned "
+                "no output — diff may be empty because the default branch is not 'main'. "
+                "Pass --repo or ensure a session-close commit exists.",
+                file=sys.stderr,
+            )
 
     capped_diff, was_truncated, truncated_paths = _apply_diff_cap(diff.strip(), MAX_DIFF_LINES)
     if was_truncated:
         parts.append(_section("Session diff — stat (full diff truncated)", diff_stat))
         parts.append(_section(
             f"Session diff — priority-ordered, cap {MAX_DIFF_LINES} signal lines "
-            f"(core/strategies/execution first; docs/tickets/ and docs/archive/ excluded; governance appended in full)",
+            f"(scripts/tools/ and scripts/hooks/ first; docs/tickets/ and docs/archive/ excluded; governance appended in full)",
             capped_diff + "\n\n...(truncated — read individual files only if actively writing to them)",
             fence="diff",
         ))

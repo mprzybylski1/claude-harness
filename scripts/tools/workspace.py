@@ -53,8 +53,8 @@ def _add_opus_context_to_gitignore(docs_path: Path) -> None:
     )
     if result.returncode != 0:
         return  # not a git repo
-    repo_root = Path(result.stdout.strip())
-    if repo_root == ROOT:
+    repo_root = Path(result.stdout.strip()).resolve()
+    if repo_root == ROOT.resolve():
         return  # same repo as harness — already gitignored
     try:
         rel = docs_path.relative_to(repo_root) / "opus_review_context.md"

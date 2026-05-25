@@ -100,6 +100,10 @@ def main() -> int:
         print(f"ERROR: --keep ({keep}) must be less than --threshold ({threshold})", file=sys.stderr)
         return 1
 
+    if not sessions_file.exists():
+        print(f"ERROR: {sessions_file} not found", file=sys.stderr)
+        return 1
+
     content = sessions_file.read_text(encoding="utf-8")
     pre_log, entries, post_log = split_session_log(content)
 

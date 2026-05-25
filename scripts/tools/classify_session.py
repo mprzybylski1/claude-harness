@@ -102,10 +102,10 @@ def classify(files: list[str]) -> str:
 
 def main() -> None:
     import argparse
-    p = argparse.ArgumentParser(add_help=False)
+    p = argparse.ArgumentParser()
     p.add_argument("--repo", default=None, metavar="PATH",
                    help="Primary repo path for git operations (default: CWD)")
-    args, _ = p.parse_known_args()
+    args = p.parse_args()
     cwd = Path(args.repo).resolve() if args.repo else None
 
     sha = _get_last_session_close_sha(cwd=cwd)

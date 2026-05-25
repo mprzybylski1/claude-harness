@@ -28,12 +28,6 @@ ARCHIVE_DIR = ROOT / "docs" / "archive"
 _SECTION_RE = re.compile(r"^# Opus Review — S(\d+)", re.MULTILINE)
 
 
-def _archive_path(session_n: int) -> Path:
-    decade_start = (session_n // 10) * 10
-    decade_end = decade_start + 9
-    return ARCHIVE_DIR / f"opus_notes_S{decade_start}-S{decade_end}.md"
-
-
 def _archive_header(decade_start: int, decade_end: int) -> str:
     return (
         f"# Opus Review Notes — Archive S{decade_start}–S{decade_end}\n\n"
