@@ -19,21 +19,31 @@ Gate requirements before Phase 2:
 
 ## Active Work
 
-**S4 — fix all 5 Opus S3 findings (T015–T019) + implementation-review test tightenings**
+**S5 — workspace-awareness flags for all harness scripts + dead code removal + /workflow-review skill**
 
 Files changed:
-- `scripts/hooks/check_ticket_acs.py` — T015: Bash branch docs_path fix (docs_root resolution + bounds check)
-- `scripts/hooks/check_session_log.py` — T017: sessions_rel fallback uses actual path in docs_path mode
-- `scripts/tools/workspace_config.py` — T018: active_internal_dir exits 2 when docs_path dir is missing
-- `scripts/tools/workspace.py` — T016: reject docs_path inside workspaces_base(); T019: overwrite guard
-- `tests/test_hooks_workspace_scoping.py` — T015 Bash branch tests (2); T017 error message test (1)
-- `tests/test_workspace_config.py` — T018 missing-dir exit test; tightened to assert error message
-- `tests/test_workspace_extra.py` — T016 containment tests (2); T019 overwrite test (1); review fixes
+- `scripts/tools/current_session.py` — T020: added `--sessions PATH` flag
+- `scripts/tools/extract_session_brief.py` — T020: added `--sessions PATH` flag
+- `scripts/tools/extract_opus_key_sections.py` — T020: added `--opus PATH` flag; parameterized carry-forwards
+- `scripts/tools/extract_carry_forwards.py` — T020: threaded `notes_file` param through `extract()`/`main()`
+- `scripts/tools/prepare_opus_context.py` — T021: `--repo/--sessions/--opus/--output` flags; removed 4 dead trading-app static checks (~212 lines); tightened `_is_python_project`; `check_utcnow`/`check_bash_blocks` now cover `scripts/` + `tests/`
+- `scripts/tools/archive_session_log.py` — T022: `--sessions/--archive` flags; missing-file guard (impl-review F3)
+- `scripts/tools/rotate_opus_notes.py` — T022: `--opus/--archive` flags; `rotate()` parameterized; deleted dead `_archive_path()` (impl-review F5)
+- `scripts/tools/classify_session.py` — T022: `--repo` flag; git ops use repo cwd; `parse_args()` not `parse_known_args()` (impl-review F9)
+- `scripts/tools/workspace.py` — T023: `_add_opus_context_to_gitignore()` on workspace create; `.resolve()` path equality (impl-review F7)
+- `scripts/tools/run_static_analysis.py` — updated imports to match 3 remaining checks
+- `scripts/tools/README.md` — T024: new workspace-awareness matrix for all scripts in scripts/tools/
+- `.claude/skills/workflow-review/SKILL.md` — T025: new manual retrospective skill (5 steps)
+- `.claude/skills/session-close/SKILL.md` — T025: added /workflow-review pre-check prompt
+- `harness.yaml` — `static_analysis_checks` trimmed to `[test_syntax, utcnow, bash_blocks]`
+- `tests/test_workspace_path_flags.py` — new: 13 tests for T020 + T022 flags
+- `tests/test_prepare_opus_context_workspace.py` — new: 5 tests for T021
+- `tests/test_workspace_gitignore.py` — new: 5 tests for T023
 
-Tickets opened: T015, T016, T017, T018, T019
-Tickets closed: T015, T016, T017, T018, T019
+Tickets opened: T020, T021, T022, T023, T024, T025, T026
+Tickets closed: T020, T021, T022, T023, T024, T025
 
-Remaining open items: create first real workspace for live use (Phase 1 gate)
+Remaining open items: T026 (hook-logged telemetry, low priority); create first real workspace for live use (Phase 1 gate)
 
 ---
 
@@ -46,3 +56,4 @@ S1 2026-05-25: multi-workspace architecture (T001–T009) + fixed 20 Opus review
 S2 2026-05-25: fixed T010–T013 (all 4 Opus S1 findings) + 4 mid-session review fixes
 S3 2026-05-25: implemented T014 — docs_path support for project-repo workspace docs
 S4 2026-05-25: fixed T015–T019 (all 5 Opus S3 findings) + implementation-review test fixes
+S5 2026-05-25: workspace-awareness flags (T020–T025) + dead trading-app code removal + /workflow-review skill

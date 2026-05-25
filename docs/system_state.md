@@ -1,6 +1,6 @@
 # System State
 
-_Last updated: S4 2026-05-25_
+_Last updated: S5 2026-05-25_
 
 ---
 
@@ -23,7 +23,15 @@ Gate requirements before Phase 2:
 
 ## Open Tickets
 
-_No open tickets._
+**5 open tickets**
+
+| ID | Title | Phase | Age |
+|----|-------|-------|-----|
+| T027 | classify_session.py --repo flag is effectively a no-op | Ph2 | infra | this session |
+| T028 | prepare_opus_context --repo sends harness invariants not workspace's | Ph2 | infra | this session |
+| T029 | harness.yaml code_paths missing scripts/ — harness sessions misclassified | Ph2 | infra | this session |
+| T026 | workflow telemetry — hook-logged tool call data | Ph2 | infra | this session |
+| T030 | small consistency fixes from Opus S5 review (batch) | Ph2 | process | this session |
 
 ---
 

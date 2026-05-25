@@ -357,4 +357,106 @@ helpers) remains a latent Invariant 5 risk but is unchanged from S1.
 
 ---
 
+# Opus Review — S4
+
+**Invariant Violations:**
+None new this session. S4 explicitly fixed both S3 Invariant Violations (T015 closed
+the AC pre-lint fail-open in docs_path mode; T016 closed the docs_path-inside-
+workspaces_base hole). T017 partially closed S3 #6 (sessions_rel comparison now
+prints the correct path on error, but the underlying path-based comparison is still
+structurally dead in docs_path mode — see Architectural Concerns).
+
+**Architectural Concerns:**
+
+1. **`scripts/hooks/check_session_log.py:262-271` — T017 only fixed the error
+   message, not the structurally dead path-based comparison.** In docs_path mode,
+   `Path(sessions_path).relative_to(project_root)` raises ValueError because
+   sessions_path is inside the workspace repo, not the harness. The new fallback
+   sets `sessions_rel = sessions_path` (absolute). The subsequent comparison
+   `sessions_rel in all_changed or sessions_path in all_changed` then compares
+   an absolute path against a set of harness-repo-relative paths and can never
+   match. The content-based check at line 272+ saves it (the test asserts this
+   path fires), but the entire `sessions_rel in all_changed` branch is dead code
+   in docs_path mode. T017's resolution explicitly punts on this: "the git-path
+   comparison still silently misses." Either gate the path-based comparison
+   behind a docs_path-mode check (skip it entirely when sessions_path is outside
+   project_root) or remove the branch. Carry-forward of S1 #7 / S3 #6 — still
+   open after T017.
+
+2. **`scripts/hooks/check_ticket_acs.py:139` — `_get_closed_dir()` calls
+   `active_workspace_dir()` internally; S2 #17 fix is half-landed.** The Bash
+   branch now binds `ws_dir = active_workspace_dir()` once outside the for-src
+   loop (good), but `docs_root = _get_closed_dir().parent.parent` triggers
+   another `active_workspace_dir()` + YAML load via `_get_closed_dir()` →
+   `active_internal_dir()`. Net: 2 workspace lookups per Bash command instead of
+   the previous 2 (was: `active_workspace_dir()` × 2; now: `_get_closed_dir()`
+   + `active_workspace_dir()`). Cosmetic; S2 #17 carry-forward not fully closed.
+
+3. **T015 silently fixed a latent bug in standard (non-docs_path) workspace
+   Bash branch.** Previously `ws_candidate = ws_dir / src` resolved to
+   e.g. `workspaces/<slug>/tickets/open/T001.md` — but in standard workspaces,
+   tickets live at `workspaces/<slug>/internal/tickets/open/T001.md`. So the
+   Bash branch only worked correctly for absolute source paths in standard
+   workspaces too — relative paths silently fell through to the
+   `REPO_ROOT / src` fallback (harness root, also wrong). The T015 fix
+   incidentally fixes this because `docs_root = _get_closed_dir().parent.parent`
+   resolves to `ws_dir/internal` in standard workspaces. **But no test covers
+   the standard-workspace Bash branch** — see Test Gaps below. This means a
+   regression could re-break standard-workspace AC pre-lint without detection.
+
+4. **T019's overwrite guard is partial — only catches three specific filenames
+   and the open/closed ticket dirs.** Does not check for migrated `archive/`
+   content, `opus_review_context.md`, `system_state.md`, or any other docs that
+   could exist at the docs_path root. Acceptable for the documented data-loss
+   case (a fresh `_scaffold` + `_write_initial_files` writes only the three
+   detected filenames), but a broader "is this directory pristine?" check would
+   be more robust if `_scaffold` ever grows new initial files.
+
+**Carry-forwards from prior sessions:**
+
+- **S1 #3** (workspace-isolation in `run_static_analysis` helpers) — STILL OPEN.
+- **S1 #7 / S3 #6** (dead `sessions_rel` path-based comparison) — PARTIALLY closed
+  by T017 (error message fixed); structural dead-code in docs_path mode remains.
+- **S1 #8** (header-line regex fragility in `generate_client_progress.py`) — STILL OPEN.
+- **S1 #9** (portfolio stale-repo marking) — STILL OPEN.
+- **S1 #10** (workspace.py warns-but-creates on missing repo path) — STILL OPEN.
+- **S1 #11** (`_is_closed_ticket` loose substring match) — STILL OPEN.
+- **S1 #12** (`TRACKED_PREFIXES` filter missing in workspace branch) — STILL OPEN.
+- **S1 #14** (no E2E test for `run_static_analysis` workspace mode) — STILL OPEN.
+- **S1 #15** (no test for per-repo git-status iteration) — STILL OPEN.
+- **S2 #15** (closed-ticket Resolution audit for client_progress safety) — STILL OPEN.
+  Now also applies to T015–T019 Resolutions, several of which contain internal
+  symbols (`active_internal_dir`, `_workspaces_base`, hook script names).
+- **S2 #17** (`active_workspace_dir()` called twice in Bash branch) — PARTIALLY closed.
+  See Architectural Concern #2 above.
+- **S2 #18** (silent OSError swallow in AC pre-lint) — STILL OPEN.
+- **S2 #19** (no test for `ImportError` propagation in `_yaml_load`) — STILL OPEN.
+- **S2 #20** (no test for ws_dir branch of bounds check) — STILL OPEN.
+- **S2 #21** (no regression test for boundary check ordering) — STILL OPEN.
+- **S3 #3** (N YAML loads per hook in `regenerate_ticket_index.py` slow path) — STILL OPEN.
+- **S3 #11** (perf test for `_detect_workspace_from_path`) — STILL OPEN.
+
+**Suggested Next Session Focus:**
+
+1. **Close the remaining S3 #6 carry-forward properly.** Add an explicit
+   docs_path-mode branch in `check_session_log.run_session_log_check` that
+   either skips the path-based comparison or uses the workspace repo's git
+   diff (not harness's) to populate `all_changed`. T017 only addressed the
+   error message; the structurally dead comparison remains.
+
+2. **Add a standard-workspace test for the Bash branch in
+   `tests/test_hooks_workspace_scoping.py`** (TestDocsPathRouting). T015's two
+   new tests cover docs_path mode only; the standard-workspace path resolution
+   (`docs_root = ws_dir/internal`) is exercised by no test. Without it, a
+   regression to the candidate-resolution order could silently re-disable AC
+   pre-lint in standard workspaces.
+
+3. **Phase 1 gate is now unblocked from a code-quality standpoint** — all S3
+   findings are addressed. Highest-leverage next move is to **create the first
+   real workspace and run a live session** (the open gate item). This will
+   exercise the docs_path scaffolding/migration path in anger and surface any
+   issues the T015–T019 fixes did not anticipate.
+
+---
+
 
