@@ -84,15 +84,15 @@ def main(opus_notes_path: Path | None = None) -> None:
     latest_section = text[latest_start:]
 
     # Print the review header line
-    header_end = latest_section.find("\n")
-    print(latest_section[:header_end])
+    boundary_line = latest_section.split("\n", 1)[0]
+    print(boundary_line)
     print()
 
     # Subsections are one level deeper than the review header:
     #   harness-root: "# Opus Review" → subsections are "## ..."
     #   workspace:    "## Opus Review" → subsections are "### ..."
-    boundary_line = latest_section[:latest_section.find("\n")]
-    sub_prefix = "###" if boundary_line.startswith("## ") else "##"
+    level = len(boundary_line) - len(boundary_line.lstrip("#"))
+    sub_prefix = "#" * (level + 1)
     sub_pattern = re.compile(rf"^{sub_prefix} (.+)$", re.MULTILINE)
     sub_matches = list(sub_pattern.finditer(latest_section))
 

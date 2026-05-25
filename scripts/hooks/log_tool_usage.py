@@ -2,8 +2,9 @@
 """
 PostToolUse hook: append one JSON line per tool call to .git/session_tool_log.jsonl.
 
-Off by default — enable via: python scripts/tools/toggle_telemetry.py on
-(creates .git/workflow_telemetry_on sentinel and sets harness.yaml flag)
+On by default when harness.yaml has workflow_telemetry: true.
+Toggle via: python scripts/tools/toggle_telemetry.py on|off|status
+(manages .git/workflow_telemetry_on sentinel and harness.yaml in sync)
 
 Log format (one JSON object per line):
     {"ts": 1700000000.0, "tool": "Edit", "path": "scripts/...", "exit": 0, "session": "S6"}
@@ -130,8 +131,8 @@ def main() -> None:
         try:
             _SENTINEL.parent.mkdir(parents=True, exist_ok=True)
             _SENTINEL.touch()
-        except Exception:
-            pass  # proceed anyway — sentinel is an optimisation, not a gate
+        except Exception as exc:
+            _log_error(f"bootstrap sentinel create failed: {exc}")
 
     sys.path.insert(0, str(ROOT / "scripts" / "tools"))
     import harness_config as _hc

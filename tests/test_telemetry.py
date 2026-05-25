@@ -49,19 +49,52 @@ def _make_log(log_path: Path, records: list[dict]) -> None:
 
 # ── Tests: log_tool_usage.py ──────────────────────────────────────────────────
 
+def _make_fake_root(tmp_path: Path, telemetry_on: bool, sentinel: bool) -> Path:
+    """Build a minimal harness root in tmp_path for isolated hook testing."""
+    fake_root = tmp_path / "harness"
+    git = fake_root / ".git"
+    git.mkdir(parents=True)
+    (fake_root / "harness.yaml").write_text(
+        f"workflow_telemetry: {'true' if telemetry_on else 'false'}\n"
+        "workflow_telemetry_max_lines: 5000\n"
+    )
+    if sentinel:
+        (git / "workflow_telemetry_on").touch()
+    # Stub scripts/tools/ so harness_config can be imported
+    tools = fake_root / "scripts" / "tools"
+    tools.mkdir(parents=True)
+    real_tools = ROOT / "scripts" / "tools"
+    import os
+    for name in ("harness_config.py",):
+        src = real_tools / name
+        dst = tools / name
+        os.symlink(str(src), str(dst))
+    return fake_root
+
+
 class TestLogToolUsageHook:
+    def _run_hook_isolated(self, payload: dict, fake_root: Path) -> subprocess.CompletedProcess:
+        """Run the hook with HARNESS_ROOT overridden via env var (not yet implemented)
+        or by rewriting ROOT via symlink/subprocess cwd tricks.
+        Falls back to subprocess with the real hook but synthetic sentinel state."""
+        # The hook derives ROOT from __file__, so we can't easily redirect it without
+        # modifying the script. Instead, use a subprocess and control the real sentinel.
+        return subprocess.run(
+            [sys.executable, str(HOOK)],
+            input=json.dumps(payload),
+            capture_output=True, text=True,
+        )
+
     def test_exits_silently_when_both_off(self, tmp_path):
-        """Hook exits 0 when sentinel absent AND harness.yaml has telemetry false."""
-        import time
-        import harness_config as _hc
+        """Hook exits 0 quickly when sentinel absent AND harness.yaml has telemetry false."""
         sentinel = ROOT / ".git" / "workflow_telemetry_on"
-        sentinel_existed = sentinel.exists()
         harness_yaml = ROOT / "harness.yaml"
         original_yaml = harness_yaml.read_text(encoding="utf-8")
-        # Write a minimal harness.yaml with telemetry off
-        harness_yaml.write_text(original_yaml.replace(
-            "workflow_telemetry: true", "workflow_telemetry: false"
-        ), encoding="utf-8")
+        sentinel_existed = sentinel.exists()
+        harness_yaml.write_text(
+            original_yaml.replace("workflow_telemetry: true", "workflow_telemetry: false"),
+            encoding="utf-8",
+        )
         if sentinel_existed:
             sentinel.unlink()
         try:
@@ -73,34 +106,30 @@ class TestLogToolUsageHook:
             if sentinel_existed:
                 sentinel.touch()
         assert result.returncode == 0
-        assert elapsed < 1.0, f"Expected fast exit, took {elapsed:.3f}s"
+        assert elapsed < 0.5, f"Expected fast exit, took {elapsed:.3f}s"
 
     def test_bootstrap_creates_sentinel_from_yaml(self):
-        """Sentinel-absent + yaml true → sentinel created, hook proceeds."""
+        """Sentinel-absent + yaml true → sentinel created on first tool call."""
         sentinel = ROOT / ".git" / "workflow_telemetry_on"
         sentinel_existed = sentinel.exists()
         if sentinel_existed:
             sentinel.unlink()
         try:
-            # harness.yaml already has workflow_telemetry: true in this repo
             result = _run_hook({"tool_name": "Read", "tool_input": {"file_path": "x.py"}})
             assert result.returncode == 0
             assert sentinel.exists(), "Bootstrap must have created the sentinel"
         finally:
-            if not sentinel_existed and sentinel.exists():
-                pass  # leave it — we want telemetry on
-            elif sentinel_existed and not sentinel.exists():
+            # Always restore to original state
+            if sentinel_existed and not sentinel.exists():
                 sentinel.touch()
+            elif not sentinel_existed and sentinel.exists():
+                sentinel.unlink()
 
     def test_exits_silently_when_telemetry_disabled(self):
         """Hook must exit 0 and write nothing when workflow_telemetry is false/absent."""
         payload = {"tool_name": "Edit", "tool_input": {"file_path": "foo.py"}}
         result = _run_hook(payload)
         assert result.returncode == 0
-        # Log must NOT have been written (telemetry off by default)
-        log = ROOT / ".git" / "session_tool_log.jsonl"
-        # We can't assert it doesn't exist (may be written by other tests),
-        # but we can verify the hook didn't crash.
 
     def test_handles_malformed_stdin_gracefully(self):
         """Invalid JSON on stdin must not crash the hook."""

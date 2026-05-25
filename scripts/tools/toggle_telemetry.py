@@ -17,10 +17,11 @@ ROOT = Path(__file__).resolve().parents[2]
 SENTINEL = ROOT / ".git" / "workflow_telemetry_on"
 
 
-def _set_harness_yaml(enabled: bool) -> None:
+def _set_harness_yaml(enabled: bool) -> bool:
+    """Return True if harness.yaml was updated, False if key not found."""
     harness_yaml = ROOT / "harness.yaml"
     if not harness_yaml.exists():
-        return
+        return False
     text = harness_yaml.read_text(encoding="utf-8")
     import re
     new_val = "true" if enabled else "false"
@@ -35,25 +36,30 @@ def _set_harness_yaml(enabled: bool) -> None:
     )
     if count:
         harness_yaml.write_text(updated, encoding="utf-8")
-    else:
-        print(
-            "WARNING: workflow_telemetry key not found in harness.yaml — add it manually.",
-            file=sys.stderr,
-        )
+        return True
+    return False
 
 
 def _enable() -> None:
     SENTINEL.parent.mkdir(parents=True, exist_ok=True)
     SENTINEL.touch()
-    _set_harness_yaml(True)
-    print("Telemetry ON — sentinel created, harness.yaml updated.")
+    yaml_ok = _set_harness_yaml(True)
+    if yaml_ok:
+        print("Telemetry ON — sentinel created, harness.yaml updated.")
+    else:
+        print("Telemetry ON — sentinel created. WARNING: workflow_telemetry key not found in harness.yaml — add it manually.", file=sys.stderr)
+        sys.exit(1)
 
 
 def _disable() -> None:
     if SENTINEL.exists():
         SENTINEL.unlink()
-    _set_harness_yaml(False)
-    print("Telemetry OFF — sentinel removed, harness.yaml updated.")
+    yaml_ok = _set_harness_yaml(False)
+    if yaml_ok:
+        print("Telemetry OFF — sentinel removed, harness.yaml updated.")
+    else:
+        print("Telemetry OFF — sentinel removed. WARNING: workflow_telemetry key not found in harness.yaml — add it manually.", file=sys.stderr)
+        sys.exit(1)
 
 
 def _status() -> None:

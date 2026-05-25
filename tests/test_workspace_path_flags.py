@@ -397,3 +397,16 @@ class TestExtractOpusKeySectionsWorkspaceFormat:
         )
         assert result.returncode == 0
         assert "usage" in result.stdout.lower()
+
+    def test_parses_level1_review_header(self, tmp_path):
+        """Harness-root opus_notes.md uses # Opus Review (level 1) — regression guard."""
+        opus = tmp_path / "opus_notes.md"
+        opus.write_text(OPUS_NOTES_MD)  # uses level-1 "# Opus Review"
+        result = subprocess.run(
+            [sys.executable, str(TOOLS / "extract_opus_key_sections.py"),
+             "--opus", str(opus)],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        assert "S42" in result.stdout
+        assert "Invariant Violations" in result.stdout
