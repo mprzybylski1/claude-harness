@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import importlib.util
+import io
 import os
 import sys
 from pathlib import Path
@@ -248,14 +249,19 @@ class TestDocsPathContainmentCheck:
             str(bad_docs_path), # docs_path INSIDE workspaces_base — must be rejected
         ])
 
+        captured = io.StringIO()
         with (
             patch.object(mod, "_workspaces_base", return_value=ws_base),
             patch("builtins.input", side_effect=inputs),
+            patch("sys.stderr", captured),
         ):
             with pytest.raises(SystemExit) as exc_info:
                 mod.cmd_create(args)
 
         assert exc_info.value.code == 1
+        assert "cross-workspace" in captured.getvalue(), (
+            "error message must mention cross-workspace contamination"
+        )
 
     def test_docs_path_outside_workspaces_base_is_accepted(self, tmp_path):
         """docs_path inside declared repo but outside workspaces_base() proceeds."""
@@ -282,11 +288,8 @@ class TestDocsPathContainmentCheck:
             patch.object(mod, "_workspaces_base", return_value=ws_base),
             patch("builtins.input", side_effect=inputs),
         ):
-            # Should not exit(1) — completes and creates the workspace
-            try:
-                mod.cmd_create(args)
-            except SystemExit as e:
-                assert e.code != 1, f"Valid docs_path must not exit(1), got {e.code}"
+            # Should complete without raising SystemExit
+            mod.cmd_create(args)
 
 
 # ── T019: scaffold must not overwrite existing docs files ─────────────────────

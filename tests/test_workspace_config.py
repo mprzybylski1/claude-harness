@@ -110,7 +110,7 @@ class TestInternalDir:
                 result = active_internal_dir()
         assert result == harness_dir.resolve()
 
-    def test_active_internal_dir_missing_docs_path_exits(self, tmp_path):
+    def test_active_internal_dir_missing_docs_path_exits(self, tmp_path, capsys):
         """active_internal_dir exits 2 when docs_path is configured but directory is missing."""
         nonexistent = tmp_path / "does_not_exist"
         ws = {"name": "test", "repos": [], "docs_path": str(nonexistent)}
@@ -119,3 +119,6 @@ class TestInternalDir:
                 with pytest.raises(SystemExit) as exc_info:
                     active_internal_dir()
         assert exc_info.value.code == 2
+        stderr = capsys.readouterr().err
+        assert str(nonexistent) in stderr, "error message must name the missing path"
+        assert "workspace.yaml" in stderr, "error message must name the config file"

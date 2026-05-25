@@ -170,6 +170,11 @@ def cmd_create(args: argparse.Namespace) -> None:
     if docs_path_resolved:
         existing = [f for f in ("sessions.md", "opus_notes.md", "tickets/INDEX.md")
                     if (docs_path_resolved / f).exists()]
+        # Also catch migrated workspaces that have tickets but no INDEX.md yet.
+        for sub in ("tickets/open", "tickets/closed"):
+            d = docs_path_resolved / sub
+            if d.is_dir() and any(d.glob("*.md")):
+                existing.append(sub + "/")
         if existing:
             print(
                 f"Error: docs_path '{docs_path_resolved}' already contains workspace files: "
