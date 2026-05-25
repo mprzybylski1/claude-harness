@@ -19,11 +19,12 @@ NOTES_FILE = Path(__file__).resolve().parents[2] / "docs" / "opus_notes.md"
 DEFAULT_THRESHOLD = 5
 
 
-def extract(threshold: int = DEFAULT_THRESHOLD) -> list[tuple[int, str]]:
-    if not NOTES_FILE.exists():
+def extract(threshold: int = DEFAULT_THRESHOLD, notes_file: Path | None = None) -> list[tuple[int, str]]:
+    path = notes_file if notes_file is not None else NOTES_FILE
+    if not path.exists():
         return []
 
-    text = NOTES_FILE.read_text()
+    text = path.read_text()
     found: dict[str, int] = {}     # norm_key -> max count
     original: dict[str, str] = {}  # norm_key -> display description
 
@@ -54,7 +55,7 @@ def extract(threshold: int = DEFAULT_THRESHOLD) -> list[tuple[int, str]]:
     )
 
 
-def main() -> None:
+def main(notes_file: Path | None = None) -> None:
     threshold = DEFAULT_THRESHOLD
     if "--threshold" in sys.argv:
         idx = sys.argv.index("--threshold")
@@ -64,7 +65,7 @@ def main() -> None:
             print("ERROR: --threshold requires an integer argument", file=sys.stderr)
             sys.exit(1)
 
-    items = extract(threshold)
+    items = extract(threshold, notes_file=notes_file)
     if not items:
         print(f"(no Opus carry-forwards >= {threshold} sessions)")
         return

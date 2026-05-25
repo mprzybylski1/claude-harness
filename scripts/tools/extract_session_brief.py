@@ -35,11 +35,17 @@ def extract_section(content: str, heading: str) -> str | None:
 
 
 def main() -> None:
-    if not SESSIONS_FILE.exists():
-        print(f"ERROR: {SESSIONS_FILE} not found", file=sys.stderr)
+    import argparse
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument("--sessions", default=None, metavar="PATH")
+    args, _ = p.parse_known_args()
+    sessions_file = Path(args.sessions) if args.sessions else SESSIONS_FILE
+
+    if not sessions_file.exists():
+        print(f"ERROR: {sessions_file} not found", file=sys.stderr)
         sys.exit(1)
 
-    content = SESSIONS_FILE.read_text()
+    content = sessions_file.read_text()
 
     # Current Phase & Status section
     phase_status = extract_section(content, "Current Phase & Status")

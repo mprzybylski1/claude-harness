@@ -61,12 +61,13 @@ def _cap_numbered_list(block: str, max_items: int) -> str:
     return header + "".join(kept).rstrip() + trailer
 
 
-def main() -> None:
-    if not OPUS_NOTES.exists():
-        print(f"ERROR: {OPUS_NOTES} not found", file=sys.stderr)
+def main(opus_notes_path: Path | None = None) -> None:
+    path = opus_notes_path if opus_notes_path is not None else OPUS_NOTES
+    if not path.exists():
+        print(f"ERROR: {path} not found", file=sys.stderr)
         sys.exit(1)
 
-    text = OPUS_NOTES.read_text(encoding="utf-8")
+    text = path.read_text(encoding="utf-8")
 
     # Split into top-level review sections (## Opus Review — ...)
     review_pattern = re.compile(r"^# Opus Review", re.MULTILINE)
@@ -110,10 +111,11 @@ if __name__ == "__main__":
     import argparse
     _parser = argparse.ArgumentParser(add_help=False)
     _parser.add_argument("--with-carry-forwards", action="store_true")
+    _parser.add_argument("--opus", default=None, metavar="PATH")
     _args, _ = _parser.parse_known_args()
-    main()
+    _opus_path = Path(_args.opus) if _args.opus else None
+    main(_opus_path)
     if _args.with_carry_forwards:
-        # Import and run carry-forwards extraction in the same process (avoid double file read)
         sys.path.insert(0, str(Path(__file__).resolve().parent))
         from extract_carry_forwards import main as _cf_main
-        _cf_main()
+        _cf_main(notes_file=_opus_path)

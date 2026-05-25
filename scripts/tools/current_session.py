@@ -49,7 +49,12 @@ def persist_session(n: int) -> None:
 
 
 def main() -> None:
-    n = get_current_session()
+    import argparse
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument("--sessions", default=None, metavar="PATH")
+    args, _ = p.parse_known_args()
+    path = Path(args.sessions) if args.sessions else SESSIONS_MD
+    n = get_current_session(path)
     persist_session(n)
     print(f"S{n}")
 
