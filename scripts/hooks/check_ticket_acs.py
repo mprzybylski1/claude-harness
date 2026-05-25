@@ -169,7 +169,7 @@ def main() -> None:
                     )
                     continue
                 content = resolved.read_text()
-            except Exception:
+            except (OSError, UnicodeDecodeError):
                 continue
             items = _unchecked(content)
             if items:

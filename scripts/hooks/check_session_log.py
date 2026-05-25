@@ -304,9 +304,9 @@ def check_unstaged_code_changes(project_root: str) -> list[str]:
         unstaged = []
         for repo in _all_repos(ws):
             repo_path = Path(repo["path"]).expanduser().resolve()
+            assert_workspace_boundary(repo_path, ws)
             if not repo_path.exists():
                 continue
-            assert_workspace_boundary(repo_path, ws)
             porcelain_out = run(["git", "status", "--porcelain"], cwd=str(repo_path))
             for line in porcelain_out.splitlines():
                 if len(line) < 4:
