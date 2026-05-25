@@ -69,21 +69,27 @@ def _top_files(records: list[dict], tool_names: set[str], n: int = 10) -> str:
 
 
 def _retry_sequences(records: list[dict]) -> str:
-    """Find same-tool calls within _RETRY_WINDOW_S — likely retries."""
-    if len(records) < 2:
-        return "  (none)"
+    """Find same-tool calls within _RETRY_WINDOW_S — likely retries.
+
+    Computed per-session to avoid false positives at session boundaries.
+    """
+    by_session: dict[str, list[dict]] = defaultdict(list)
+    for r in records:
+        by_session[r.get("session") or ""].append(r)
+
     retries: list[str] = []
-    for i in range(1, len(records)):
-        prev, cur = records[i - 1], records[i]
-        prev_tool = prev.get("tool") or ""
-        cur_tool = cur.get("tool") or ""
-        if not prev_tool or not cur_tool:
-            continue
-        if (prev_tool == cur_tool
-                and cur.get("ts", 0) - prev.get("ts", 0) <= _RETRY_WINDOW_S):
-            delta = cur.get("ts", 0) - prev.get("ts", 0)
-            path = (cur.get("path") or "")[:60]
-            retries.append(f"  {cur_tool} × 2 within {delta:.1f}s  path={path!r}")
+    for sess_records in by_session.values():
+        for i in range(1, len(sess_records)):
+            prev, cur = sess_records[i - 1], sess_records[i]
+            prev_tool = prev.get("tool") or ""
+            cur_tool = cur.get("tool") or ""
+            if not prev_tool or not cur_tool:
+                continue
+            if (prev_tool == cur_tool
+                    and cur.get("ts", 0) - prev.get("ts", 0) <= _RETRY_WINDOW_S):
+                delta = cur.get("ts", 0) - prev.get("ts", 0)
+                path = (cur.get("path") or "")[:60]
+                retries.append(f"  {cur_tool} × 2 within {delta:.1f}s  path={path!r}")
     return "\n".join(retries) if retries else "  (none)"
 
 
