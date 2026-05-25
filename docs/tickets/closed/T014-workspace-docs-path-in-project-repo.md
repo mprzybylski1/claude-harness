@@ -6,7 +6,7 @@ status: closed
 phase: 2
 layer: infra
 opened: S2 2026-05-25
-closed: S2 2026-05-25
+closed: S3 2026-05-25
 ---
 
 ## Problem
@@ -48,6 +48,6 @@ in the project repo and only committing sessions.md and tickets/.
 
 ## Resolution
 
-S2 2026-05-25: Workspace session docs can now live inside the project repo by setting `docs_path` in `workspace.yaml`, keeping development notes versioned and portable alongside code.
+S3 2026-05-25: Workspace session docs can now live inside the project repo by setting `docs_path` in `workspace.yaml`, keeping development notes versioned and portable alongside code.
 
 Implemented `internal_dir(ws_dir, ws)` in `workspace_config.py` as the single resolution point — returns `docs_path` (expanded, resolved) when set, else falls back to `ws_dir/internal`. Updated all path consumers: `check_session_log.py`, `check_ticket_acs.py`, `regenerate_ticket_index.py`, `portfolio.py`, `generate_client_progress.py`, `workspace.py`. Added `workspace_internal_path.py` helper script. Updated session-start and session-close skill docs to use `<INTERNAL>` placeholder derived via the new script. 12 new tests (7 unit + 5 integration), all 63 tests pass.
