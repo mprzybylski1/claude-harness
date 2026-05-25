@@ -67,8 +67,8 @@ def _priority_tier(path: str) -> int:
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-def _run(cmd: list[str], check: bool = False) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
+def _run(cmd: list[str], cwd: Path = ROOT, check: bool = False) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
 
 
 def _split_diff_files(diff: str) -> list[tuple[str, str]]:
@@ -246,8 +246,11 @@ def check_eval_exec(root: Path) -> str:
     AST-based (not grep) so comments and docstrings are not matched.
     """
     import ast as _ast
+    strategies_dir = root / "strategies"
+    if not strategies_dir.exists():
+        return "SKIP  strategies/ not found"
     eval_hits = []
-    for py_file in sorted((root / "strategies").rglob("*.py")):
+    for py_file in sorted(strategies_dir.rglob("*.py")):
         try:
             tree = _ast.parse(py_file.read_text())
         except SyntaxError:
@@ -422,12 +425,18 @@ def check_spec_status_enum(root: Path) -> str:
     return f"PASS  all {sum(1 for _ in specs_dir.glob('*.yaml'))} spec files have valid StrategyStatus values"
 
 
+def _is_python_project(root: Path) -> bool:
+    return any((root / d).exists() for d in ("tests", "scripts", "core", "strategies"))
+
+
 def _static_analysis(root: Path = ROOT) -> str:
     """
     Run all 7 pre-flight invariant checks. Returns a human-readable summary.
     Opus reads this section instead of reading source files to verify findings.
     Each check returns PASS / WARN / FAIL / SKIP with details on failure.
     """
+    if root != ROOT and not _is_python_project(root):
+        return "SKIP  static analysis N/A for this repo type (no Python project structure detected)"
     checks = [
         check_test_syntax,
         check_utcnow,
@@ -442,7 +451,30 @@ def _static_analysis(root: Path = ROOT) -> str:
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 
+def _parse_args() -> "argparse.Namespace":
+    import argparse
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--repo", default=None, metavar="PATH",
+                   help="Primary repo path for git diff (default: harness root)")
+    p.add_argument("--sessions", default=None, metavar="PATH",
+                   help="Path to sessions.md (default: docs/sessions.md in harness root)")
+    p.add_argument("--opus", default=None, metavar="PATH",
+                   help="Path to opus_notes.md to include in context (default: omitted)")
+    p.add_argument("--output", default=None, metavar="PATH",
+                   help="Output path (default: docs/opus_review_context.md in harness root)")
+    return p.parse_args()
+
+
 def main() -> None:
+    args = _parse_args()
+    repo_root = Path(args.repo).resolve() if args.repo else ROOT
+    sessions_path = Path(args.sessions) if args.sessions else ROOT / "docs" / "sessions.md"
+    opus_path = Path(args.opus) if args.opus else None
+    out_path = Path(args.output) if args.output else OUT
+
+    def run(cmd: list[str]) -> subprocess.CompletedProcess:
+        return _run(cmd, cwd=repo_root)
+
     parts: list[str] = []
 
     parts.append(
@@ -456,13 +488,13 @@ def main() -> None:
 
     # ── Git log since last session close ─────────────────────────────────────
     base_sha: str | None = None
-    log_out = _run(["git", "log", "--oneline", f"--grep={_SESSION_CLOSE_PREFIX}", "-20"]).stdout
+    log_out = run(["git", "log", "--oneline", f"--grep={_SESSION_CLOSE_PREFIX}", "-20"]).stdout
     log_lines = [ln.strip() for ln in log_out.splitlines() if ln.strip()]
     if log_lines:
         base_sha = log_lines[0].split()[0]
 
     if base_sha:
-        log = _run(["git", "log", f"{base_sha}..HEAD", "--oneline"]).stdout
+        log = run(["git", "log", f"{base_sha}..HEAD", "--oneline"]).stdout
         parts.append(_section(
             f"Commits since last session-close ({base_sha[:12]})",
             log.strip() or "(none — all changes are uncommitted)",
@@ -472,11 +504,11 @@ def main() -> None:
 
     # ── Session diff ──────────────────────────────────────────────────────────
     if base_sha:
-        diff = _run(["git", "diff", f"{base_sha}..HEAD"]).stdout
-        diff_stat = _run(["git", "diff", f"{base_sha}..HEAD", "--stat"]).stdout
+        diff = run(["git", "diff", f"{base_sha}..HEAD"]).stdout
+        diff_stat = run(["git", "diff", f"{base_sha}..HEAD", "--stat"]).stdout
     else:
-        diff = _run(["git", "diff", "main...HEAD"]).stdout
-        diff_stat = _run(["git", "diff", "main...HEAD", "--stat"]).stdout
+        diff = run(["git", "diff", "main...HEAD"]).stdout
+        diff_stat = run(["git", "diff", "main...HEAD", "--stat"]).stdout
 
     capped_diff, was_truncated, truncated_paths = _apply_diff_cap(diff.strip(), MAX_DIFF_LINES)
     if was_truncated:
@@ -499,8 +531,8 @@ def main() -> None:
         ))
 
     # ── Uncommitted / staged changes ──────────────────────────────────────────
-    unstaged = _run(["git", "diff", "HEAD"]).stdout
-    staged = _run(["git", "diff", "--cached"]).stdout
+    unstaged = run(["git", "diff", "HEAD"]).stdout
+    staged = run(["git", "diff", "--cached"]).stdout
     extra = (staged + unstaged).strip()
     if extra:
         extra_capped, extra_truncated, extra_cut = _apply_diff_cap(extra, 400)
@@ -515,13 +547,16 @@ def main() -> None:
 
     # ── Static analysis ───────────────────────────────────────────────────────
     parts.append(_section("Static analysis (pre-run — do not re-check by reading source files)",
-                           _static_analysis()))
+                           _static_analysis(repo_root)))
 
     # ── Trimmed docs/sessions.md ──────────────────────────────────────────────
-    sessions_path = ROOT / "docs" / "sessions.md"
     if sessions_path.exists():
         trimmed = _trim_sessions_md(sessions_path.read_text())
         parts.append(_section("docs/sessions.md (trimmed)", trimmed))
+
+    # ── docs/opus_notes.md (when provided via --opus) ─────────────────────────
+    if opus_path and opus_path.exists():
+        parts.append(_section("docs/opus_notes.md (last review)", opus_path.read_text()))
 
     # ── docs/architecture_invariants.md ──────────────────────────────────────
     inv_path = ROOT / "docs" / "architecture_invariants.md"
@@ -537,10 +572,14 @@ def main() -> None:
             template_path.read_text(),
         ))
 
-    OUT.write_text("\n---\n\n".join(parts))
-    size_kb = OUT.stat().st_size // 1024 + 1
+    out_path.write_text("\n---\n\n".join(parts))
+    size_kb = out_path.stat().st_size // 1024 + 1
     diff_line_count = len(diff.strip().splitlines())
-    print(f"Written {OUT.relative_to(ROOT)} ({size_kb}KB, {diff_line_count} diff lines)")
+    try:
+        display_path = out_path.relative_to(ROOT)
+    except ValueError:
+        display_path = out_path
+    print(f"Written {display_path} ({size_kb}KB, {diff_line_count} diff lines)")
 
 
 if __name__ == "__main__":
