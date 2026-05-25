@@ -37,7 +37,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "tools"))
-from workspace_config import active_workspace_dir, active_workspace, all_repos as _all_repos
+from workspace_config import active_workspace_dir, active_workspace, all_repos as _all_repos, assert_workspace_boundary
 
 TRACKED_PREFIXES = (
     "core/",
@@ -306,6 +306,7 @@ def check_unstaged_code_changes(project_root: str) -> list[str]:
             repo_path = Path(repo["path"]).expanduser().resolve()
             if not repo_path.exists():
                 continue
+            assert_workspace_boundary(repo_path, ws)
             porcelain_out = run(["git", "status", "--porcelain"], cwd=str(repo_path))
             for line in porcelain_out.splitlines():
                 if len(line) < 4:

@@ -1,13 +1,11 @@
 # Ticket Index
 
-Generated S2 2026-05-25. 3 open tickets.
+Generated S2 2026-05-25. 2 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
-## Critical (1)
+## Critical (0)
 
-| ID | Title | Phase | Layer | Age |
-|----|-------|-------|-------|-----|
-| T011 | check_unstaged_code_changes workspace branch reads repos without boundary check | process | infra | 1 session |
+*(none)*
 
 ## High (1)
 
