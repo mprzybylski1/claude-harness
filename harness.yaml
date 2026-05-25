@@ -27,7 +27,8 @@ static_analysis_checks:
   - utcnow
   - bash_blocks
 
-# Opt-in workflow telemetry: logs each tool call to .git/session_tool_log.jsonl.
+# Workflow telemetry: logs each tool call to .git/session_tool_log.jsonl.
+# Default: ON (changed from opt-in to default-on in S7 2026-05-25).
 # Analyze with: python scripts/tools/analyze_tool_log.py
 # Toggle with:  python scripts/tools/toggle_telemetry.py on|off|status
 #   (creates/removes .git/workflow_telemetry_on sentinel + updates this file)

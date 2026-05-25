@@ -73,7 +73,7 @@ def _extract_path(tool_name: str, tool_input: dict) -> str:
 
 
 def _extract_exit(payload: dict) -> int:
-    """Best-effort exit code from tool_response; defaults to 0."""
+    """Bash exit code from tool_response; 0 for all non-Bash tools (no exit_code key)."""
     response = payload.get("tool_response", {})
     if isinstance(response, dict):
         code = response.get("exit_code")
@@ -115,7 +115,7 @@ def _yaml_telemetry_enabled() -> bool:
         return False
     try:
         text = harness_yaml.read_text(encoding="utf-8")
-        return bool(re.search(r"^\s*workflow_telemetry\s*:\s*true", text, re.MULTILINE))
+        return bool(re.search(r"^\s*workflow_telemetry\s*:\s*true\s*$", text, re.MULTILINE))
     except Exception:
         return False
 
@@ -133,6 +133,9 @@ def main() -> None:
             _SENTINEL.touch()
         except Exception as exc:
             _log_error(f"bootstrap sentinel create failed: {exc}")
+        # Exit without logging this first call — next call hits the fast path.
+        # Dropping one record on fresh-clone bootstrap is acceptable.
+        sys.exit(0)
 
     sys.path.insert(0, str(ROOT / "scripts" / "tools"))
     import harness_config as _hc

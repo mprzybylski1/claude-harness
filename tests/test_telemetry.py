@@ -125,8 +125,8 @@ class TestLogToolUsageHook:
             elif not sentinel_existed and sentinel.exists():
                 sentinel.unlink()
 
-    def test_exits_silently_when_telemetry_disabled(self):
-        """Hook must exit 0 and write nothing when workflow_telemetry is false/absent."""
+    def test_exits_zero_with_any_state(self):
+        """Hook exits 0 regardless of telemetry state (never breaks tool calls)."""
         payload = {"tool_name": "Edit", "tool_input": {"file_path": "foo.py"}}
         result = _run_hook(payload)
         assert result.returncode == 0
@@ -334,15 +334,19 @@ class TestLoadForRepoFallback:
         cfg = _hc.load_for_repo(repo)
         assert cfg.get("code_paths") == ["app/", "server/"]
 
-    def test_falls_back_on_invalid_yaml(self, tmp_path, capsys):
-        """load_for_repo warns and falls back when repo harness.yaml is invalid."""
+    def test_exits_on_invalid_yaml(self, tmp_path):
+        """load_for_repo exits 2 (fail-closed) when repo harness.yaml is malformed."""
         import harness_config as _hc
+        import subprocess
         repo = tmp_path / "bad_yaml_repo"
         repo.mkdir()
         (repo / "harness.yaml").write_text(": invalid: yaml: }{")
-        cfg = _hc.load_for_repo(repo)
-        harness_root_cfg = _hc.load()
-        assert cfg == harness_root_cfg
-        # Warning should have been printed to stderr
-        captured = capsys.readouterr()
-        assert "WARNING" in captured.err
+        # Call via subprocess so sys.exit(2) doesn't kill the test process
+        result = subprocess.run(
+            [sys.executable, "-c",
+             f"import sys; sys.path.insert(0, '{ROOT}/scripts/tools');"
+             f"import harness_config as _hc; _hc.load_for_repo('{repo}')"],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 2
+        assert "ERROR" in result.stderr

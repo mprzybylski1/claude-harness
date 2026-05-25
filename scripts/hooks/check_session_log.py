@@ -257,19 +257,18 @@ def run_session_log_check(project_root: str, all_changed: set[str]) -> bool:
         return True
 
     sessions_path, _ = _resolve_paths(project_root)
-    # Compute relative path; workspace internal/ files are gitignored so this
-    # check typically falls through to the content-based fallback below.
+    # Compute relative path for harness-root sessions.md (workspace files are
+    # gitignored from the harness repo and will never appear in git diff output).
+    sessions_display = sessions_path  # used in error message below
     try:
         sessions_rel = str(Path(sessions_path).relative_to(project_root))
+        sessions_display = sessions_rel
+        if sessions_rel in all_changed:
+            return True
     except ValueError:
-        # docs_path workspace: sessions.md is outside harness root — it is gitignored
-        # from the harness repo, so the git-path comparison below will not match.
-        # Fall through to the content-based check; use the full path in any error message.
-        sessions_rel = sessions_path
-
-    # Check if sessions.md was modified (git-visible path)
-    if sessions_rel in all_changed or sessions_path in all_changed:
-        return True
+        # docs_path workspace: sessions.md is outside harness root — skip git check,
+        # fall through to the content-based check below.
+        pass
 
     # Last resort: check if sessions.md content has today's date in Session Log
     if os.path.exists(sessions_path):
@@ -283,9 +282,9 @@ def run_session_log_check(project_root: str, all_changed: set[str]) -> bool:
 
     today = datetime.date.today().isoformat()
     print(
-        f"\n[STOP HOOK] Core Python files were modified but {sessions_rel} "
+        f"\n[STOP HOOK] Core Python files were modified but {sessions_display} "
         f"has no Session Log entry for today ({today}).\n"
-        f"\nUpdate {sessions_rel} before ending the session:\n"
+        f"\nUpdate {sessions_display} before ending the session:\n"
         f"  1. Update the 'Active Work' section with what changed.\n"
         f"  2. Append to 'Session Log': S[N] {today}: <one-line summary>\n",
         file=sys.stderr,

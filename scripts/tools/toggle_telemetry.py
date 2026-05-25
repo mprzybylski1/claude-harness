@@ -29,8 +29,8 @@ def _set_harness_yaml(enabled: bool) -> bool:
     #   workflow_telemetry: false
     #   # workflow_telemetry: true
     updated, count = re.subn(
-        r"^#?\s*(workflow_telemetry\s*:\s*).*$",
-        rf"\g<1>{new_val}",
+        r"^[#\s]*(workflow_telemetry\s*:\s*)\S*\s*$",
+        rf"\g<1>{new_val}\n",
         text,
         flags=re.MULTILINE,
     )
