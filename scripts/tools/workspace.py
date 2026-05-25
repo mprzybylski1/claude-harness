@@ -154,6 +154,16 @@ def cmd_create(args: argparse.Namespace) -> None:
                 file=sys.stderr,
             )
             sys.exit(1)
+        try:
+            docs_path_resolved.relative_to(ws_base)
+            print(
+                f"Error: docs_path '{docs_path_resolved}' must not be inside the harness "
+                f"workspaces directory ({ws_base}) — cross-workspace contamination.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        except ValueError:
+            pass  # Good — docs_path is outside workspaces_base
 
     ws_dir.mkdir(parents=True)
     docs_dir = docs_path_resolved if docs_path_resolved else ws_dir / "internal"

@@ -1,9 +1,13 @@
 """Additional workspace tests covering findings #15, #17, #18 from Opus review."""
 from __future__ import annotations
 
+import argparse
+import importlib
+import importlib.util
 import os
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -208,3 +212,78 @@ class TestRunStaticAnalysisWorkspaceMode:
         run_static_analysis.main()
         assert any(str(repo) in str(c) for c in boundary_calls), \
             "assert_workspace_boundary was not called for the workspace repo"
+
+
+# ── T016: docs_path containment — must not be inside workspaces_base() ────────
+
+def _load_workspace_tool():
+    spec = importlib.util.spec_from_file_location(
+        "workspace_tool", ROOT / "scripts" / "tools" / "workspace.py"
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class TestDocsPathContainmentCheck:
+    def test_docs_path_inside_workspaces_base_is_rejected(self, tmp_path):
+        """docs_path inside workspaces_base() is rejected even when inside a declared repo."""
+        # repo is the whole tmp_path tree so workspaces_base (a subdir) is also "inside" the repo
+        repo_path = tmp_path
+        ws_base = tmp_path / "harness" / "workspaces"
+        ws_base.mkdir(parents=True)
+
+        # bad docs_path: inside workspaces_base (violates cross-workspace isolation)
+        bad_docs_path = ws_base / "other-ws" / "internal"
+
+        mod = _load_workspace_tool()
+        args = argparse.Namespace(slug="test-ws")
+
+        inputs = iter([
+            "Test Workspace",   # name
+            "personal",         # type
+            "myapp",            # repo name
+            str(repo_path),     # repo path (contains ws_base → is_within_workspace passes)
+            "",                 # blank to finish repos
+            str(bad_docs_path), # docs_path INSIDE workspaces_base — must be rejected
+        ])
+
+        with (
+            patch.object(mod, "_workspaces_base", return_value=ws_base),
+            patch("builtins.input", side_effect=inputs),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                mod.cmd_create(args)
+
+        assert exc_info.value.code == 1
+
+    def test_docs_path_outside_workspaces_base_is_accepted(self, tmp_path):
+        """docs_path inside declared repo but outside workspaces_base() proceeds."""
+        repo_path = tmp_path / "myapp"
+        repo_path.mkdir()
+        ws_base = tmp_path / "harness" / "workspaces"
+        ws_base.mkdir(parents=True)
+
+        good_docs_path = repo_path / ".harness"  # inside repo, outside ws_base
+
+        mod = _load_workspace_tool()
+        args = argparse.Namespace(slug="test-ws2")
+
+        inputs = iter([
+            "Test Workspace 2",
+            "personal",
+            "myapp",
+            str(repo_path),
+            "",
+            str(good_docs_path),
+        ])
+
+        with (
+            patch.object(mod, "_workspaces_base", return_value=ws_base),
+            patch("builtins.input", side_effect=inputs),
+        ):
+            # Should not exit(1) — completes and creates the workspace
+            try:
+                mod.cmd_create(args)
+            except SystemExit as e:
+                assert e.code != 1, f"Valid docs_path must not exit(1), got {e.code}"
