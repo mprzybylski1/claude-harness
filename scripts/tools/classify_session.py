@@ -41,12 +41,13 @@ SAFETY_ADJACENT = (
 )
 
 
-def _get_last_session_close_sha() -> str:
+def _get_last_session_close_sha(cwd: Path | None = None) -> str:
     """Return the SHA of the most recent session-close commit."""
     result = subprocess.run(
         ["git", "log", "--oneline", "--format=%H %s"],
         capture_output=True,
         text=True,
+        cwd=cwd,
     )
     if result.returncode != 0:
         return ""
@@ -59,14 +60,14 @@ def _get_last_session_close_sha() -> str:
     return ""
 
 
-def _changed_files(since_sha: str) -> list[str]:
+def _changed_files(since_sha: str, cwd: Path | None = None) -> list[str]:
     """Return all files changed since since_sha plus any uncommitted changes."""
     files: set[str] = set()
 
     if since_sha:
         r = subprocess.run(
             ["git", "diff", f"{since_sha}..HEAD", "--name-only"],
-            capture_output=True, text=True,
+            capture_output=True, text=True, cwd=cwd,
         )
         if r.returncode == 0:
             files.update(f.strip() for f in r.stdout.splitlines() if f.strip())
@@ -74,7 +75,7 @@ def _changed_files(since_sha: str) -> list[str]:
     # Uncommitted changes
     r = subprocess.run(
         ["git", "diff", "HEAD", "--name-only"],
-        capture_output=True, text=True,
+        capture_output=True, text=True, cwd=cwd,
     )
     if r.returncode == 0:
         files.update(f.strip() for f in r.stdout.splitlines() if f.strip())
@@ -82,7 +83,7 @@ def _changed_files(since_sha: str) -> list[str]:
     # Untracked files that were Written this session (new tickets etc.)
     r = subprocess.run(
         ["git", "ls-files", "--others", "--exclude-standard"],
-        capture_output=True, text=True,
+        capture_output=True, text=True, cwd=cwd,
     )
     if r.returncode == 0:
         files.update(f.strip() for f in r.stdout.splitlines() if f.strip())
@@ -100,13 +101,20 @@ def classify(files: list[str]) -> str:
 
 
 def main() -> None:
-    sha = _get_last_session_close_sha()
+    import argparse
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument("--repo", default=None, metavar="PATH",
+                   help="Primary repo path for git operations (default: CWD)")
+    args, _ = p.parse_known_args()
+    cwd = Path(args.repo).resolve() if args.repo else None
+
+    sha = _get_last_session_close_sha(cwd=cwd)
     if not sha:
         # Can't find anchor — be conservative
         print("code")
         return
 
-    files = _changed_files(sha)
+    files = _changed_files(sha, cwd=cwd)
     print(classify(files))
 
 

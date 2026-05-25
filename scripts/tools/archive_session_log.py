@@ -38,6 +38,10 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--threshold", type=int, default=75, help="Archive when log exceeds this many entries (default 75)")
     p.add_argument("--keep", type=int, default=30, help="Entries to retain after archiving (default 30)")
+    p.add_argument("--sessions", default=None, metavar="PATH",
+                   help="Path to sessions.md (default: harness-root docs/sessions.md)")
+    p.add_argument("--archive", default=None, metavar="PATH",
+                   help="Path to archive file (default: harness-root docs/archive/session_log_archive.md)")
     return p.parse_args()
 
 
@@ -89,12 +93,14 @@ def main() -> int:
     args = parse_args()
     threshold = args.threshold
     keep = args.keep
+    sessions_file = Path(args.sessions) if args.sessions else SESSIONS_FILE
+    archive_file = Path(args.archive) if args.archive else ARCHIVE_FILE
 
     if keep >= threshold:
         print(f"ERROR: --keep ({keep}) must be less than --threshold ({threshold})", file=sys.stderr)
         return 1
 
-    content = SESSIONS_FILE.read_text(encoding="utf-8")
+    content = sessions_file.read_text(encoding="utf-8")
     pre_log, entries, post_log = split_session_log(content)
 
     count = len(entries)
@@ -106,16 +112,16 @@ def main() -> int:
     to_keep = entries[n_to_archive:]
 
     # Append to archive file
-    ARCHIVE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    archive_file.parent.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     archive_header = f"\n## Archived {timestamp} (entries {to_archive[0].split()[0]}–{to_archive[-1].split()[0]})\n\n"
     archive_block = archive_header + "\n".join(to_archive) + "\n"
 
-    if ARCHIVE_FILE.exists():
-        with ARCHIVE_FILE.open("a", encoding="utf-8") as f:
+    if archive_file.exists():
+        with archive_file.open("a", encoding="utf-8") as f:
             f.write(archive_block)
     else:
-        ARCHIVE_FILE.write_text(
+        archive_file.write_text(
             "# Session Log Archive\n\nOldest entries moved here when the active log exceeds the threshold.\n"
             + archive_block,
             encoding="utf-8",
@@ -126,7 +132,7 @@ def main() -> int:
     new_content = pre_log + "\n" + new_log_section
     if post_log:
         new_content += post_log
-    SESSIONS_FILE.write_text(new_content, encoding="utf-8")
+    sessions_file.write_text(new_content, encoding="utf-8")
 
     print(f"Archived {n_to_archive} entries; {keep} remain.")
     return 0

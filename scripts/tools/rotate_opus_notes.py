@@ -15,6 +15,7 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import re
 from pathlib import Path
 
@@ -43,9 +44,16 @@ def _archive_header(decade_start: int, decade_end: int) -> str:
     )
 
 
-def rotate() -> None:
+def rotate(notes: Path = NOTES, archive_dir: Path = ARCHIVE_DIR) -> None:
     """Archive oldest section(s) until opus_notes.md has exactly 1 review."""
-    content = NOTES.read_text()
+    import sys
+
+    def _archive_path_for(session_n: int) -> Path:
+        decade_start = (session_n // 10) * 10
+        decade_end = decade_start + 9
+        return archive_dir / f"opus_notes_S{decade_start}-S{decade_end}.md"
+
+    content = notes.read_text()
     initial_count = len(_SECTION_RE.findall(content))
 
     if initial_count <= 1:
@@ -54,7 +62,7 @@ def rotate() -> None:
 
     rotated = 0
     while True:
-        content = NOTES.read_text()
+        content = notes.read_text()
         matches = list(_SECTION_RE.finditer(content))
         if len(matches) <= 1:
             break
@@ -69,29 +77,35 @@ def rotate() -> None:
         remainder = content[second_start:]
 
         session_n = int(first.group(1))
-        archive_path = _archive_path(session_n)
+        archive_path = _archive_path_for(session_n)
+        archive_dir.mkdir(parents=True, exist_ok=True)
 
         if not archive_path.exists():
             decade_start = (session_n // 10) * 10
             decade_end = decade_start + 9
             archive_path.write_text(_archive_header(decade_start, decade_end))
-            print(f"Created archive {archive_path.relative_to(ROOT)}")
+            try:
+                print(f"Created archive {archive_path.relative_to(ROOT)}")
+            except ValueError:
+                print(f"Created archive {archive_path}")
 
         # Append to archive, then rewrite opus_notes.md.
         archive_text = archive_path.read_text().rstrip()
         archive_path.write_text(archive_text + "\n\n" + oldest_section + "\n\n\n")
-        NOTES.write_text(header_block + remainder)
+        notes.write_text(header_block + remainder)
 
-        print(f"Archived S{session_n} review → {archive_path.relative_to(ROOT)}")
+        try:
+            print(f"Archived S{session_n} review → {archive_path.relative_to(ROOT)}")
+        except ValueError:
+            print(f"Archived S{session_n} review → {archive_path}")
         rotated += 1
 
-    final_count = len(_SECTION_RE.findall(NOTES.read_text()))
+    final_count = len(_SECTION_RE.findall(notes.read_text()))
     print(
         f"Rotation complete: {rotated} section(s) archived. "
         f"opus_notes.md now has {final_count} section(s)."
     )
     if final_count != 1:
-        import sys
         sys.exit(
             f"ERROR: expected 1 section after rotation, got {final_count}. "
             "Inspect docs/opus_notes.md before proceeding."
@@ -99,4 +113,12 @@ def rotate() -> None:
 
 
 if __name__ == "__main__":
-    rotate()
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--opus", default=None, metavar="PATH",
+                   help="Path to opus_notes.md (default: harness-root docs/opus_notes.md)")
+    p.add_argument("--archive", default=None, metavar="PATH",
+                   help="Path to archive directory (default: harness-root docs/archive/)")
+    args = p.parse_args()
+    _notes = Path(args.opus) if args.opus else NOTES
+    _archive = Path(args.archive) if args.archive else ARCHIVE_DIR
+    rotate(_notes, _archive)
