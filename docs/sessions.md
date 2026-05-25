@@ -19,29 +19,21 @@ Gate requirements before Phase 2:
 
 ## Active Work
 
-**S1 — workspace multi-project architecture (T001–T009) + 20 Opus findings fixed**
+**S2 — fix all 4 Opus S1 findings (T010–T013) + mid-session review fixes**
 
 Files changed:
-- `scripts/tools/workspace_config.py` (new) — CWD-based workspace detection, isolation enforcement
-- `scripts/tools/workspace.py` (new) — create/list/archive CLI
-- `scripts/tools/portfolio.py` (new) — cross-workspace metadata view
-- `scripts/tools/generate_client_progress.py` (new) — client-facing progress.md
-- `scripts/tools/run_static_analysis.py` — multi-repo scanning, boundary checks
-- `scripts/tools/harness_config.py` — added workspaces_dir() accessor
-- `scripts/hooks/check_session_log.py` — workspace-scoped path routing; fixed project_root=os.getcwd() critical bug; workspace guards on research artefact checks
-- `scripts/hooks/check_ticket_acs.py` — workspace-aware closed/ dir detection; workspace-relative Bash source path resolution
-- `scripts/hooks/regenerate_ticket_index.py` — workspace path detection, narrowed exception
-- `.claude/skills/session-start/SKILL.md` — workspace detection step, portfolio call, path table
-- `.claude/skills/session-close/SKILL.md` — workspace scoping, multi-repo Opus, client progress step
-- `harness.yaml` — workspaces_dir key
-- `.gitignore` — workspaces/*/internal/, workspaces/*/client/, workspaces/archive/
-- `docs/architecture_invariants.md` — Invariant 5 (workspace isolation)
-- `tests/test_workspace_isolation.py`, `tests/test_hooks_workspace_scoping.py`, `tests/test_workspace_extra.py` — 45 workspace tests
+- `scripts/tools/workspace_config.py` — `_yaml_load` split OSError vs YAMLError (T010)
+- `scripts/hooks/check_session_log.py` — `assert_workspace_boundary` before git status (T011); boundary check before exists() check (review fix)
+- `scripts/hooks/check_ticket_acs.py` — Bash source path bounds check (T013); narrowed bare except Exception (review fix)
+- `.claude/skills/session-close/SKILL.md` — Resolution text client-visible policy note (T012)
+- `docs/tickets/TEMPLATE.md` — Resolution section client-visible annotation (T012); trailing newline (review fix)
+- `tests/test_workspace_config.py` (new) — 4 tests for _yaml_load exception handling
+- `tests/test_hooks_workspace_scoping.py` — tampered path exit(2) test (T011); traversal bounds test rewritten to drive hook.main() (T013 + review fix)
 
-Tickets closed: none (harness infrastructure session)
+Tickets closed: T010, T011, T012, T013
 Tickets opened: none
 
-Remaining open items: create first real workspace for live use
+Remaining open items: create first real workspace for live use (Phase 1 gate)
 
 ---
 
@@ -51,3 +43,4 @@ Remaining open items: create first real workspace for live use
 
 S000 2000-01-01: template initialized
 S1 2026-05-25: multi-workspace architecture (T001–T009) + fixed 20 Opus review findings
+S2 2026-05-25: fixed T010–T013 (all 4 Opus S1 findings) + 4 mid-session review fixes

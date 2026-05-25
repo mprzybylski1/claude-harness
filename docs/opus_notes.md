@@ -1,46 +1,3 @@
-# Opus Review — S001 YYYY-MM-DD
-
-**Scope:** Template initialization — no production code reviewed.
-
-**Files reviewed:** none (template placeholder)
-
----
-
-## Invariant Violations
-
-None. Template not yet in use.
-
-## Architectural Concerns
-
-None.
-
-## Bugs & Implementation Issues
-
-None.
-
-## Session Notes Discrepancy
-
-None.
-
-## Tickets Opened This Session
-
-None.
-
-## Tickets Closed This Session
-
-None.
-
-## Suggested Next Session Focus
-
-Fill in `docs/architecture_invariants.md`, complete CLAUDE.md placeholders, and open
-your first ticket.
-
-## Clean
-
-N/A — template placeholder review.
-
----
-
 # Opus Review — S1 2026-05-25
 
 **Scope:** Multi-workspace architecture (T001–T009) plus 20 follow-up findings from the
@@ -189,3 +146,161 @@ mid-session review. Reviewed the full session diff (~2017 lines) covering
 3. **Create the first real workspace and exercise the full hook chain.** The current
    gate item "First real workspace created and used for a live session" will surface
    any remaining path/boundary issues that synthetic tests cannot.
+
+---
+
+# Opus Review — S2 2026-05-25
+
+**Scope:** Four ticket closures (T010–T013) addressing S1 findings #1, #2, #4, #5, #6,
+plus four mid-session review fixes. Diff covers `workspace_config.py`,
+`check_session_log.py`, `check_ticket_acs.py`, `session-close/SKILL.md`,
+`TEMPLATE.md`, and two test files. Total: 8 commits, ~250 lines.
+
+## S1 Carry-Forwards Fixed This Session
+
+1. **S1 #1 (T010) — FIXED.** `_yaml_load` now distinguishes `(FileNotFoundError,
+   OSError)` (return `{}`) from `yaml.YAMLError` (re-raise). `import yaml` lifted out
+   of the try block so `ImportError` propagates. Four new tests in
+   `tests/test_workspace_config.py` cover all four branches.
+
+2. **S1 #2 (T011) — FIXED.** `assert_workspace_boundary(repo_path, ws)` called inside
+   the `_all_repos` loop in `check_unstaged_code_changes`, before `repo_path.exists()`
+   and the `git status` subprocess. Test `test_tampered_path_triggers_system_exit_2`
+   exercises the failure path.
+
+3. **S1 #4 (T012) — POLICY DECIDED.** Option A chosen: documentation-only. `TEMPLATE.md`
+   Resolution section now warns that first sentence is client-visible verbatim;
+   `session-close/SKILL.md` Step 5c carries the same note. No code-level sanitisation —
+   deferred until first real client workspace exercises the path. Acceptable for now,
+   but the leak surface is still present (see Architectural Concerns #5 below).
+
+4. **S1 #5 (T010, same diff) — FIXED.** Bare `except Exception` in `_yaml_load`
+   replaced with narrowed `(FileNotFoundError, OSError)` plus explicit `yaml.YAMLError`
+   re-raise.
+
+5. **S1 #6 (T013) — FIXED.** `check_ticket_acs.py` Bash branch now calls
+   `resolved.resolve()` followed by `relative_to(REPO_ROOT)` / `relative_to(ws_dir)`
+   bounds check; out-of-bounds paths skipped with WARNING. Bare `except Exception`
+   narrowed to `(OSError, UnicodeDecodeError)`. Test
+   `test_bash_traversal_path_skipped_with_warning` drives `hook.main()` via stdin.
+
+## S1 Carry-Forwards Still Open
+
+6. **S1 #3 — NOT ADDRESSED.** `run_static_analysis.py` boundary check is still only
+   asserted at script entry, not enforced inside imported check helpers from
+   `prepare_opus_context.py`. Still a latent Invariant 5 hole if any helper follows
+   a symlink or joins a `..` path. No ticket opened in S2.
+
+7. **S1 #7 — NOT ADDRESSED.** Dead-code `sessions_rel` path-based comparison in
+   `check_session_log.py` workspace mode remains. Low impact (the content-based
+   fallback already enforces the check), but misleading.
+
+8. **S1 #8 — NOT ADDRESSED.** `generate_client_progress.py` header-line skipping
+   regex `r"\*\*\s*\n"` still fragile against multi-line summary headers.
+
+9. **S1 #9 — NOT ADDRESSED.** `portfolio.py` does not mark workspaces whose declared
+   repo paths no longer exist as stale. Cosmetic.
+
+10. **S1 #10 — NOT ADDRESSED.** `workspace.py cmd_create` still only warns on
+    non-existent repo path; workspace is created with a broken declaration.
+
+11. **S1 #11 — NOT ADDRESSED.** `_is_closed_ticket` substring match
+    `"/tickets/closed/" in file_path` still loose; would match
+    `notes/tickets/closed/file.md`.
+
+12. **S1 #12 — NOT ADDRESSED.** Workspace branch of `check_unstaged_code_changes`
+    still has no `TRACKED_PREFIXES` filter — reports every `.py` file in declared
+    repos. Will flood output on a real repo.
+
+13. **S1 #14 — NOT ADDRESSED.** No end-to-end integration test for
+    `run_static_analysis` in workspace mode (only stubbed unit test exists). Coupled
+    with #6 above — if helpers do leak via symlink, no test catches it.
+
+14. **S1 #15 — NOT ADDRESSED.** No test for the per-repo git-status iteration in
+    `check_unstaged_code_changes` workspace branch. T011's new test only proves the
+    boundary check fires; it does NOT prove the iteration produces correct output for
+    two repos with modified files.
+
+## Invariant Violations
+
+None new this session. S1 #3 (workspace-isolation hole in `run_static_analysis`
+helpers) remains a latent Invariant 5 risk but is unchanged from S1.
+
+## Architectural Concerns
+
+15. **T012's Option-A decision pushes leak risk to ticket authors.** The policy now
+    says "first sentence of Resolution is client-visible — don't write internal paths
+    there." This is enforceable only by author discipline. Every existing closed
+    ticket's Resolution (T001–T013) should be audited against this rule before any
+    real client workspace runs `generate_client_progress`. T010's Resolution
+    currently contains `_yaml_load` (internal symbol), `tests/test_workspace_config.py`
+    (internal path), `ImportError`/`yaml.YAMLError` (internal jargon) — all of which
+    would leak verbatim. T013's Resolution contains `check_ticket_acs.py` and
+    `tests/test_hooks_workspace_scoping.py`. Policy-only fix means these are now
+    actively unsafe to render to a client. Either: (a) re-audit each closed
+    Resolution and rewrite the first sentence, or (b) implement a minimal
+    sanitisation pass as originally proposed in Option B.
+
+16. **T011's boundary check is structurally tautological in non-tampered runs.** Both
+    `_all_repos(ws)` and `_repo_roots(ws)` (inside `assert_workspace_boundary`)
+    derive from the same `workspace["repos"]` dict. So a non-tampered run will always
+    pass — the call protects only against in-process mutation of `_all_repos`'s
+    return value between the two calls. This is acceptable defense-in-depth, but
+    the test (`test_tampered_path_triggers_system_exit_2`) only fires because it
+    mocks `_all_repos` while leaving `active_workspace` returning the original dict.
+    No real attack surface in current code exercises this — the test is artificial.
+
+## Bugs & Implementation Issues
+
+17. **`check_ticket_acs.py:144,157` — `active_workspace_dir()` called twice in the
+    bounds-check path.** Line 144 binds `ws_dir` for the candidate-path step; line
+    157 calls it again inside the bounds check. Two `Path.cwd().resolve()` calls and
+    two YAML loads per Bash command. Cosmetic — but in workspace context with many
+    Bash commands per session, this adds up. Bind once at the top of the `for src`
+    loop.
+
+18. **`check_ticket_acs.py:172` — `OSError` catch may still mask real read failures.**
+    Narrowing from bare `Exception` to `(OSError, UnicodeDecodeError)` is correct,
+    but the `continue` still silently skips. If a closed-ticket source file exists
+    in-bounds but is unreadable (permission error, symlink loop), the AC pre-lint
+    silently produces no findings for that file. Consider logging the OSError to
+    stderr before `continue` — same pattern as the WARNING just above.
+
+## Test Gaps
+
+19. **`test_workspace_config.py` does not test `ImportError` propagation.** T010's AC
+    #2 (`ImportError` not swallowed) is verified by code inspection (`import yaml`
+    outside try block), not by a test. A test that stubs `sys.modules["yaml"] = None`
+    and asserts `load_workspace` raises `ImportError` would close the AC properly.
+
+20. **`test_bash_traversal_path_skipped_with_warning` only tests `active_workspace_dir
+    return_value=None`.** The bounds-check has two branches (REPO_ROOT, ws_dir). The
+    ws_dir branch is exercised by no test. Add a workspace-context case where a
+    traversal escapes BOTH ws_dir and REPO_ROOT, and verify WARNING fires.
+
+21. **No regression test for the "boundary check before exists() check" mid-session
+    fix in `check_unstaged_code_changes`.** The session log notes "boundary check
+    before exists() check (review fix)" but the test plants `outside_repo` as an
+    existing directory. A test variant where the tampered path points to a
+    non-existent location would catch any future regression where someone moves the
+    boundary check below the `if not repo_path.exists(): continue` guard.
+
+## Suggested Next Session Focus
+
+22. **Audit and rewrite closed-ticket Resolution first sentences (Concern #15).**
+    Before any real client workspace runs `generate_client_progress`, each of T001–
+    T013's Resolution needs a client-facing first sentence. This is a 30-minute
+    docs-only pass and is a hard prerequisite to the Phase 1 gate ("First real
+    workspace created and used for a live session").
+
+23. **Close S1 carry-forwards #11, #12, #14 (items 11, 12, 13 above) before the
+    first real workspace.** `_is_closed_ticket` tightening, `TRACKED_PREFIXES` filter
+    in workspace mode, and end-to-end test for `run_static_analysis` workspace mode
+    are all small, but #12 (no prefix filter) will produce noisy hook output on the
+    first real repo and #14 leaves the most concerning S1 finding (#3) untested.
+
+24. **Either implement Option B for `generate_client_progress` sanitisation, or
+    explicitly defer the client-progress feature.** Option A only works if every
+    ticket author is disciplined — and item 15 shows current closed tickets already
+    violate the policy. If the team won't backfill, the safer move is to gate the
+    client_remote push step behind a manual review until sanitisation lands.
