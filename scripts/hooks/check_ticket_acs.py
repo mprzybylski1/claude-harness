@@ -144,6 +144,30 @@ def main() -> None:
                     ws_dir = active_workspace_dir()
                     candidate = ws_dir / src if ws_dir else None
                     resolved = candidate if (candidate and candidate.exists()) else REPO_ROOT / src
+                resolved = resolved.resolve()
+                # Bounds check: resolved path must stay within REPO_ROOT or ws_dir
+                in_repo_root = False
+                try:
+                    resolved.relative_to(REPO_ROOT)
+                    in_repo_root = True
+                except ValueError:
+                    pass
+                in_ws_dir = False
+                if not in_repo_root:
+                    ws_dir = active_workspace_dir()
+                    if ws_dir:
+                        try:
+                            resolved.relative_to(ws_dir)
+                            in_ws_dir = True
+                        except ValueError:
+                            pass
+                if not in_repo_root and not in_ws_dir:
+                    print(
+                        f"AC pre-lint WARNING: source path {src!r} resolves outside "
+                        f"REPO_ROOT and workspace — skipping read.",
+                        file=sys.stderr,
+                    )
+                    continue
                 content = resolved.read_text()
             except Exception:
                 continue

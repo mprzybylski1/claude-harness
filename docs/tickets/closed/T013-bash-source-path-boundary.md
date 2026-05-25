@@ -2,11 +2,11 @@
 id: T013
 title: check_ticket_acs.py Bash source path fallback not bounded to repo or harness root
 severity: high
-status: open
+status: closed
 phase: process
 layer: infra
 opened: S1 2026-05-25
-closed:
+closed: S2 2026-05-25
 ---
 
 ## Problem
@@ -19,11 +19,11 @@ any OSError, giving no signal that an out-of-bounds path was attempted.
 
 ## Acceptance Criteria
 
-- [ ] After resolving `src` to an absolute `resolved` path, verify it is either
+- [x] After resolving `src` to an absolute `resolved` path, verify it is either
   `relative_to(REPO_ROOT)` or `relative_to(ws_dir)` (if in workspace context)
-- [ ] If the resolved path escapes both roots, skip the source (do not read it) and
+- [x] If the resolved path escapes both roots, skip the source (do not read it) and
   print a WARNING to stderr
-- [ ] Test: command containing `mv ../outside/T001.md closed/T001.md` does not cause
+- [x] Test: command containing `mv ../outside/T001.md closed/T001.md` does not cause
   the hook to read the outside file
 
 ## Notes
@@ -31,3 +31,5 @@ any OSError, giving no signal that an out-of-bounds path was attempted.
 Opus S1 finding #6. Low likelihood in practice but the fallback must be bounded.
 
 ## Resolution
+
+Added `resolved.resolve()` plus `relative_to(REPO_ROOT)` / `relative_to(ws_dir)` bounds check in `check_ticket_acs.py` Bash branch before `resolved.read_text()`. Out-of-bounds paths are skipped with a WARNING to stderr. Added `TestCheckTicketAcsPathDetection::test_bash_traversal_path_skipped_with_warning` in `test_hooks_workspace_scoping.py`. All 51 tests pass.
