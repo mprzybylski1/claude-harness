@@ -66,16 +66,17 @@ This file provides guidance to Claude Code when working in this repository.
 
 ### Hook paths in `.claude/settings.json`
 
-Hook commands use the **absolute** harness path
-(`/Users/mprzybylski/PycharmProjects/claude-harness/...`) rather than
-`$CLAUDE_PROJECT_DIR`. The env var was empty in the hook subshell on this Claude Code
-build, so every hook (telemetry, ticket ACs, index regen, skill-bash check, session-log
-check) silently failed with `python3: can't open file '/scripts/hooks/...'` — bash exits
-non-zero before Python runs, and Claude Code discards the hook exit code, so nothing
-surfaces in `.git/session_tool_log.errors`.
+Hook commands use `$(git rev-parse --show-toplevel)` to locate the harness root at
+runtime, making the config portable across machines:
 
-If the harness is ever cloned to a different path, update the five `command:` lines in
-`.claude/settings.json` to match. Diagnosed S3 2026-05-26.
+```
+bash -c 'python3 "$(git rev-parse --show-toplevel)/scripts/hooks/<name>.py"'
+```
+
+`$CLAUDE_PROJECT_DIR` was empty in the hook subshell (diagnosed S3 2026-05-26), so we
+avoid it. The `$(...)` is inside single quotes, which prevents the outer shell from
+expanding it; `bash -c` then runs the string in a fresh shell where the substitution
+is evaluated correctly.
 
 ---
 

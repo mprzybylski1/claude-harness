@@ -21,7 +21,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'python3 \"/Users/mprzybylski/PycharmProjects/claude-harness/scripts/hooks/check_ticket_acs.py\"'"
+            "command": "bash -c 'python3 \"$(git rev-parse --show-toplevel)/scripts/hooks/check_ticket_acs.py\"'"
           }
         ]
       }
@@ -32,11 +32,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'python3 \"/Users/mprzybylski/PycharmProjects/claude-harness/scripts/hooks/regenerate_ticket_index.py\"'"
+            "command": "bash -c 'python3 \"$(git rev-parse --show-toplevel)/scripts/hooks/regenerate_ticket_index.py\"'"
           },
           {
             "type": "command",
-            "command": "bash -c 'python3 \"/Users/mprzybylski/PycharmProjects/claude-harness/scripts/hooks/check_skill_bash_blocks_hook.py\"'"
+            "command": "bash -c 'python3 \"$(git rev-parse --show-toplevel)/scripts/hooks/check_skill_bash_blocks_hook.py\"'"
           }
         ]
       },
@@ -45,7 +45,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'python3 \"/Users/mprzybylski/PycharmProjects/claude-harness/scripts/hooks/log_tool_usage.py\"'"
+            "command": "bash -c 'python3 \"$(git rev-parse --show-toplevel)/scripts/hooks/log_tool_usage.py\"'"
           }
         ]
       }
@@ -55,7 +55,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'python3 \"/Users/mprzybylski/PycharmProjects/claude-harness/scripts/hooks/check_session_log.py\"'"
+            "command": "bash -c 'python3 \"$(git rev-parse --show-toplevel)/scripts/hooks/check_session_log.py\"'"
           }
         ]
       }
