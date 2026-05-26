@@ -93,6 +93,27 @@ def classify(files: list[str], code_prefixes: tuple[str, ...]) -> str:
     return "docs"
 
 
+_DOCS_SUFFIXES = frozenset({".md", ".rst", ".txt"})
+_DOCS_PREFIXES = ("docs/", ".harness/docs/")
+
+
+def _classify_no_config(files: list[str]) -> str:
+    """Conservative fallback when no repo-specific harness.yaml exists.
+
+    Any committed file that isn't clearly docs-only (markdown/rst/txt or under
+    a docs/ prefix) is treated as code. This avoids the harness-root code_paths
+    allowlist incorrectly classifying arbitrary workspace repos as 'docs'.
+    """
+    for f in files:
+        p = Path(f)
+        if p.suffix.lower() in _DOCS_SUFFIXES:
+            continue
+        if any(f.startswith(pfx) for pfx in _DOCS_PREFIXES):
+            continue
+        return "code"
+    return "docs"
+
+
 def main() -> None:
     import argparse
     p = argparse.ArgumentParser()
@@ -100,9 +121,9 @@ def main() -> None:
                    help="Primary repo path for git operations (default: CWD)")
     args = p.parse_args()
     cwd = Path(args.repo).resolve() if args.repo else None
+    repo_has_yaml = cwd is not None and (cwd / "harness.yaml").exists()
 
     harness = _hc.load_for_repo(cwd) if cwd else _hc.load()
-    code_prefixes = _hc.code_paths(harness)
     close_prefix = _hc.session_close_prefix(harness)
 
     sha = _get_last_session_close_sha(close_prefix, cwd=cwd)
@@ -117,7 +138,10 @@ def main() -> None:
         return
 
     files = _changed_files(sha, cwd=cwd)
-    print(classify(files, code_prefixes))
+    if cwd is not None and not repo_has_yaml:
+        print(_classify_no_config(files))
+    else:
+        print(classify(files, _hc.code_paths(harness)))
 
 
 if __name__ == "__main__":

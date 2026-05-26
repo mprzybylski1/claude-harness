@@ -400,6 +400,65 @@ class TestClassifySessionRepoFlag:
 
 # ── T029: harness.yaml code_paths includes scripts/ ──────────────────────────
 
+class TestClassifySessionNoRepoYaml:
+    """T077: classify_session.py --repo must classify code correctly when no harness.yaml exists."""
+
+    def _make_bare_repo(self, base: Path) -> Path:
+        """Create a minimal git repo with a session-close anchor but NO harness.yaml."""
+        repo = base / "ws_repo"
+        repo.mkdir()
+        subprocess.run(["git", "init", str(repo)], capture_output=True, check=True)
+        subprocess.run(["git", "-C", str(repo), "config", "user.email", "t@t.com"],
+                       capture_output=True, check=True)
+        subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"],
+                       capture_output=True, check=True)
+        subprocess.run(["git", "-C", str(repo), "config", "commit.gpgsign", "false"],
+                       capture_output=True, check=True)
+        (repo / "README.md").write_text("# Repo")
+        subprocess.run(["git", "-C", str(repo), "add", "."], capture_output=True, check=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "-m", "docs: S1 session close — init"],
+                       capture_output=True, check=True)
+        return repo
+
+    def test_code_file_in_repo_without_yaml_classified_code(self, tmp_path):
+        """Repo without harness.yaml: committing a Swift file → 'code', not 'docs'."""
+        repo = self._make_bare_repo(tmp_path)
+        view_dir = repo / "MyApp" / "View"
+        view_dir.mkdir(parents=True)
+        (view_dir / "GameView.swift").write_text("struct GameView {}")
+        subprocess.run(["git", "-C", str(repo), "add", "."], capture_output=True, check=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "-m", "feat: add GameView"],
+                       capture_output=True, check=True)
+
+        result = subprocess.run(
+            [sys.executable, str(TOOLS / "classify_session.py"), "--repo", str(repo)],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0
+        assert result.stdout.strip() == "code", (
+            f"Expected 'code' for Swift commit in repo without harness.yaml, "
+            f"got {result.stdout.strip()!r}"
+        )
+
+    def test_docs_only_in_repo_without_yaml_classified_docs(self, tmp_path):
+        """Repo without harness.yaml: committing only .md files → 'docs'."""
+        repo = self._make_bare_repo(tmp_path)
+        (repo / "NOTES.md").write_text("session notes")
+        subprocess.run(["git", "-C", str(repo), "add", "."], capture_output=True, check=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "-m", "docs: update notes"],
+                       capture_output=True, check=True)
+
+        result = subprocess.run(
+            [sys.executable, str(TOOLS / "classify_session.py"), "--repo", str(repo)],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0
+        assert result.stdout.strip() == "docs", (
+            f"Expected 'docs' for .md-only commit in repo without harness.yaml, "
+            f"got {result.stdout.strip()!r}"
+        )
+
+
 class TestHarnessYamlCodePaths:
     def test_scripts_prefix_triggers_code_classification(self):
         """A scripts/ file must classify as 'code' with the updated harness.yaml."""
