@@ -1,6 +1,6 @@
 # System State
 
-_Last updated: S14 2026-05-26_
+_Last updated: S15 2026-05-26_
 
 ---
 
@@ -23,11 +23,7 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Open Tickets
 
-**1 open ticket**
-
-| ID | Title | Phase | Age |
-|----|-------|-------|-----|
-| T050 | Split opus_notes archive by session range when over line threshold | Ph2 | tooling | 5 sessions |
+_No open tickets._
 
 ---
 

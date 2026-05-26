@@ -103,3 +103,51 @@ None. Invariant 4 (fail-closed) is strengthened in close_ticket.py: `_git_stage`
 - S11 #5 / S11 #6 / S12 #16 / S13 carry: close_ticket re.sub + permissive-fallback test gaps — 3 sessions, no ticket
 - S12 #3 / S13 carry: `~/` expansion in `_candidate_paths` — 2 sessions, no ticket
 
+---
+
+# Opus Review S15
+
+Scope: closed T072 (workspace `_git_stage` regression from S14) and T050 (opus archive splitting — closed as already-implemented + tests). ~226 insertions / 31 deletions across 3 source/test files. S15 fixed the highest-priority finding from S14 (the actual production regression for workspace ticket close) and addressed the T050 deferral by writing tests against existing behavior rather than new code. Backlog dropped to 0 open tickets — but several S12/S14 carry-forwards are still untouched.
+
+## Invariant Violations
+
+None. `_git_root_for` strengthens Invariant 5 (workspace isolation) by routing `git add`/`rm --cached` to the correct repo per workspace, instead of leaking workspace ticket archive paths into the harness repo's index. Invariant 4 (fail-closed) is preserved: when the workspace's docs_path is in a non-git directory, the script exits 2 with a clear stderr WARNING and a manual-staging command (verified by new `test_non_git_workspace_warns_and_exits_nonzero`).
+
+## Architectural Concerns
+
+1. **`scripts/hooks/log_tool_usage.py:179-209` — `_log_error` cross-process race is STILL UNADDRESSED.** [Carry-forward S14 #2 — 1 session] The read→check→increment→write flow has no `fcntl.flock`; two concurrent hook processes can both read count=N, both write count=N+1, both append errors. S14 closed T071 claiming this was solved, but the test (`test_rate_limit_cross_process`) runs subprocesses sequentially. S14 review explicitly called this out as a #2 priority for S15; S15 ignored it. Fix: either add `fcntl.flock` on `_ERR_STATE_PATH` for the duration of the read-modify-write, or honestly amend T071's closed resolution to state the cap is "approximate under concurrency." Continuing to ship code that claims a guarantee its test cannot verify is a process smell.
+
+2. **`scripts/hooks/log_tool_usage.py:189` — window-expiry check still uses `>` not `>=`.** [Carry-forward S14 #4 — 1 session] Trivial fix (`now - window_start > _ERR_WINDOW_SECS` → `>=`). Edge case at exact 60.0s boundary; will rarely fire in practice but a one-character fix that S14 flagged.
+
+3. **`scripts/hooks/log_tool_usage.py:108` — `Path(path)` without `.expanduser()` at workspace match site.** [Carry-forward S12 #3 / S13 / S14 — 3 sessions] `_candidate_paths` accepts `~/...` tokens at lines 85/87, but the workspace-match call at line 108 passes `Path(path)` directly to `is_within_workspace`. Result: Bash `cat ~/PycharmProjects/scrabble-score/foo.md` is stamped as harness-root, not the workspace. Two-character fix: `Path(path).expanduser()`. Three sessions of deferral on a one-token change is the same process pattern S14 called out — close it.
+
+4. **`scripts/tools/close_ticket.py:210-221` — `_git_root_for` swallows non-zero git exit codes silently.** [Fail-closed concern, minor] When `git rev-parse --show-toplevel` exits non-zero (e.g. "fatal: not a git repository", or "fatal: this operation must be run in a work tree" for bare repos), the function discards both stdout and stderr (captured but never inspected) and returns None. The caller then prints the same "git staging failed — stage manually" warning for ALL failure modes: not-a-repo, bare-repo, corrupted repo, permission denied. The user cannot distinguish "this is intentionally not a git repo" from "your repo is broken." Fix: include `result.stderr.strip()` in the WARNING text so the user sees git's actual error message.
+
+5. **`scripts/tools/close_ticket.py:_git_root_for` uses `path.parent` rather than `path`.** [Minor / docstring mismatch] The docstring says "git worktree root that owns path" but the call is `git -C str(path.parent) rev-parse`. For files this is equivalent (since the parent contains the file), but if a future caller passes a directory path, the behavior shifts (resolves the parent of the directory, not the directory itself). Either pass `str(path if path.is_dir() else path.parent)`, or update the docstring to say "the git worktree root that owns path.parent".
+
+6. **`scripts/tools/close_ticket.py:34` — `_ws_internal_dir` unused import IS NOW REMOVED.** [Carry-forward resolved] Verified by grep: no remaining references. S15 cleared this implicitly (likely a side-effect of T072 work). No action.
+
+## Architectural Concerns — Test Gaps
+
+1. **`_git_root_for` is tested only at the integration level via `close_ticket.py` end-to-end.** No unit test directly invokes `_git_root_for(some_path)` with: (a) a bare git repo, (b) a path that doesn't exist, (c) a path inside a submodule, (d) a worktree (vs. main checkout). The integration tests cover the happy path (external project repo) and the non-git failure path, which is acceptable — but the docstring/behavior mismatch (Concern #5) wouldn't surface.
+
+2. **No test asserts `_git_stage` does NOT leak workspace ticket paths into the harness repo's `git rm --cached` operation.** The existing `test_external_docs_path_workspace_stages_in_project_repo` checks that "T999" doesn't appear in `harness_status`, but a leaky `git rm --cached` (e.g. one that ran against ROOT before being switched to git_root) would only mutate the harness *index*, not the working tree — `git status --porcelain` might not show it depending on git version and prior state. Stronger check: `git -C harness diff --cached --name-only` must be empty.
+
+3. **`_log_error` rate-limit concurrent test still missing.** [Carry-forward S14 Test Gap #2 — 1 session] Same as Concern #1 above; documenting it under tests too.
+
+4. **`_log_error` count==11 boundary marker test still missing.** [Carry-forward S13 / S14 Test Gap #4 — 1 session]
+
+## Suggested Next Session Focus
+
+1. **Close out the `log_tool_usage.py` triad (Concerns #1, #2, #3).** All three are file-local, each ≤ 5 LoC, all flagged in S14, and one has been carrying for 3 sessions. Bundle into a single ticket: add `fcntl.flock` on `_ERR_STATE_PATH`, change `>` to `>=`, add `.expanduser()` at line 108. Add one concurrent test (`ProcessPoolExecutor` with N=20) and one test asserting `~/foo` paths match a workspace. ~25 LoC + 2 tests. Highest priority — three sessions of deferral on flagged one-line fixes is the exact pattern S14 told us to stop.
+
+2. **Improve `_git_root_for` error transparency (Concern #4).** Include git's stderr in the failure WARNING so users can distinguish "not a git repo (expected)" from "git is broken." ~5 LoC.
+
+3. **Audit T071's closed resolution.** It claims cross-process rate limiting is solved; the test is sequential. Either fix the underlying race (Concern #1) or reopen/amend the ticket to honestly document the limitation. Closing tickets with overclaimed resolutions makes future audits fragile.
+
+## Carry-forwards (issues unresolved ≥ 2 sessions)
+
+- S12 #3 / S13 carry / S14 #7: `~/` expansion in `_candidate_paths` — 3 sessions, no ticket
+- S14 #2: `_log_error` cross-process race (T071 closed but unverified by test) — 1 session, no ticket but T071 is misleadingly closed
+- S14 #4: window-expiry `>` vs `>=` — 1 session, no ticket
+- S13 / S14 Test Gap #4: `_log_error` count==11 marker test — 2 sessions, no ticket

@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S15 2026-05-26. 0 open tickets.
+Generated S16 2026-05-26. 1 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -11,9 +11,11 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Medium (0)
+## Medium (1)
 
-*(none)*
+| ID | Title | Phase | Layer | Age |
+|----|-------|-------|-------|-----|
+| T073 | log_tool_usage.py three carry-forward fixes (race, >= window, expanduser) | process | process | 1 session |
 
 ## Low (0)
 

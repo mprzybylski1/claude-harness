@@ -19,22 +19,17 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Active Work
 
-**S14 — closed T064–T071 (S13 workflow-review backlog) + impl-review fixes.**
+**S15 — closed T072 (workspace git staging regression) + T050 (opus archive tests) + impl-review fixes.**
 
 Files changed:
-- `scripts/hooks/log_tool_usage.py` — T071: cross-process rate-limit via JSON state file (`.git/session_tool_log.errors.state`) with atomic PID-unique rename; impl-review: use per-process tmp filename to eliminate concurrent-hook race
-- `tests/test_telemetry.py` — T071: updated 4 rate-limit tests + new cross-process test; T066: test that Bash paths excluded from top-edited-files section
-- `scripts/tools/close_ticket.py` — T064: `_git_stage()` auto-stages after close (git rm + add); T065: `--force` bypasses archive-exists check; T070: cleaner stderr on unlink fail (exit 2 + WARNING + manual cmd); impl-review: clarify git-staging-failed message
-- `tests/test_workspace_path_flags.py` — T064: git-init setup for existing tests; new `TestCloseTicketGitStaging` (2 tests); T065: `test_force_bypasses_archive_exists_check`; T070: tighter assertions on exit code + stderr content
-- `CLAUDE.md` — T067: documented worktree isolation limitation (main-repo writes bypass worktree)
-- `.claude/settings.json` — T068: pre-allowed `Bash(git commit *)` permission
-- `scripts/hooks/regenerate_ticket_index.py` — T069: added per-process cache comment
-- `tests/test_t056_aging_empty_marker.py` — T069: `TestMultiCloseIndexFreshness` (2 tests confirming no in-process caching)
+- `scripts/tools/close_ticket.py` — T072: added `_git_root_for(path)` using `git rev-parse --show-toplevel` to detect correct git repo for workspace tickets; `dest.relative_to(ROOT)` fallback to absolute path; impl-review: `_git_root_for` returns `None` on failure (not ROOT), broadened except to OSError/SubprocessError
+- `tests/test_workspace_path_flags.py` — T072: new `test_external_docs_path_workspace_stages_in_project_repo`; impl-review: new `test_non_git_workspace_warns_and_exits_nonzero`; tightened assertion to `"archive/T999"`
+- `tests/test_rotate_opus_notes.py` — T050: new file with 8 tests covering decade routing, cross-decade split, append semantics, single-section no-op, and expand_carry_forward multi-file glob
 
-Tickets opened: T072 (Opus post-session: _git_stage uses wrong git root for workspace tickets — high)
-Tickets closed: T064, T065, T066, T067, T068, T069, T070, T071
+Tickets opened: T073 (Opus post-session: bundle 3 log_tool_usage.py carry-forwards — race, >=, expanduser — medium)
+Tickets closed: T072, T050
 
-Remaining open: T050, T072
+Remaining open: T073
 
 ---
 
@@ -57,3 +52,4 @@ S11 2026-05-26: closed T054 (close_ticket.py: atomic move via os.replace, resolu
 S12 2026-05-26: closed T057 (telemetry workspace-aware session stamping); reverted hook paths to absolute; impl-review hardening (3 findings)
 S13 2026-05-26: hook portability (git rev-parse); closed T044, T055, T056, T058–T063; workflow review opened T064–T071; impl-review fixed 4 findings
 S14 2026-05-26: closed T064–T071 (S13 workflow-review backlog); cross-process rate-limit, close_ticket git-staging, worktree docs; impl-review fixed 2 findings
+S15 2026-05-26: closed T072 (workspace git staging wrong repo) + T050 (opus archive tests); impl-review fixed 5 findings; all tickets closed
