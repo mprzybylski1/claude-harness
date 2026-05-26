@@ -340,3 +340,126 @@ class TestCloseTicketStageFiles:
         assert result.returncode == 0, result.stderr
         assert "myscript.py" in result.stdout, \
             f"Expected --files path in staging summary:\n{result.stdout}"
+
+    # ── T098: gitignored --files rejected upfront ────────────────────────────
+
+    def test_gitignored_file_in_files_exits_before_move(self, tmp_path):
+        """--files with a gitignored path exits nonzero WITHOUT moving the ticket (T098)."""
+        ticket = self._setup(tmp_path)
+        # Create .gitignore that ignores the target file
+        (tmp_path / ".gitignore").write_text("ignored_file.py\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(tmp_path), "add", str(tmp_path / ".gitignore")],
+                       check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(tmp_path), "commit", "-q", "-m", "add gitignore"],
+                       check=True, capture_output=True)
+        ignored = tmp_path / "ignored_file.py"
+        ignored.write_text("# ignored\n")
+
+        result = self._run(tmp_path, "T999", "--resolution", "done", "--files", str(ignored))
+        assert result.returncode != 0, "Should fail for gitignored --files path"
+        assert "ignore" in result.stderr.lower() or "gitignore" in result.stderr.lower(), \
+            f"Expected gitignore mention in stderr:\n{result.stderr}"
+        assert ticket.exists(), "ticket must not be moved when --files contains a gitignored path"
+        assert not (tmp_path / "docs" / "archive" / ticket.name).exists(), \
+            "archive must not be created when --files validation fails"
+
+    # ── T099: extra_files staged before ticket move ───────────────────────────
+
+    def test_staging_failure_leaves_ticket_in_open(self, tmp_path):
+        """If --files path does not exist, ticket stays in open/ (T099 — atomic ordering)."""
+        ticket = self._setup(tmp_path)
+        result = self._run(tmp_path, "T999", "--resolution", "done",
+                           "--files", str(tmp_path / "does_not_exist.py"))
+        assert result.returncode != 0
+        assert ticket.exists(), "ticket must remain in open/ when --files fails"
+        assert not (tmp_path / "docs" / "archive" / ticket.name).exists()
+
+
+class TestCloseTicketTickAcs:
+    """T100: --tick-acs auto-checks unchecked ACs before close."""
+
+    OPEN_TICKET_UNCHECKED = """\
+---
+id: T999
+title: Synthetic test ticket
+severity: low
+status: open
+phase: 2
+layer: tooling
+opened: S1 2026-01-01
+closed:
+---
+
+## Problem
+
+Synthetic.
+
+## Acceptance Criteria
+
+- [ ] AC one
+- [ ] AC two
+- [ ] AC three
+
+## Resolution
+(Fill in on close.)
+"""
+
+    def _run(self, tmp_root: Path, *extra_args: str) -> subprocess.CompletedProcess:
+        import os as _os
+        return subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "tools" / "close_ticket.py"), *extra_args],
+            capture_output=True, text=True,
+            env={**_os.environ, "HARNESS_ROOT": str(tmp_root), "PYTHONPATH": str(ROOT)},
+        )
+
+    def _setup_unchecked(self, tmp_path: Path) -> Path:
+        docs = tmp_path / "docs"
+        (docs / "tickets" / "open").mkdir(parents=True)
+        (docs / "archive").mkdir(parents=True)
+        (docs / "tickets" / "INDEX.md").write_text("# Ticket Index\n", encoding="utf-8")
+        (docs / "sessions.md").write_text("## Session Log\n\nS1 2026-01-01: init\n")
+        tools = tmp_path / "scripts" / "tools"
+        tools.mkdir(parents=True)
+        (tools / "current_session.py").write_text("import sys\nprint('S9')\n")
+        (tools / "generate_ticket_index.py").write_text(
+            "import os; from pathlib import Path\n"
+            "root = Path(os.environ.get('HARNESS_ROOT', '.'))\n"
+            "(root / 'docs' / 'tickets' / 'INDEX.md').write_text('# Updated\\n')\n"
+        )
+        ticket = docs / "tickets" / "open" / "T999-synthetic-test-ticket.md"
+        ticket.write_text(self.OPEN_TICKET_UNCHECKED, encoding="utf-8")
+        for cmd in [
+            ["git", "-C", str(tmp_path), "init", "-q"],
+            ["git", "-C", str(tmp_path), "config", "user.email", "t@t.com"],
+            ["git", "-C", str(tmp_path), "config", "user.name", "Test"],
+            ["git", "-C", str(tmp_path), "config", "commit.gpgsign", "false"],
+            ["git", "-C", str(tmp_path), "add", "-A"],
+            ["git", "-C", str(tmp_path), "commit", "-q", "-m", "init"],
+        ]:
+            subprocess.run(cmd, check=True, capture_output=True)
+        return ticket
+
+    def test_tick_acs_allows_close_with_unchecked_acs(self, tmp_path):
+        """--tick-acs marks all unchecked ACs and closes successfully."""
+        self._setup_unchecked(tmp_path)
+        result = self._run(tmp_path, "T999", "--resolution", "done", "--tick-acs")
+        assert result.returncode == 0, f"Expected success with --tick-acs:\n{result.stderr}"
+        # Archived ticket should have all ACs ticked
+        archive = tmp_path / "docs" / "archive" / "T999-synthetic-test-ticket.md"
+        assert archive.exists()
+        content = archive.read_text(encoding="utf-8")
+        assert "- [ ]" not in content, "All ACs must be ticked in archived ticket"
+        assert content.count("- [x]") == 3, "All 3 ACs must be ticked"
+
+    def test_tick_acs_and_force_are_mutually_exclusive(self, tmp_path):
+        """--tick-acs and --force together must be rejected."""
+        self._setup_unchecked(tmp_path)
+        result = self._run(tmp_path, "T999", "--resolution", "done", "--tick-acs", "--force")
+        assert result.returncode != 0, "Expected error when both --tick-acs and --force used"
+
+    def test_tick_acs_without_flag_still_blocked(self, tmp_path):
+        """Without --tick-acs or --force, unchecked ACs block the close."""
+        self._setup_unchecked(tmp_path)
+        result = self._run(tmp_path, "T999", "--resolution", "done")
+        assert result.returncode != 0
+        assert "unchecked" in result.stderr.lower() or "AC" in result.stderr

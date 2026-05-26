@@ -1,17 +1,16 @@
 # Ticket Index
 
-Generated S19 2026-05-26. 5 open tickets.
+Generated S19 2026-05-26. 4 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
 
 *(none)*
 
-## High (2)
+## High (1)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
-| T098 | close_ticket.py: validate gitignored --files paths upfront before moving ticket | Ph2 | tooling | this session |
 | T099 | close_ticket.py: make atomic — stage --files before moving ticket | Ph2 | tooling | this session |
 
 ## Medium (2)

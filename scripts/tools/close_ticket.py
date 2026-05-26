@@ -119,6 +119,11 @@ def _check_acs(content: str) -> list[str]:
     return [ln.strip() for ln in content.splitlines() if re.match(r"\s*-\s+\[ \]", ln)]
 
 
+def _tick_acs(content: str) -> str:
+    """Rewrite all unchecked '- [ ]' AC boxes to '- [x]'."""
+    return re.sub(r"^(\s*-)\s+\[ \]", r"\1 [x]", content, flags=re.MULTILINE)
+
+
 def _update_frontmatter(content: str, session: str) -> str:
     today = date.today().isoformat()
     content = re.sub(r"^(status:\s*)open\s*$", r"\1closed", content, flags=re.MULTILINE)
@@ -229,18 +234,54 @@ def _git_root_for(path: Path) -> tuple[str | None, str]:
         return None, str(exc)
 
 
+def _check_gitignored(paths: list[Path]) -> list[Path]:
+    """Return subset of paths that are ignored by git. Best-effort: returns [] on errors."""
+    if not paths:
+        return []
+    try:
+        result = subprocess.run(
+            ["git", "check-ignore", "--", *[str(p) for p in paths]],
+            capture_output=True, text=True,
+        )
+        if result.returncode == 0:
+            ignored_names = set(result.stdout.splitlines())
+            return [p for p in paths if str(p) in ignored_names]
+        return []
+    except (FileNotFoundError, OSError, subprocess.SubprocessError):
+        return []
+
+
+def _stage_extra_files(extra_files: list[Path]) -> None:
+    """Stage extra_files grouped by their git root. Exit 2 on failure."""
+    if not extra_files:
+        return
+    from collections import defaultdict
+    by_root: dict[str, list[str]] = defaultdict(list)
+    for ef in extra_files:
+        ef_root, ef_err = _git_root_for(ef)
+        if ef_root is None:
+            err_detail = f"\n  git: {ef_err}" if ef_err else ""
+            print(
+                f"WARNING: --files path '{ef}' is not in a git repo — stage manually:{err_detail}\n"
+                f"  git add -- {ef}",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        by_root[ef_root].append(str(ef))
+    try:
+        for root, file_paths in by_root.items():
+            subprocess.check_call(["git", "-C", root, "add", "--", *file_paths])
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        print("WARNING: failed to stage --files paths — stage manually.", file=sys.stderr)
+        sys.exit(2)
+
+
 def _git_stage(
     ticket_path: Path,
     dest: Path,
     internal: Path | None,
-    extra_files: list[Path] | None = None,
 ) -> None:
-    """Stage the paths changed by close_ticket via git.
-
-    Always stages: ticket deletion, archive destination, INDEX.md.
-    Optionally stages extra_files grouped by their git root (may differ from
-    the archive root in workspace setups).
-    """
+    """Stage ticket deletion, archive destination, and INDEX.md via git."""
     if internal is not None:
         index_path = internal / "tickets" / "INDEX.md"
     else:
@@ -271,29 +312,6 @@ def _git_stage(
             f"  git -C {git_root} add -- {' '.join(paths[1:])}",
             file=sys.stderr,
         )
-        sys.exit(2)
-
-    if not extra_files:
-        return
-
-    from collections import defaultdict
-    by_root: dict[str, list[str]] = defaultdict(list)
-    for ef in extra_files:
-        ef_root, ef_err = _git_root_for(ef)
-        if ef_root is None:
-            err_detail = f"\n  git: {ef_err}" if ef_err else ""
-            print(
-                f"WARNING: --files path '{ef}' is not in a git repo — stage manually:{err_detail}\n"
-                f"  git add -- {ef}",
-                file=sys.stderr,
-            )
-            sys.exit(2)
-        by_root[ef_root].append(str(ef))
-    try:
-        for root, file_paths in by_root.items():
-            subprocess.check_call(["git", "-C", root, "add", "--", *file_paths])
-    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
-        print("WARNING: failed to stage --files paths — stage manually.", file=sys.stderr)
         sys.exit(2)
 
 
@@ -341,8 +359,11 @@ def main() -> None:
                            help="Resolution text (inline)")
     res_group.add_argument("--resolution-file", metavar="PATH",
                            help="Path to a file containing the resolution text")
-    parser.add_argument("--force", action="store_true",
-                        help="Close even if some ACs are still unchecked")
+    gate_group = parser.add_mutually_exclusive_group()
+    gate_group.add_argument("--force", action="store_true",
+                            help="Close even if some ACs are still unchecked")
+    gate_group.add_argument("--tick-acs", action="store_true",
+                            help="Mark all unchecked ACs as done and close")
     parser.add_argument("--workspace", metavar="SLUG",
                         help="Workspace slug to search (required when ID is ambiguous)")
     parser.add_argument("--files", nargs="+", metavar="PATH",
@@ -388,8 +409,15 @@ def main() -> None:
                 print(f"ERROR: --files path '{raw}' is not a regular file", file=sys.stderr)
                 sys.exit(1)
             extra_files.append(p)
+        ignored = _check_gitignored(extra_files)
+        if ignored:
+            for p in ignored:
+                print(f"ERROR: --files path '{p}' is gitignored — cannot stage", file=sys.stderr)
+            sys.exit(1)
 
-    # AC check
+    # AC check (--tick-acs rewrites boxes before the gate; --force skips it)
+    if args.tick_acs:
+        content = _tick_acs(content)
     unchecked = _check_acs(content)
     if unchecked and not args.force:
         print(f"ERROR: {ticket_id} has unchecked ACs — resolve them or use --force:", file=sys.stderr)
@@ -421,13 +449,16 @@ def main() -> None:
         print(f"ERROR: {dest} already exists in archive — ticket may already be closed", file=sys.stderr)
         sys.exit(2)
 
+    # Stage extra_files BEFORE moving the ticket so a staging failure leaves the ticket in open/
+    _stage_extra_files(extra_files)
+
     _atomic_move(ticket_path, dest, content)
 
     # Regenerate index
     _regenerate_index(internal)
 
-    # Stage changed paths in git (plus any --files code paths)
-    _git_stage(ticket_path, dest, internal, extra_files or None)
+    # Stage ticket deletion, archive, and INDEX (extra_files already staged above)
+    _git_stage(ticket_path, dest, internal)
     if not extra_files:
         root, _ = _git_root_for(dest)
         _warn_unstaged_code(root)
