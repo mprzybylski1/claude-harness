@@ -2,7 +2,7 @@
 id: T042
 title: Add test for _is_closed_ticket path-component check
 severity: low
-status: open
+status: closed
 phase: 2
 layer: test
 opened: S9 2026-05-26
@@ -31,4 +31,10 @@ Flagged as S8 Finding #8.
 - [ ] All tests pass.
 
 ## Resolution
-(Fill in on close.)
+
+Added `TestIsClosedTicket` class to `tests/test_workspace_path_flags.py` with 6
+parametrized cases: 3 true (harness root, absolute, workspace layout) and 3 false
+(substring-only match, open/, bare tickets/). All 6 pass. 134 other tests unaffected
+(13 pre-existing failures in test_workflow_orchestrator.py unrelated to this change).
+
+Closed S9 2026-05-26.

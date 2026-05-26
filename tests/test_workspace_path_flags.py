@@ -410,3 +410,37 @@ class TestExtractOpusKeySectionsWorkspaceFormat:
         assert result.returncode == 0, f"stderr: {result.stderr}"
         assert "S42" in result.stdout
         assert "Invariant Violations" in result.stdout
+
+
+# ── Tests: regenerate_ticket_index._is_closed_ticket ─────────────────────────
+
+class TestIsClosedTicket:
+    """T042: path-component check added in T034 — must accept real closed/ paths and
+    reject false positives that contain 'tickets/closed' as a substring only."""
+
+    @pytest.fixture(autouse=True)
+    def _import(self):
+        sys.path.insert(0, str(ROOT / "scripts" / "hooks"))
+        import regenerate_ticket_index as rti
+        self.fn = rti._is_closed_ticket
+
+    @pytest.mark.parametrize("path,expected", [
+        # Happy paths — various closed/ layouts
+        ("docs/tickets/closed/T001.md", True),
+        ("/abs/harness/docs/tickets/closed/T001.md", True),
+        # Workspace layout
+        ("workspaces/ws/internal/tickets/closed/T001.md", True),
+        # False-positive rejection — 'tickets/closed' only as a substring
+        ("/some/tickets-closed-archive/T001.md", False),
+        ("docs/tickets/open/T001.md", False),
+        ("tickets/T001.md", False),
+    ])
+    def test_is_closed_ticket(self, path, expected, tmp_path):
+        # _is_closed_ticket calls Path.resolve() which hits the filesystem for relative
+        # paths; use absolute paths or write a sentinel file so resolve works correctly.
+        if not Path(path).is_absolute():
+            abs_path = tmp_path / path
+            abs_path.parent.mkdir(parents=True, exist_ok=True)
+            abs_path.touch()
+            path = str(abs_path)
+        assert self.fn(path) is expected
