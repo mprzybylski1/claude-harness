@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S17 2026-05-26. 0 open tickets.
+Generated S17 2026-05-26. 2 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -15,9 +15,12 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Low (0)
+## Low (2)
 
-*(none)*
+| ID | Title | Phase | Layer | Age |
+|----|-------|-------|-------|-----|
+| T084 | close_ticket.py prints staged files after staging | process | process | this session |
+| T085 | close_ticket.py --path-only flag to resolve ticket ID to file path | process | process | this session |
 
 ## Unknown (0)
 
