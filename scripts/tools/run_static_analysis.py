@@ -54,6 +54,15 @@ def _resolve_checks() -> list:
 
 
 def _run_checks_for_repo(scan_root: Path, label: str) -> list[str]:
+    # T044 audit: assert_workspace_boundary() is called by main() on scan_root
+    # before this function is invoked, so scan_root itself is guaranteed to be
+    # inside the declared workspace. Individual check functions in
+    # prepare_opus_context.py are further hardened:
+    #   - check_test_syntax: filters symlinks that resolve outside scan_root via
+    #     _is_within_root() before passing files to py_compile.
+    #   - check_utcnow: uses grep -r which does not dereference symlink dirs;
+    #     symlink files are followed but only one file is read (not traversed).
+    #   - check_bash_blocks: path anchored to scan_root; no direct file opens.
     print(f"--- [{label}] ---")
     checks = _resolve_checks()
     results = [fn(scan_root) for fn in checks]

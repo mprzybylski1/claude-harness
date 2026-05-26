@@ -200,13 +200,38 @@ def _trim_sessions_md(content: str) -> str:
 # Tests in tests/test_prepare_opus_context.py call these directly without running
 # the full context-builder.
 
+def _is_within_root(path: Path, root: Path) -> bool:
+    """Return True if path resolves to a location inside root.
+
+    Symlinks are resolved before the check so that a symlink inside root that
+    points outside (e.g. tests/test_evil.py -> /tmp/outside/evil.py) is
+    detected and can be skipped — enforcing Invariant 5 (workspace isolation)
+    inside individual check functions (T044).
+    """
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except ValueError:
+        return False
+
+
 def check_test_syntax(root: Path) -> str:
-    """1. Compile every test_*.py — catches SyntaxErrors before Opus review."""
+    """1. Compile every test_*.py — catches SyntaxErrors before Opus review.
+
+    Symlinks that resolve outside root are skipped to enforce Invariant 5
+    (workspace isolation). Only files whose resolved path is under root are
+    passed to py_compile (T044).
+    """
     tests_dir = root / "tests"
     if not tests_dir.exists():
         return "SKIP  no tests/ directory found"
-    test_files = sorted(tests_dir.glob("test_*.py"))
+    all_candidates = sorted(tests_dir.glob("test_*.py"))
+    # Audit (T044): filter out symlinks that escape scan_root boundary
+    test_files = [f for f in all_candidates if _is_within_root(f, root)]
+    skipped = len(all_candidates) - len(test_files)
     if not test_files:
+        if skipped:
+            return f"SKIP  no test_*.py files within scan_root ({skipped} symlink(s) outside boundary skipped)"
         return "SKIP  no test_*.py files found"
     errors = []
     for f in test_files:
@@ -218,11 +243,22 @@ def check_test_syntax(root: Path) -> str:
             errors.append(f"  {f.name}: {r.stderr.strip()}")
     if errors:
         return "FAIL  test syntax errors:\n" + "\n".join(errors)
-    return f"PASS  {len(test_files)} test files compile cleanly (no SyntaxError)"
+    skip_note = f" ({skipped} symlink(s) outside boundary skipped)" if skipped else ""
+    return f"PASS  {len(test_files)} test files compile cleanly (no SyntaxError){skip_note}"
 
 
 def check_utcnow(root: Path) -> str:
-    """2. Grep for deprecated datetime.utcnow() in scripts/ and tests/."""
+    """2. Grep for deprecated datetime.utcnow() in scripts/ and tests/.
+
+    Symlink safety (T044 audit): grep -r does NOT follow symlinks to directories
+    by default (POSIX behaviour; GNU grep confirms this unless -L/--dereference is
+    passed). A symlink file inside scripts/ or tests/ pointing to an outside file
+    IS followed — but grep only reads that one file, not its surrounding directory,
+    so no directory traversal outside root occurs. This is acceptable: the risk is
+    a false-positive WARN (not data exfiltration), and the boundary assertion in
+    run_static_analysis.py already guards against accessing repos outside the
+    declared workspace. No additional filtering is required here.
+    """
     prod_dirs = ["scripts", "tests"]
     existing = [str(root / d) for d in prod_dirs if (root / d).exists()]
     if not existing:
@@ -243,7 +279,14 @@ def check_utcnow(root: Path) -> str:
 
 
 def check_bash_blocks(root: Path) -> str:
-    """3. Run check_skill_bash_blocks.py to validate bash fenced blocks in SKILL.md."""
+    """3. Run check_skill_bash_blocks.py to validate bash fenced blocks in SKILL.md.
+
+    Symlink safety (T044 audit): check_script path is constructed as
+    root / "scripts" / "tools" / "check_skill_bash_blocks.py" — anchored to root.
+    The script is then executed as a subprocess; its internal file traversal is
+    its own concern and is not further constrained here. No direct Python file
+    opens occur in this function.
+    """
     check_script = root / "scripts" / "tools" / "check_skill_bash_blocks.py"
     if not check_script.exists():
         return "SKIP  check_skill_bash_blocks.py not found"
