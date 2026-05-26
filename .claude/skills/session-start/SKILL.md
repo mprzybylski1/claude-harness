@@ -119,7 +119,7 @@ Run the appropriate command to get the session ID:
 **Triage required** (open ≥ 50 sessions):
 - [Output of `surface_stale_tickets.py`, or "None"]
 
-**Long-lived carry-forwards** (Opus issues ≥5 sessions unaddressed):
+**Carry-forwards** (Opus issues ≥2 sessions unaddressed):
 - [Output from `--with-carry-forwards`, or "None"]
 
 **Last session:** [one-line summary from Session Log tail]

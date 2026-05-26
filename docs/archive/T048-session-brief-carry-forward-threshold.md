@@ -2,7 +2,7 @@
 id: T048
 title: Session brief carry-forward threshold mismatches Opus escalation cadence
 severity: low
-status: open
+status: closed
 phase: 2
 layer: tooling
 opened: S9 2026-05-26
@@ -33,4 +33,17 @@ Surfaced by workflow-review S9.
 - [ ] Test: synthetic Opus output with 2-session carry-forwards → brief shows them.
 
 ## Resolution
-(Fill in on close.)
+
+Two-part fix:
+1. `extract_carry_forwards.py`: lowered DEFAULT_THRESHOLD from 5 to 2; added second
+   regex pattern `carry.forward from S(\d+)` that computes age as current_session minus
+   the referenced session number. This matches Opus's actual phrasing ("carry-forward
+   from S7 Concern #5") which the old `carry.forward\s+(\d+)\s+sessions` regex missed
+   entirely.
+2. `session-start/SKILL.md`: updated briefing label from "Long-lived carry-forwards
+   (Opus issues ≥5 sessions)" to "Carry-forwards (Opus issues ≥2 sessions)".
+
+5 tests added for both patterns, threshold boundary, empty case, and default threshold.
+All 8/8 tests pass.
+
+Closed S9 2026-05-26.
