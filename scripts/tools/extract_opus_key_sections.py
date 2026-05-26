@@ -125,3 +125,4 @@ if __name__ == "__main__":
         sys.path.insert(0, str(Path(__file__).resolve().parent))
         from extract_carry_forwards import main as _cf_main
         _cf_main(notes_file=_opus_path)
+        print("(run expand_carry_forward.py S<N>#<M> to see full description of any item above)")

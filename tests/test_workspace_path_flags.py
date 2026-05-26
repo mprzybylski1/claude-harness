@@ -648,3 +648,98 @@ class TestExtractCarryForwards:
         import extract_carry_forwards as ecf
         items = ecf.extract(notes_file=f)   # uses DEFAULT_THRESHOLD
         assert len(items) == 1
+
+
+# ── Tests: expand_carry_forward.py (T046) ────────────────────────────────────
+
+class TestExpandCarryForward:
+    """T046: expand_carry_forward.py surfaces full Opus finding context by ID."""
+
+    SCRIPT = ROOT / "scripts" / "tools" / "expand_carry_forward.py"
+
+    # Minimal opus_notes content with two numbered findings across two sessions.
+    NOTES_CURRENT = """\
+# Opus Review — S9 2026-05-26
+
+## Bugs & Implementation Issues
+
+1. **S1 #3 — carry-forward from S7.** Still unaddressed. The boundary check
+   in run_static_analysis.py is only at entry.
+
+2. **S9 #1 — NEW.** Some brand-new finding with multiple lines of detail
+   explaining the problem in depth.
+"""
+
+    NOTES_ARCHIVE = """\
+# Opus Review Notes — Archive S0–S9
+
+# Opus Review — S1 2026-05-25
+
+## Bugs & Implementation Issues
+
+1. **S1 #1 (T010) — FIXED.** Some already-fixed thing.
+
+2. **S1 #2 — NOT ADDRESSED.** Another issue entirely.
+
+3. **S1 #3 — NOT ADDRESSED.** `run_static_analysis.py` boundary check is still only
+   asserted at script entry, not enforced inside imported check helpers.
+   This is a latent Invariant 5 hole.
+
+4. **S1 #4 — NOT ADDRESSED.** Some other issue.
+"""
+
+    def _run(self, tmp_root: Path, *args: str) -> subprocess.CompletedProcess:
+        import os as _os
+        return subprocess.run(
+            [sys.executable, str(self.SCRIPT), *args],
+            capture_output=True, text=True,
+            env={**_os.environ, "HARNESS_ROOT": str(tmp_root), "PYTHONPATH": str(ROOT)},
+        )
+
+    def _make_root(self, tmp_path: Path) -> Path:
+        (tmp_path / "docs" / "tickets" / "open").mkdir(parents=True)
+        (tmp_path / "docs" / "archive").mkdir(parents=True)
+        (tmp_path / "docs" / "opus_notes.md").write_text(self.NOTES_CURRENT)
+        (tmp_path / "docs" / "archive" / "opus_notes_S0-S9.md").write_text(self.NOTES_ARCHIVE)
+        return tmp_path
+
+    def test_finds_finding_in_archive(self, tmp_path):
+        root = self._make_root(tmp_path)
+        result = self._run(root, "S1#3")
+        assert result.returncode == 0
+        assert "boundary check" in result.stdout
+        assert "Invariant 5" in result.stdout
+
+    def test_case_insensitive_and_spaced_formats(self, tmp_path):
+        root = self._make_root(tmp_path)
+        for fmt in ("s1#3", "S1 #3", "s1 #3"):
+            result = self._run(root, fmt)
+            assert result.returncode == 0, f"format {fmt!r} failed"
+            assert "boundary check" in result.stdout
+
+    def test_multi_file_shows_source_headers(self, tmp_path):
+        """S1 #3 appears in both archive and current notes — both shown."""
+        root = self._make_root(tmp_path)
+        result = self._run(root, "S1#3")
+        assert result.returncode == 0
+        assert "[From:" in result.stdout
+
+    def test_not_found_exits_nonzero(self, tmp_path):
+        root = self._make_root(tmp_path)
+        result = self._run(root, "S99#99")
+        assert result.returncode == 1
+        assert "not found" in result.stderr.lower() or "not found" in result.stdout.lower()
+
+    def test_latest_flag_prints_one_occurrence(self, tmp_path):
+        root = self._make_root(tmp_path)
+        result = self._run(root, "S1#3", "--latest")
+        assert result.returncode == 0
+        # With --latest only one [From:] block should appear
+        assert result.stdout.count("[From:") == 1
+
+    def test_extracts_body_up_to_next_finding(self, tmp_path):
+        """Extraction stops before the next numbered finding heading."""
+        root = self._make_root(tmp_path)
+        result = self._run(root, "S1#3")
+        # S1 #4 content should NOT appear in any occurrence
+        assert "Some other issue" not in result.stdout
