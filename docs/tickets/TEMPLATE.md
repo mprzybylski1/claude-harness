@@ -1,3 +1,4 @@
+<!-- Embedded verbatim into docs/opus_review_context.md by prepare_opus_context.py. Edit here to change the Opus-visible template. -->
 ---
 id: T000
 title: Short description (keep under 60 chars)
