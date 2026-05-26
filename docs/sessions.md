@@ -19,6 +19,10 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Active Work
 
+**S9 (active) — closed T039–T042 (hook path fix, test isolation, drop _extract_exit, _is_closed_ticket test); opened T043–T050 (carry-forward backlog + workflow-review findings); merged workflow-review skill.**
+
+Workflow review: 5 friction points; 6 tickets proposed; 6 opened (T045–T050).
+
 **S8 — closed T034–T038 (Opus carry-forward fixes: ticket attribution, telemetry hardening, fail-closed YAML, retry session isolation, invariants source labeling)**
 
 Files changed:
