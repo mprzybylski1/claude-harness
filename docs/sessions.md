@@ -19,29 +19,22 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Active Work
 
-**S13 — hook portability fix + closed T058–T063 + workflow review + impl-review hardening.**
+**S14 — closed T064–T071 (S13 workflow-review backlog) + impl-review fixes.**
 
 Files changed:
-- `.claude/settings.json` — all 5 hook commands switched from hardcoded `/home/marcin/...` paths to `$(git rev-parse --show-toplevel)` (cross-machine portability)
-- `CLAUDE.md` — updated hook path documentation; added archive split note (T063)
-- `tests/test_config.py` — new regression guard: no hardcoded paths in hook commands
-- `scripts/hooks/log_tool_usage.py` — T058: inner-except logs instead of swallowing; `rsplit` for chained `=` tokens; T059: rate-limit `_log_error` at 10+1/60s; impl-review: fail-closed `_detect_workspace` on exception
-- `tests/test_telemetry.py` — 8 new tests (T058/T059); 4 subprocess tests converted to in-process (T063); 213 total
-- `scripts/tools/current_session.py` — T060: skip cache write when `--sessions` arg provided (workspace calls don't clobber `.git/CLAUDE_SESSION_ID`)
-- `scripts/tools/extract_session_brief.py` — T061: `## Hook errors (last 5)` section; tail via deque (impl-review fix)
-- `.claude/skills/session-start/SKILL.md` — T061: updated Step 1.2 and briefing template
-- `scripts/tools/prepare_opus_context.py` — T044: `_is_within_root()` helper; `check_test_syntax` skips symlinks escaping workspace
-- `tests/test_static_analysis_symlink_boundary.py` — T044: 8 integration tests
-- `scripts/tools/extract_opus_key_sections.py` — T055: `run_with_carry_forwards` captures stderr, re-emits as `Note:`; impl-review: removed dead subprocess/importlib code, deduplicated `sys.path.insert`
-- `scripts/tools/ticket_constants.py` — T056: new file with `AGING_EMPTY_MARKER = "*(none)*"`
-- `scripts/tools/generate_ticket_index.py` — T056: use `AGING_EMPTY_MARKER` constant
-- `scripts/tools/surface_stale_tickets.py` — T056: regex uses `re.escape(AGING_EMPTY_MARKER)`
-- `docs/tickets/open/` — opened T064–T071 (workflow review + impl-review findings)
+- `scripts/hooks/log_tool_usage.py` — T071: cross-process rate-limit via JSON state file (`.git/session_tool_log.errors.state`) with atomic PID-unique rename; impl-review: use per-process tmp filename to eliminate concurrent-hook race
+- `tests/test_telemetry.py` — T071: updated 4 rate-limit tests + new cross-process test; T066: test that Bash paths excluded from top-edited-files section
+- `scripts/tools/close_ticket.py` — T064: `_git_stage()` auto-stages after close (git rm + add); T065: `--force` bypasses archive-exists check; T070: cleaner stderr on unlink fail (exit 2 + WARNING + manual cmd); impl-review: clarify git-staging-failed message
+- `tests/test_workspace_path_flags.py` — T064: git-init setup for existing tests; new `TestCloseTicketGitStaging` (2 tests); T065: `test_force_bypasses_archive_exists_check`; T070: tighter assertions on exit code + stderr content
+- `CLAUDE.md` — T067: documented worktree isolation limitation (main-repo writes bypass worktree)
+- `.claude/settings.json` — T068: pre-allowed `Bash(git commit *)` permission
+- `scripts/hooks/regenerate_ticket_index.py` — T069: added per-process cache comment
+- `tests/test_t056_aging_empty_marker.py` — T069: `TestMultiCloseIndexFreshness` (2 tests confirming no in-process caching)
 
-Tickets opened: T058, T059, T060, T061, T063, T064, T065, T066, T067, T068, T069, T070, T071
-Tickets closed: T058, T059, T060, T061, T044, T055, T056, T063
+Tickets opened: T072 (Opus post-session: _git_stage uses wrong git root for workspace tickets — high)
+Tickets closed: T064, T065, T066, T067, T068, T069, T070, T071
 
-Remaining open: T050, T064–T071
+Remaining open: T050, T072
 
 ---
 
@@ -63,3 +56,4 @@ S10 2026-05-26: closed T043, T049, T051–T053 (S9 carry-forward backlog: close_
 S11 2026-05-26: closed T054 (close_ticket.py: atomic move via os.replace, resolution permissive fallback, stamp regex fix, parse-failure warning)
 S12 2026-05-26: closed T057 (telemetry workspace-aware session stamping); reverted hook paths to absolute; impl-review hardening (3 findings)
 S13 2026-05-26: hook portability (git rev-parse); closed T044, T055, T056, T058–T063; workflow review opened T064–T071; impl-review fixed 4 findings
+S14 2026-05-26: closed T064–T071 (S13 workflow-review backlog); cross-process rate-limit, close_ticket git-staging, worktree docs; impl-review fixed 2 findings

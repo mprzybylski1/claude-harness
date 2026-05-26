@@ -1,6 +1,6 @@
 # System State
 
-_Last updated: S13 2026-05-26_
+_Last updated: S14 2026-05-26_
 
 ---
 
@@ -23,19 +23,11 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Open Tickets
 
-**9 open tickets**
+**1 open ticket**
 
 | ID | Title | Phase | Age |
 |----|-------|-------|-----|
-| T064 | close_ticket.py should auto-stage git changes | process | process | this session |
-| T067 | Worktree isolation for parallel agents doesn't hold | process | process | this session |
-| T065 | close_ticket.py --force should bypass archive-exists check | process | process | this session |
-| T068 | Pre-allow Bash(git commit *) in settings.json | process | process | this session |
-| T069 | regenerate_ticket_index cache never invalidated | process | process | this session |
-| T070 | close_ticket.py BOTH-locations unlink silent failure | process | process | this session |
-| T071 | _log_error rate-limit is per-process, resets every hook call | process | process | this session |
-| T050 | Split opus_notes archive by session range when over line threshold | Ph2 | tooling | 4 sessions |
-| T066 | analyze_tool_log.py top-edited shows junk Bash tokens | process | process | this session |
+| T050 | Split opus_notes archive by session range when over line threshold | Ph2 | tooling | 5 sessions |
 
 ---
 
