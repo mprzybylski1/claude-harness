@@ -298,18 +298,25 @@ def _git_stage(
 
 
 def _warn_unstaged_code(git_root: str | None) -> None:
-    """Warn if there are unstaged (dirty working-tree) code files not passed via --files."""
+    """Warn if there are unstaged or untracked code files not passed via --files."""
     if git_root is None:
         return
     try:
-        # git diff (no --cached) = working tree vs index = unstaged changes only
-        result = subprocess.run(
+        # Modified tracked files (working tree vs index — unstaged changes only)
+        diff_result = subprocess.run(
             ["git", "-C", git_root, "diff", "--name-only"],
             capture_output=True, text=True,
         )
-        if result.returncode != 0:
+        # New untracked files that haven't been staged
+        untracked_result = subprocess.run(
+            ["git", "-C", git_root, "ls-files", "--others", "--exclude-standard"],
+            capture_output=True, text=True,
+        )
+        if diff_result.returncode != 0 and untracked_result.returncode != 0:
             return
-        code_files = [p for p in result.stdout.splitlines() if not p.endswith(".md")]
+        dirty = diff_result.stdout.splitlines() if diff_result.returncode == 0 else []
+        untracked = untracked_result.stdout.splitlines() if untracked_result.returncode == 0 else []
+        code_files = [p for p in dirty + untracked if not p.endswith(".md")]
         if code_files:
             print(
                 "WARNING: no code files staged — pass --files explicitly or commit code separately.",

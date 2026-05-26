@@ -124,7 +124,7 @@ class TestCloseTicketHookIntegration:
     def test_without_files_hook_blocks_commit(self, tmp_path):
         """close_ticket without --files stages no code; hook blocks the fix commit."""
         _ticket, _code_file = _setup_harness(tmp_path)
-        # Do NOT modify code_file — no dirty working-tree changes, clean repo
+        # code_file has v2 contents (dirty working tree) but is not staged — intentional.
         # Close the ticket with no --files
         result = _run_close(tmp_path, "T999", "--resolution", "done")
         assert result.returncode == 0, f"close_ticket failed:\n{result.stderr}"

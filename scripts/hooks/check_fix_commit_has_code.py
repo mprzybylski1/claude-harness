@@ -67,12 +67,15 @@ def _parse_fix_commit(tokens: list[str]) -> tuple[str, str | None] | None:
     else:
         return None
 
+    commit_idx = i  # index of "commit" token
+
     # --no-verify → bypass
     if "--no-verify" in tokens:
         return None
 
-    # Find -m <message>
-    for j, tok in enumerate(tokens):
+    # Find -m <message> — scan only tokens after "commit" to avoid matching
+    # flags that appear before the subcommand in malformed invocations.
+    for j, tok in enumerate(tokens[commit_idx + 1:], start=commit_idx + 1):
         if tok == "-m" and j + 1 < len(tokens):
             msg = tokens[j + 1]
             m = re.match(r"^fix\(T(\d+)\):", msg)
@@ -87,10 +90,16 @@ def _parse_fix_commit(tokens: list[str]) -> tuple[str, str | None] | None:
     return None
 
 
+_TICKET_FILE_RE = re.compile(r"^T\d+-.+\.md$")
+
+
 def _is_archive_path(path: str) -> bool:
-    """Return True for ticket archive/open paths at any depth in the tree."""
-    parts = Path(path).parts
-    return "archive" in parts or "tickets" in parts
+    """Return True for ticket files (T###-*.md) — archive moves are not code.
+
+    Uses the filename pattern rather than directory names so that legitimate
+    code directories named 'archive' or 'tickets' are not misclassified.
+    """
+    return bool(_TICKET_FILE_RE.match(Path(path).name))
 
 
 def _staged_code_files(code_prefixes: tuple[str, ...], git_cwd: str | None = None) -> list[str]:
