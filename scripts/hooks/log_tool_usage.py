@@ -52,6 +52,10 @@ _DEFAULT_MAX_LINES = 5000
 _ERR_RATE_LIMIT = 10
 _ERR_WINDOW_SECS = 60
 
+# Set to True after the first one-shot bootstrap/state-error message is emitted to
+# stderr, so subsequent calls in the same process don't repeat it.
+_BOOTSTRAP_STDERR_LOGGED = False
+
 
 def _max_lines(harness: dict) -> int:
     return int(harness.get("workflow_telemetry_max_lines", _DEFAULT_MAX_LINES))
@@ -182,9 +186,18 @@ def _rotate_if_needed(path: Path, max_lines: int) -> None:
 
 
 def _log_error(msg: str) -> None:
+    global _BOOTSTRAP_STDERR_LOGGED
+    # Bootstrap guard: if .git/ doesn't exist we can't rate-limit or write to the
+    # error log. Emit one-shot to stderr to surface the problem, then return.
+    if not _ERR_STATE_PATH.parent.exists():
+        if not _BOOTSTRAP_STDERR_LOGGED:
+            _BOOTSTRAP_STDERR_LOGGED = True
+            print(f"[bootstrap: {msg}]", file=sys.stderr)
+        return
     try:
         now = time.time()
         count, window_start = 0, 0.0
+        state_ok = False
         try:
             with open(_ERR_STATE_PATH, "a+", encoding="utf-8") as fd:
                 if _fcntl is not None:
@@ -205,8 +218,17 @@ def _log_error(msg: str) -> None:
                 fd.seek(0)
                 fd.truncate()
                 fd.write(json.dumps({"count": count, "window_start": window_start}))
+                state_ok = True
         except Exception:
             pass
+        if not state_ok:
+            # State file I/O failed (disk full, flock exhausted, bad permissions).
+            # Rate-limit state is unknowable; write one-shot to stderr instead of
+            # falling through to _ERR_PATH, which would bypass the cap entirely.
+            if not _BOOTSTRAP_STDERR_LOGGED:
+                _BOOTSTRAP_STDERR_LOGGED = True
+                print(f"[rate-limit-state-error: {msg}]", file=sys.stderr)
+            return
         if count > _ERR_RATE_LIMIT:
             msg = "[rate-limit engaged — further errors suppressed]"
         with _ERR_PATH.open("a", encoding="utf-8") as f:

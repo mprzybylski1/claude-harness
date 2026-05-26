@@ -2,11 +2,11 @@
 id: T081
 title: log_tool_usage.py bootstrap-path errors bypass rate-limit
 severity: medium
-status: open
+status: closed
 phase: process
 layer: infra
 opened: S16 2026-05-26
-closed:
+closed: S17 2026-05-26
 ---
 
 ## Problem
@@ -28,13 +28,13 @@ check, and tilde expansion. It did not touch the bootstrap path.
 
 ## Acceptance Criteria
 
-- [ ] Module-level imports in `log_tool_usage.py` that can fail
+- [x] Module-level imports in `log_tool_usage.py` that can fail
       (`harness_config`, `workspace_config`) are wrapped to not call
       `_log_error` if `_ERR_STATE_PATH.parent` does not exist yet.
-- [ ] `_log_error` short-circuits and writes a single one-shot
+- [x] `_log_error` short-circuits and writes a single one-shot
       `[bootstrap: <error>]` line to stderr (not `_ERR_PATH`) when
       `_ERR_STATE_PATH.parent` is missing, then returns.
-- [ ] Test in `tests/test_telemetry.py`: simulate `.git/` absence (point
+- [x] Test in `tests/test_telemetry.py`: simulate `.git/` absence (point
       `_ERR_PATH` at a non-existent directory) and call `_log_error` 100
       times — verify total stderr/file output is bounded (1 line, not 100).
 - [ ] Opus review of S<close-session> confirms the carry-forward is cleared.
@@ -47,7 +47,6 @@ Distinct from [[T073]] which fixed normal-path race + boundary + expanduser.
 
 ## Resolution
 
-> **Client-visible:** Telemetry hook errors during system bootstrap no longer
-> spam the error log — bootstrap-time failures emit at most one message.
+Added _BOOTSTRAP_STDERR_LOGGED module-level flag and two guards in _log_error: (1) bootstrap guard checks _ERR_STATE_PATH.parent.exists() and emits one-shot stderr message if .git/ is absent; (2) state_ok sentinel prevents falling through to _ERR_PATH when state file IO fails (disk full, IsADirectoryError, etc.) — previously the inner except pass left count=0 so all calls wrote to the error log uncapped. Also covers the Opus S16 concern #1 (state IO failure bypassing rate limit), not just the bootstrap path. 3 new tests in TestLogErrorBootstrapGuard.
 
-(Fill in on close.)
+Closed S17 2026-05-26.

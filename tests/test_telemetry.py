@@ -804,3 +804,91 @@ class TestLogErrorRateLimit:
             p.wait()
         lines = err_path.read_text().splitlines() if err_path.exists() else []
         assert len(lines) <= 11, f"Expected ≤ 11 lines (concurrent), got {len(lines)}"
+
+
+# ── T081: bootstrap-path errors bypass rate-limit ────────────────────────────
+
+class TestLogErrorBootstrapGuard:
+    """T081: _log_error must not flood when .git/ is absent or state IO fails."""
+
+    @classmethod
+    def setup_class(cls):
+        sys.path.insert(0, str(ROOT / "scripts" / "hooks"))
+
+    def test_git_absent_bounded_at_one_stderr_line(self, tmp_path, capsys):
+        """With .git/ absent, 100 _log_error calls produce ≤ 1 total output line."""
+        import log_tool_usage as ltu
+        import unittest.mock as mock
+
+        no_dir = tmp_path / "no_git_dir"  # parent directory that does NOT exist
+        state_path = no_dir / "errors.state"
+        err_path = no_dir / "errors"
+
+        ltu._BOOTSTRAP_STDERR_LOGGED = False  # reset for test isolation
+
+        with mock.patch.object(ltu, "_ERR_PATH", err_path), \
+             mock.patch.object(ltu, "_ERR_STATE_PATH", state_path):
+            for i in range(100):
+                ltu._log_error(f"bootstrap-error {i}")
+
+        captured = capsys.readouterr()
+        stderr_lines = [ln for ln in captured.err.splitlines() if ln.strip()]
+        file_lines = err_path.read_text().splitlines() if err_path.exists() else []
+        total = len(stderr_lines) + len(file_lines)
+        assert total <= 1, (
+            f"Expected ≤ 1 output line with .git/ absent, got {total}:\n"
+            f"  stderr: {stderr_lines}\n"
+            f"  file: {file_lines}"
+        )
+
+    def test_git_absent_first_message_goes_to_stderr(self, tmp_path, capsys):
+        """The one allowed line must go to stderr, not to _ERR_PATH."""
+        import log_tool_usage as ltu
+        import unittest.mock as mock
+
+        no_dir = tmp_path / "no_git_dir"
+        state_path = no_dir / "errors.state"
+        err_path = no_dir / "errors"
+
+        ltu._BOOTSTRAP_STDERR_LOGGED = False
+
+        with mock.patch.object(ltu, "_ERR_PATH", err_path), \
+             mock.patch.object(ltu, "_ERR_STATE_PATH", state_path):
+            ltu._log_error("first-bootstrap-error")
+
+        captured = capsys.readouterr()
+        assert "first-bootstrap-error" in captured.err or "bootstrap" in captured.err.lower(), \
+            f"Expected bootstrap message in stderr, got: {captured.err!r}"
+        assert not err_path.exists() or err_path.stat().st_size == 0, \
+            "bootstrap error must NOT be written to _ERR_PATH"
+
+    def test_state_io_failure_does_not_bypass_rate_limit(self, tmp_path, capsys):
+        """When state file is unreadable (IsADirectoryError), output is bounded, not unlimited.
+
+        Placing a directory at _ERR_STATE_PATH causes open(path, 'a+') to raise
+        IsADirectoryError, exercising the exact bypass that Opus flagged: inner except
+        fires, count stays 0, and without the fix all 100 calls reach _ERR_PATH.
+        """
+        import log_tool_usage as ltu
+        import unittest.mock as mock
+
+        err_path = tmp_path / "errors"
+        state_path = tmp_path / "errors.state"
+        state_path.mkdir()  # directory → open("a+") raises IsADirectoryError
+        # tmp_path EXISTS → bootstrap guard does NOT trigger (this tests the normal-path fix)
+
+        ltu._BOOTSTRAP_STDERR_LOGGED = False
+
+        with mock.patch.object(ltu, "_ERR_PATH", err_path), \
+             mock.patch.object(ltu, "_ERR_STATE_PATH", state_path):
+            for i in range(100):
+                ltu._log_error(f"io-fail-{i}")
+
+        captured = capsys.readouterr()
+        stderr_lines = [ln for ln in captured.err.splitlines() if ln.strip()]
+        file_lines = err_path.read_text().splitlines() if err_path.exists() else []
+        total = len(stderr_lines) + len(file_lines)
+        assert total <= 1, (
+            f"State IO failure must not bypass rate limit: got {total} lines "
+            f"(stderr={stderr_lines}, file={file_lines})"
+        )
