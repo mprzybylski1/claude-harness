@@ -2,7 +2,7 @@
 id: T041
 title: Drop _extract_exit field from telemetry records for non-Bash tools
 severity: low
-status: open
+status: closed
 phase: 2
 layer: infra
 opened: S9 2026-05-26
@@ -35,4 +35,10 @@ if Bash exit data is wanted in future, add `bash_exit` properly at that time.
 - [ ] All telemetry tests still pass.
 
 ## Resolution
-(Fill in on close.)
+
+Dropped `_extract_exit` function and `"exit"` field entirely from `log_tool_usage.py`.
+Updated module docstring log format example. Removed two tests (`test_extract_exit_*`).
+`grep` confirmed `analyze_tool_log.py` had zero references to `exit` field.
+21/21 tests pass.
+
+Closed S9 2026-05-26.

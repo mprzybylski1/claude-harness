@@ -7,7 +7,7 @@ Toggle via: python scripts/tools/toggle_telemetry.py on|off|status
 (manages .git/workflow_telemetry_on sentinel and harness.yaml in sync)
 
 Log format (one JSON object per line):
-    {"ts": 1700000000.0, "tool": "Edit", "path": "scripts/...", "exit": 0, "session": "S6"}
+    {"ts": 1700000000.0, "tool": "Edit", "path": "scripts/...", "session": "S6"}
 
 Log location: <harness-root>/.git/session_tool_log.jsonl
   - Inside .git/ so it is never committed or pushed.
@@ -71,15 +71,6 @@ def _extract_path(tool_name: str, tool_input: dict) -> str:
         return tool_input.get("description", "")[:120]
     return ""
 
-
-def _extract_exit(payload: dict) -> int:
-    """Bash exit code from tool_response; 0 for all non-Bash tools (no exit_code key)."""
-    response = payload.get("tool_response", {})
-    if isinstance(response, dict):
-        code = response.get("exit_code")
-        if code is not None:
-            return int(code)
-    return 0
 
 
 def _rotate_if_needed(path: Path, max_lines: int) -> None:
@@ -157,7 +148,6 @@ def main() -> None:
         "ts": time.time(),
         "tool": tool_name,
         "path": _extract_path(tool_name, tool_input),
-        "exit": _extract_exit(payload),
         "session": _current_session(),
     }
 

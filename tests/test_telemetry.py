@@ -238,18 +238,6 @@ class TestLogToolUsageHook:
         ltu._rotate_if_needed(log, 10)
         assert log.read_text() == original
 
-    def test_extract_exit_from_tool_response(self):
-        """_extract_exit reads exit_code from tool_response when present."""
-        import log_tool_usage as ltu
-        payload = {"tool_response": {"exit_code": 1}}
-        assert ltu._extract_exit(payload) == 1
-
-    def test_extract_exit_defaults_to_zero(self):
-        """_extract_exit returns 0 when tool_response has no exit_code."""
-        import log_tool_usage as ltu
-        assert ltu._extract_exit({}) == 0
-        assert ltu._extract_exit({"tool_response": {}}) == 0
-
 
 # ── Tests: analyze_tool_log.py ────────────────────────────────────────────────
 
