@@ -113,6 +113,53 @@ def main(opus_notes_path: Path | None = None) -> None:
         # else: skip
 
 
+def run_with_carry_forwards(notes_file: Path | None = None) -> None:
+    """Call extract_carry_forwards and re-emit any warning as a Note: line in stdout.
+
+    When extract_carry_forwards cannot determine the current session number (e.g. the
+    opus_notes.md file has 'carry-forward from S<N>' lines but no 'Opus Review — SN'
+    header), it prints a WARNING to stderr.  When invoked as a subprocess or via import,
+    that stderr message is discarded — the user sees an empty carry-forwards list with no
+    explanation.  This function captures that stderr output and re-emits any warning as a
+    'Note:' line in stdout so it reaches the user regardless of invocation mode.
+    """
+    import io
+    import subprocess
+
+    # Run extract_carry_forwards as a subprocess so we can capture its stderr cleanly
+    # without interfering with the current process's stderr.
+    script = Path(__file__).resolve().parent / "extract_carry_forwards.py"
+    cmd = [sys.executable, str(script)]
+    if notes_file is not None:
+        # Pass notes path via environment; the script's main() uses sys.argv only for
+        # --threshold, not for the notes file.  We call via import instead.
+        pass
+
+    # Import and call directly, capturing stderr via redirection
+    import importlib
+    captured_stderr = io.StringIO()
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+    # We need a fresh stderr capture around the extract_carry_forwards call
+    original_stderr = sys.stderr
+    sys.stderr = captured_stderr
+    try:
+        # Import fresh each time (may already be cached)
+        import extract_carry_forwards as _ecf
+        _ecf.main(notes_file=notes_file)
+    finally:
+        sys.stderr = original_stderr
+
+    warning_text = captured_stderr.getvalue().strip()
+    if warning_text:
+        # Re-emit each warning line as a Note: in stdout so the user sees it
+        for line in warning_text.splitlines():
+            if line.strip():
+                print(f"Note: {line.strip()}")
+
+    print("(run expand_carry_forward.py S<N>#<M> to see full description of any item above)")
+
+
 if __name__ == "__main__":
     import argparse
     _parser = argparse.ArgumentParser()
@@ -122,7 +169,4 @@ if __name__ == "__main__":
     _opus_path = Path(_args.opus) if _args.opus else None
     main(_opus_path)
     if _args.with_carry_forwards:
-        sys.path.insert(0, str(Path(__file__).resolve().parent))
-        from extract_carry_forwards import main as _cf_main
-        _cf_main(notes_file=_opus_path)
-        print("(run expand_carry_forward.py S<N>#<M> to see full description of any item above)")
+        run_with_carry_forwards(notes_file=_opus_path)
