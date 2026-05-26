@@ -86,26 +86,27 @@ class TestLogToolUsageHook:
         )
 
     def test_exits_silently_when_both_off(self, tmp_path):
-        """Hook exits 0 quickly when sentinel absent AND harness.yaml has telemetry false."""
-        sentinel = ROOT / ".git" / "workflow_telemetry_on"
-        harness_yaml = ROOT / "harness.yaml"
-        original_yaml = harness_yaml.read_text(encoding="utf-8")
-        sentinel_existed = sentinel.exists()
-        harness_yaml.write_text(
-            original_yaml.replace("workflow_telemetry: true", "workflow_telemetry: false"),
-            encoding="utf-8",
-        )
-        if sentinel_existed:
-            sentinel.unlink()
-        try:
-            start = time.monotonic()
-            result = _run_hook({"tool_name": "Edit", "tool_input": {"file_path": "foo.py"}})
-            elapsed = time.monotonic() - start
-        finally:
-            harness_yaml.write_text(original_yaml, encoding="utf-8")
-            if sentinel_existed:
-                sentinel.touch()
-        assert result.returncode == 0
+        """Hook exits 0 quickly when sentinel absent AND harness.yaml has telemetry false.
+
+        Uses _make_fake_root + mock.patch so an interrupted run cannot leave the real
+        harness.yaml with telemetry disabled (S7 Concern #5 / T040).
+        """
+        import unittest.mock as mock
+
+        sys.path.insert(0, str(ROOT / "scripts" / "hooks"))
+        import log_tool_usage as ltu
+
+        fake_root = _make_fake_root(tmp_path, telemetry_on=False, sentinel=False)
+        start = time.monotonic()
+        with mock.patch.object(ltu, "ROOT", fake_root), \
+             mock.patch.object(ltu, "_SENTINEL", fake_root / ".git" / "workflow_telemetry_on"), \
+             mock.patch.object(ltu, "_LOG_PATH", fake_root / ".git" / "session_tool_log.jsonl"), \
+             mock.patch.object(ltu, "_ERR_PATH", fake_root / ".git" / "session_tool_log.errors"):
+            with pytest.raises(SystemExit) as exc_info:
+                ltu.main()
+        elapsed = time.monotonic() - start
+
+        assert exc_info.value.code == 0
         assert elapsed < 0.5, f"Expected fast exit, took {elapsed:.3f}s"
 
     def test_bootstrap_creates_sentinel_from_yaml(self):
