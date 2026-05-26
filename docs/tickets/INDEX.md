@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S14 2026-05-26. 3 open tickets.
+Generated S14 2026-05-26. 2 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -11,11 +11,9 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Medium (1)
+## Medium (0)
 
-| ID | Title | Phase | Layer | Age |
-|----|-------|-------|-------|-----|
-| T070 | close_ticket.py BOTH-locations unlink silent failure | process | process | 1 session |
+*(none)*
 
 ## Low (2)
 

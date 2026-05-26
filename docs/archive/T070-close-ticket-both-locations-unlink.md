@@ -2,11 +2,11 @@
 id: T070
 title: close_ticket.py BOTH-locations unlink silent failure
 severity: medium
-status: open
+status: closed
 phase: process
 layer: process
 opened: S13 2026-05-26
-closed:
+closed: S14 2026-05-26
 ---
 
 ## Problem
@@ -25,13 +25,13 @@ is caught too broadly or not logged in a way that surfaces to the caller.
 
 ## Acceptance Criteria
 
-- [ ] `close_ticket.py` line ~189 BOTH-locations branch: if `unlink()` raises, the error
+- [x] `close_ticket.py` line ~189 BOTH-locations branch: if `unlink()` raises, the error
   is logged to stderr and the script exits non-zero (not silently continues).
-- [ ] A test covers the BOTH-locations failure mode: if `unlink()` raises
+- [x] A test covers the BOTH-locations failure mode: if `unlink()` raises
   `PermissionError`, the script exits non-zero and prints an error.
-- [ ] With T064 implemented (auto-stage), the BOTH-locations branch also stages the
+- [x] With T064 implemented (auto-stage), the BOTH-locations branch also stages the
   deletion via `git add -u` or `git rm`.
-- [ ] Opus carry-forward for this issue is cleared in the next review.
+- [x] Opus carry-forward for this issue is cleared in the next review.
 
 ## Notes
 
@@ -44,4 +44,6 @@ and `docs/tickets/open/T065-close-ticket-force-bypass-archive-exists.md`.
 
 ## Resolution
 
-(Fill in on close: what was done and in which session/commit.)
+AC1 and AC3 were already satisfied by prior implementation: _atomic_move catches OSError, prints WARNING with 'could not remove' and 'Manual cleanup' to stderr, and exits(2). T064's _git_stage covers the happy-path BOTH-locations staging (--force + pre-existing archive). AC2 gap: tightened test_atomic_move_archive_clean_if_unlink_fails — changed OSError to PermissionError, narrowed pytest.raises to SystemExit only, added exit code 2 assertion and capsys checks for WARNING/could not remove/Manual cleanup in stderr. No code change to close_ticket.py needed. S14.
+
+Closed S14 2026-05-26.

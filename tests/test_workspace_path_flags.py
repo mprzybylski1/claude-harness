@@ -960,8 +960,8 @@ Synthetic.
 
     # ── Fix 1: atomic move via os.replace ─────────────────────────────────────
 
-    def test_atomic_move_archive_clean_if_unlink_fails(self, tmp_path, monkeypatch):
-        """os.replace completes before ticket_path.unlink(); archive is clean if unlink fails."""
+    def test_atomic_move_archive_clean_if_unlink_fails(self, tmp_path, monkeypatch, capsys):
+        """T070: PermissionError on unlink → exit(2) + WARNING to stderr; archive stays clean."""
         archive_dir = tmp_path / "archive"
         archive_dir.mkdir()
         open_dir = tmp_path / "open"
@@ -974,14 +974,19 @@ Synthetic.
 
         def fail_on_source(self_path, missing_ok=False):
             if self_path.parent == open_dir:
-                raise OSError("simulated unlink failure")
+                raise PermissionError("simulated permission denied")
             return original_unlink(self_path, missing_ok=missing_ok)
 
         monkeypatch.setattr(Path, "unlink", fail_on_source)
 
-        with pytest.raises((OSError, SystemExit)):
+        with pytest.raises(SystemExit) as exc_info:
             self.ct._atomic_move(ticket_path, dest, "new content")
 
+        assert exc_info.value.code == 2
+        captured = capsys.readouterr()
+        assert "WARNING" in captured.err
+        assert "could not remove" in captured.err
+        assert "Manual cleanup" in captured.err
         assert dest.exists(), "archive must exist after os.replace"
         assert dest.read_text() == "new content", "archive must have correct content"
         assert not list(archive_dir.glob("*.tmp")), "no temp files should remain"
