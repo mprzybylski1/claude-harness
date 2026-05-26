@@ -19,19 +19,29 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Active Work
 
-**S12 — fixed telemetry session-stamping bug (T057) + hook-path revert + impl-review hardening.**
+**S13 — hook portability fix + closed T058–T063 + workflow review + impl-review hardening.**
 
 Files changed:
-- `scripts/hooks/log_tool_usage.py` — T057: workspace-aware session/workspace stamping (detect workspace from tool target paths, read right sessions.md directly, add `workspace` field); impl-review: bypass internal_dir for ws_cfg with docs_path, shlex.split for quoted Bash paths, log missing sessions.md to error file
-- `tests/test_telemetry.py` — 11 new tests; 2 obsolete cache-based tests removed (30 total)
-- `.claude/settings.json` — reverted hook commands to absolute paths ($CLAUDE_PROJECT_DIR was empty in hook subshell)
-- `CLAUDE.md` — documented hook-path diagnosis
-- `docs/archive/T057-telemetry-workspace-aware-session-stamping.md` — ticket closed
+- `.claude/settings.json` — all 5 hook commands switched from hardcoded `/home/marcin/...` paths to `$(git rev-parse --show-toplevel)` (cross-machine portability)
+- `CLAUDE.md` — updated hook path documentation; added archive split note (T063)
+- `tests/test_config.py` — new regression guard: no hardcoded paths in hook commands
+- `scripts/hooks/log_tool_usage.py` — T058: inner-except logs instead of swallowing; `rsplit` for chained `=` tokens; T059: rate-limit `_log_error` at 10+1/60s; impl-review: fail-closed `_detect_workspace` on exception
+- `tests/test_telemetry.py` — 8 new tests (T058/T059); 4 subprocess tests converted to in-process (T063); 213 total
+- `scripts/tools/current_session.py` — T060: skip cache write when `--sessions` arg provided (workspace calls don't clobber `.git/CLAUDE_SESSION_ID`)
+- `scripts/tools/extract_session_brief.py` — T061: `## Hook errors (last 5)` section; tail via deque (impl-review fix)
+- `.claude/skills/session-start/SKILL.md` — T061: updated Step 1.2 and briefing template
+- `scripts/tools/prepare_opus_context.py` — T044: `_is_within_root()` helper; `check_test_syntax` skips symlinks escaping workspace
+- `tests/test_static_analysis_symlink_boundary.py` — T044: 8 integration tests
+- `scripts/tools/extract_opus_key_sections.py` — T055: `run_with_carry_forwards` captures stderr, re-emits as `Note:`; impl-review: removed dead subprocess/importlib code, deduplicated `sys.path.insert`
+- `scripts/tools/ticket_constants.py` — T056: new file with `AGING_EMPTY_MARKER = "*(none)*"`
+- `scripts/tools/generate_ticket_index.py` — T056: use `AGING_EMPTY_MARKER` constant
+- `scripts/tools/surface_stale_tickets.py` — T056: regex uses `re.escape(AGING_EMPTY_MARKER)`
+- `docs/tickets/open/` — opened T064–T071 (workflow review + impl-review findings)
 
-Tickets opened: T057
-Tickets closed: T057
+Tickets opened: T058, T059, T060, T061, T063, T064, T065, T066, T067, T068, T069, T070, T071
+Tickets closed: T058, T059, T060, T061, T044, T055, T056, T063
 
-Remaining open items: T044, T050, T055, T056
+Remaining open: T050, T064–T071
 
 ---
 
@@ -52,3 +62,4 @@ S9 2026-05-26: closed T039–T042, T045–T048 (hook abs paths, carry-forward to
 S10 2026-05-26: closed T043, T049, T051–T053 (S9 carry-forward backlog: close_ticket.py correctness, expand_carry_forward boundary bleed, YAML cache, misc); impl-review hardening (4 findings)
 S11 2026-05-26: closed T054 (close_ticket.py: atomic move via os.replace, resolution permissive fallback, stamp regex fix, parse-failure warning)
 S12 2026-05-26: closed T057 (telemetry workspace-aware session stamping); reverted hook paths to absolute; impl-review hardening (3 findings)
+S13 2026-05-26: hook portability (git rev-parse); closed T044, T055, T056, T058–T063; workflow review opened T064–T071; impl-review fixed 4 findings
