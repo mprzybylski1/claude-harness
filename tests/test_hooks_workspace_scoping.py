@@ -645,3 +645,49 @@ class TestSessionsRelDocsPathMode:
             f"Error message must not fall back to hardcoded 'docs/sessions.md'. "
             f"Got: {stderr!r}"
         )
+
+
+# ── Tests: _get_docs_path_map cache (T043) ───────────────────────────────────
+
+class TestDocsPathMapCache:
+    """Opus review finding: cache must only persist on success; exception leaves it retryable."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_cache(self):
+        """Clear the module-level cache before and after each test."""
+        sys.path.insert(0, str(REPO_ROOT / "scripts" / "hooks"))
+        import importlib
+        import regenerate_ticket_index as rti
+        importlib.reload(rti)
+        self.rti = rti
+        yield
+        # Reset for next test
+        self.rti._docs_path_cache = None
+
+    def test_second_call_returns_cached_result(self, tmp_path):
+        """Cache is reused on second call — workspaces_base called only once."""
+        call_count = 0
+
+        def counting_workspaces_base():
+            nonlocal call_count
+            call_count += 1
+            return tmp_path / "workspaces"
+
+        with patch.object(self.rti, "workspaces_base", side_effect=counting_workspaces_base):
+            self.rti._get_docs_path_map()
+            self.rti._get_docs_path_map()
+
+        assert call_count == 1, f"Expected 1 workspaces_base call, got {call_count}"
+
+    def test_exception_does_not_cache_empty_map(self, tmp_path):
+        """Finding 2: exception during build leaves _docs_path_cache None so next call retries."""
+        def failing_workspaces_base():
+            raise OSError("transient FS error")
+
+        with patch.object(self.rti, "workspaces_base", side_effect=failing_workspaces_base):
+            result = self.rti._get_docs_path_map()
+
+        assert result == {}, "Should return empty dict on failure"
+        assert self.rti._docs_path_cache is None, (
+            "Cache must remain None after failure so next call retries"
+        )

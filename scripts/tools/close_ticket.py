@@ -81,7 +81,7 @@ def _find_ticket(ticket_id: str, workspace_slug: str | None = None) -> tuple[Pat
         sys.exit(1)
 
     if len(matches) > 1:
-        locations = "\n".join(f"  {p} (workspace: {i.parent.parent.name if i else 'harness root'})"
+        locations = "\n".join(f"  {p} (workspace: {i.parent.name if i else 'harness root'})"
                               for p, i in matches)
         print(
             f"ERROR: ticket {ticket_id} found in multiple locations — use --workspace to disambiguate:\n"

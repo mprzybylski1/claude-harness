@@ -663,6 +663,8 @@ Synthetic.
         result = self._run(tmp_path, "T999", "--resolution", "should error")
         assert result.returncode != 0
         assert "multiple" in result.stderr.lower() or "disambiguate" in result.stderr.lower()
+        # Finding 1: error message must name the workspace slug, not the grandparent dir name
+        assert "ws1" in result.stderr, f"Expected slug 'ws1' in error, got: {result.stderr}"
 
     def test_workspace_flag_disambiguates(self, tmp_path):
         """S9 #3: --workspace targets the right scope when ID exists in multiple places."""
@@ -703,6 +705,9 @@ Synthetic.
         # open/ ticket must be untouched
         assert ticket.exists(), "open/ ticket must survive a failed archive write"
         assert ticket.read_text() == original, "open/ ticket content must be unmodified"
+        # No partial archive copy should exist at the intended destination
+        dest = tmp_path / "docs" / "archive" / ticket.name
+        assert not dest.exists(), "No archive copy must be created when dest write fails"
 
 
 # ── Tests: surface_stale_tickets.py (T047) ───────────────────────────────────

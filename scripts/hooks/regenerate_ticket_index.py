@@ -61,9 +61,10 @@ def _get_docs_path_map() -> dict[str, Path]:
                     continue
                 docs = _internal_dir(ws_dir, cfg)
                 result[str(docs / "tickets")] = ws_dir
+        # Only cache on success — transient failure leaves None so next call retries.
+        _docs_path_cache = result
     except Exception:
         pass
-    _docs_path_cache = result
     return result
 
 
