@@ -1,6 +1,6 @@
 # System State
 
-_Last updated: S10 2026-05-26_
+_Last updated: S11 2026-05-26_
 
 ---
 
@@ -23,11 +23,10 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Open Tickets
 
-**5 open tickets**
+**4 open tickets**
 
 | ID | Title | Phase | Age |
 |----|-------|-------|-----|
-| T054 | S10 — close_ticket.py remaining correctness issues (atomic move, resolution regex, stamp regex, silent parse failure) | Ph2 | infra | 1 session |
 | T044 | S1 #3 — run_static_analysis boundary check inside check functions | Ph2 | infra | 2 sessions |
 | T050 | Split opus_notes archive by session range when over line threshold | Ph2 | tooling | 2 sessions |
 | T055 | S10 — carry-forward warning swallowed in brief output (S9 #6) | Ph2 | infra | 1 session |
