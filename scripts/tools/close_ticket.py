@@ -207,19 +207,18 @@ def _regenerate_index(internal: Path | None) -> None:
         print(f"WARNING: generate_ticket_index.py failed: {exc}", file=sys.stderr)
 
 
-def _git_root_for(path: Path) -> str:
-    """Return the git worktree root that owns path, falling back to ROOT."""
+def _git_root_for(path: Path) -> str | None:
+    """Return the git worktree root that owns path, or None if not in a git repo."""
     try:
         result = subprocess.run(
-            ["git", "-C", str(path if path.is_dir() else path.parent),
-             "rev-parse", "--show-toplevel"],
+            ["git", "-C", str(path.parent), "rev-parse", "--show-toplevel"],
             capture_output=True, text=True,
         )
         if result.returncode == 0:
             return result.stdout.strip()
-    except FileNotFoundError:
+    except (FileNotFoundError, OSError, subprocess.SubprocessError):
         pass
-    return str(ROOT)
+    return None
 
 
 def _git_stage(ticket_path: Path, dest: Path, internal: Path | None) -> None:
@@ -230,6 +229,14 @@ def _git_stage(ticket_path: Path, dest: Path, internal: Path | None) -> None:
         index_path = ROOT / "docs" / "tickets" / "INDEX.md"
     paths = [str(ticket_path), str(dest), str(index_path)]
     git_root = _git_root_for(dest)
+    if git_root is None:
+        print(
+            "WARNING: ticket moved to archive but git staging failed — stage manually.\n"
+            f"  git rm --cached -- {paths[0]}\n"
+            f"  git add -- {' '.join(paths[1:])}",
+            file=sys.stderr,
+        )
+        sys.exit(2)
     try:
         subprocess.check_call(
             ["git", "-C", git_root, "rm", "--cached", "--ignore-unmatch", "--", str(ticket_path)],
@@ -238,7 +245,7 @@ def _git_stage(ticket_path: Path, dest: Path, internal: Path | None) -> None:
         to_add = [str(p) for p in [dest, index_path] if p.exists()]
         if to_add:
             subprocess.check_call(["git", "-C", git_root, "add", "--", *to_add])
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         print(
             "WARNING: ticket moved to archive but git staging failed — stage manually.\n"
             f"  git rm --cached -- {paths[0]}\n"

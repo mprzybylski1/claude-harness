@@ -151,9 +151,8 @@ class TestExpandCarryForwardMultiFile:
         assert "opus_notes_S0-S9.md" in names
         assert "opus_notes_S10-S19.md" in names
 
-    def test_expand_carry_forward_subprocess_finds_across_files(self, tmp_path, monkeypatch):
-        """expand_carry_forward searches all archive decade files for a canonical finding."""
-        import subprocess
+    def test_opus_files_collects_all_decade_archives(self, tmp_path, monkeypatch):
+        """_opus_files() returns entries from both opus_notes.md and all decade archive files."""
         import expand_carry_forward as ecf
 
         # Patch ROOT so _opus_files() looks at tmp_path instead of harness root

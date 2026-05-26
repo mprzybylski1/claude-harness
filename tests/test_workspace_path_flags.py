@@ -1173,10 +1173,61 @@ Synthetic.
             ["git", "-C", str(harness), "status", "--porcelain"],
             capture_output=True, text=True, check=True,
         ).stdout
-        assert "T999" in proj_status, \
-            f"Expected T999 staged in project repo:\n{proj_status}"
+        assert "archive/T999" in proj_status, \
+            f"Expected archive/T999 staged in project repo:\n{proj_status}"
         assert "T999" not in harness_status, \
             f"T999 must not appear in harness repo staging:\n{harness_status}"
+
+    def test_non_git_workspace_warns_and_exits_nonzero(self, tmp_path):
+        """T072: workspace docs_path in a non-git dir warns and exits 2, not silently stages in harness."""
+        harness = tmp_path / "harness"
+        (harness / "docs" / "tickets" / "open").mkdir(parents=True)
+        (harness / "docs" / "archive").mkdir(parents=True)
+        (harness / "docs" / "tickets" / "INDEX.md").write_text("# Index\n")
+        (harness / "docs" / "sessions.md").write_text("## Session Log\n\nS1 2026-01-01: init\n")
+        tools = harness / "scripts" / "tools"
+        tools.mkdir(parents=True)
+        (tools / "current_session.py").write_text("import sys\nprint('S9')\n")
+        (tools / "generate_ticket_index.py").write_text("import sys; sys.exit(0)\n")
+
+        # Plain directory — NOT a git repo
+        plain_dir = tmp_path / "plain"
+        harness_dir = plain_dir / ".harness"
+        (harness_dir / "tickets" / "open").mkdir(parents=True)
+        (harness_dir / "archive").mkdir(parents=True)
+        (harness_dir / "tickets" / "INDEX.md").write_text("# Index\n")
+        (harness_dir / "sessions.md").write_text("## Session Log\n\nS1 2026-01-01: init\n")
+        ticket = harness_dir / "tickets" / "open" / "T999-synthetic-test-ticket.md"
+        ticket.write_text(self.OPEN_TICKET, encoding="utf-8")
+
+        # Init harness repo (but NOT the plain_dir)
+        for cmd in [
+            ["git", "-C", str(harness), "init", "-q"],
+            ["git", "-C", str(harness), "config", "user.email", "t@test.com"],
+            ["git", "-C", str(harness), "config", "user.name", "Test"],
+            ["git", "-C", str(harness), "config", "commit.gpgsign", "false"],
+            ["git", "-C", str(harness), "add", "-A"],
+            ["git", "-C", str(harness), "commit", "-q", "-m", "init"],
+        ]:
+            subprocess.run(cmd, check=True, capture_output=True)
+
+        ws_dir = harness / "workspaces" / "plain-ws"
+        (ws_dir / "internal" / "tickets" / "open").mkdir(parents=True)
+        ws_dir.joinpath("workspace.yaml").write_text(
+            f"name: plain-ws\ndocs_path: {harness_dir}\n", encoding="utf-8"
+        )
+
+        result = self._run(harness, "T999", "--workspace", "plain-ws", "--resolution", "done")
+        assert result.returncode == 2, f"Expected exit 2 for non-git workspace; got {result.returncode}"
+        assert "WARNING" in result.stderr
+
+        # Harness repo must be clean — nothing staged there
+        harness_status = subprocess.run(
+            ["git", "-C", str(harness), "status", "--porcelain"],
+            capture_output=True, text=True, check=True,
+        ).stdout
+        assert "T999" not in harness_status, \
+            f"T999 must not be staged in harness repo:\n{harness_status}"
 
 
 # ── Tests: surface_stale_tickets.py (T047) ───────────────────────────────────
