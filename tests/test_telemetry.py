@@ -516,3 +516,154 @@ class TestWorkspaceAwareStamping:
         assert rec["workspace"] == "eta"
         assert rec["session"] == "S12"
         assert rec["tool"] == "Edit"
+
+    def test_record_includes_workspace_field_harness_root_case(self, tmp_path):
+        """End-to-end: payload for a harness-root file produces workspace=''."""
+        import log_tool_usage as ltu
+        import unittest.mock as mock
+        ws_dir, cfg = self._make_workspace(tmp_path, slug="theta", last_session=5)
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs" / "sessions.md").write_text(
+            "S20 2026-05-25: prior\nS21 2026-05-26: latest\n"
+        )
+        log_path = tmp_path / "log.jsonl"
+        sentinel = tmp_path / ".git" / "workflow_telemetry_on"
+        sentinel.parent.mkdir(exist_ok=True)
+        sentinel.touch()
+        target = tmp_path / "harness_file.py"
+        target.write_text("")
+
+        payload = json.dumps({"tool_name": "Edit", "tool_input": {"file_path": str(target)}})
+        with mock.patch.object(ltu, "ROOT", tmp_path), \
+             mock.patch.object(ltu, "_LOG_PATH", log_path), \
+             mock.patch.object(ltu, "_SENTINEL", sentinel), \
+             mock.patch.object(ltu, "_list_workspaces", return_value=[("theta", cfg)]), \
+             mock.patch("sys.stdin.read", return_value=payload):
+            try:
+                ltu.main()
+            except SystemExit:
+                pass
+
+        lines = log_path.read_text().splitlines()
+        assert len(lines) == 1
+        rec = json.loads(lines[0])
+        assert rec["workspace"] == ""
+        assert rec["session"] == "S22"
+
+    def test_candidate_paths_tilde_expansion(self, tmp_path):
+        """~/path tokens are expanded to absolute before workspace matching."""
+        import log_tool_usage as ltu
+        import unittest.mock as mock
+        home = Path.home()
+        repo_root = home / "fake_ws_repo_for_test"
+        cfg = {
+            "name": "TildeWS",
+            "repos": [{"path": str(repo_root), "role": "primary"}],
+            "docs_path": str(tmp_path / "internal"),
+        }
+        cmd = f"cat ~/fake_ws_repo_for_test/some_file.md"
+        with mock.patch.object(ltu, "_list_workspaces", return_value=[("tildews", cfg)]):
+            slug, _ = ltu._detect_workspace("Bash", {"command": cmd})
+        assert slug == "tildews", f"Expected tildews, got '{slug}' — tilde not expanded"
+
+    def test_candidate_paths_chained_equals_extracts_path(self):
+        """KEY=val=/path yields /path, not the intermediate val=/path."""
+        import log_tool_usage as ltu
+        cmd = "python foo.py --sessions=/tmp/some/sessions.md KEY=val=/other/path"
+        paths = ltu._candidate_paths("Bash", {"command": cmd})
+        assert "/tmp/some/sessions.md" in paths
+        assert "/other/path" in paths
+
+    def test_detect_workspace_inner_except_logs_error(self, tmp_path):
+        """When is_within_workspace raises, the error is logged rather than swallowed."""
+        import log_tool_usage as ltu
+        import unittest.mock as mock
+
+        cfg = {"name": "Broken", "repos": [{"path": "/some/repo", "role": "primary"}]}
+        err_path = tmp_path / "errors"
+
+        def _raise(path, cfg):
+            raise RuntimeError("simulated cfg error")
+
+        with mock.patch.object(ltu, "_list_workspaces", return_value=[("broken", cfg)]), \
+             mock.patch("workspace_config.is_within_workspace", _raise), \
+             mock.patch.object(ltu, "_ERR_PATH", err_path):
+            ltu._ERR_COUNT = 0
+            ltu._ERR_WINDOW_START = 0.0
+            ltu._detect_workspace("Edit", {"file_path": "/some/repo/x.py"})
+
+        assert err_path.exists(), "Expected error to be logged"
+        assert "workspace match failed" in err_path.read_text()
+
+
+# ── T059: _log_error rate-limit ───────────────────────────────────────────────
+
+class TestLogErrorRateLimit:
+    @classmethod
+    def setup_class(cls):
+        sys.path.insert(0, str(ROOT / "scripts" / "hooks"))
+
+    def _reset_state(self, ltu):
+        ltu._ERR_COUNT = 0
+        ltu._ERR_WINDOW_START = 0.0
+
+    def test_rate_limit_caps_at_ten_plus_marker(self, tmp_path):
+        """100 rapid _log_error calls produce ≤ 10 real lines + 1 marker line."""
+        import log_tool_usage as ltu
+        import unittest.mock as mock
+        err_path = tmp_path / "errors"
+        self._reset_state(ltu)
+        with mock.patch.object(ltu, "_ERR_PATH", err_path):
+            for i in range(100):
+                ltu._log_error(f"boom {i}")
+        lines = err_path.read_text().splitlines()
+        assert len(lines) == 11, f"Expected 11 lines (10 + marker), got {len(lines)}"
+        assert "rate-limit" in lines[-1]
+
+    def test_rate_limit_marker_suppresses_further_writes(self, tmp_path):
+        """After the marker is written, additional calls produce no new lines."""
+        import log_tool_usage as ltu
+        import unittest.mock as mock
+        err_path = tmp_path / "errors"
+        self._reset_state(ltu)
+        with mock.patch.object(ltu, "_ERR_PATH", err_path):
+            for i in range(100):
+                ltu._log_error(f"msg {i}")
+            count_after_100 = len(err_path.read_text().splitlines())
+            for i in range(100):
+                ltu._log_error(f"extra {i}")
+            count_after_200 = len(err_path.read_text().splitlines())
+        assert count_after_100 == count_after_200, "Writes after marker must be suppressed"
+
+    def test_rate_limit_window_resets_after_expiry(self, tmp_path):
+        """After 60s the window resets and errors are logged again."""
+        import log_tool_usage as ltu
+        import unittest.mock as mock
+        err_path = tmp_path / "errors"
+        self._reset_state(ltu)
+        fake_now = [0.0]
+        with mock.patch.object(ltu, "_ERR_PATH", err_path), \
+             mock.patch("log_tool_usage.time") as mock_time:
+            mock_time.time.side_effect = lambda: fake_now[0]
+            mock_time.strftime.side_effect = time.strftime
+            mock_time.gmtime.side_effect = time.gmtime
+            for i in range(100):
+                ltu._log_error(f"first window {i}")
+            first_count = len(err_path.read_text().splitlines())
+            fake_now[0] = 61.0
+            ltu._log_error("after reset")
+        all_lines = err_path.read_text().splitlines()
+        assert first_count == 11
+        assert len(all_lines) == 12, f"Expected 12 lines after reset, got {len(all_lines)}"
+
+    def test_hook_exits_zero_when_rate_limited(self, tmp_path):
+        """Rate-limiting never causes the hook to exit non-zero."""
+        import log_tool_usage as ltu
+        import unittest.mock as mock
+        err_path = tmp_path / "errors"
+        self._reset_state(ltu)
+        ltu._ERR_COUNT = 11  # already past limit
+        ltu._ERR_WINDOW_START = time.time()  # keep window current so it doesn't reset
+        with mock.patch.object(ltu, "_ERR_PATH", err_path):
+            ltu._log_error("should be silently dropped")
+        assert not err_path.exists() or err_path.read_text() == ""

@@ -43,6 +43,11 @@ _LOG_PATH = ROOT / ".git" / "session_tool_log.jsonl"
 _ERR_PATH = ROOT / ".git" / "session_tool_log.errors"
 _DEFAULT_MAX_LINES = 5000
 
+_ERR_COUNT: int = 0
+_ERR_WINDOW_START: float = 0.0
+_ERR_RATE_LIMIT = 10
+_ERR_WINDOW_SECS = 60
+
 
 def _max_lines(harness: dict) -> int:
     return int(harness.get("workflow_telemetry_max_lines", _DEFAULT_MAX_LINES))
@@ -79,7 +84,7 @@ def _candidate_paths(tool_name: str, tool_input: dict) -> list[str]:
         for raw in parts:
             t = raw.strip("'\"`")
             if "=" in t and not (t.startswith("/") or t.startswith("~/")):
-                t = t.split("=", 1)[1].strip("'\"`")
+                t = t.rsplit("=", 1)[1].strip("'\"`")
             if t.startswith("/") or t.startswith("~/"):
                 tokens.append(t)
         return tokens
@@ -103,8 +108,8 @@ def _detect_workspace(tool_name: str, tool_input: dict) -> tuple[str, dict | Non
             try:
                 if _wc.is_within_workspace(Path(path), cfg):
                     return (slug, cfg)
-            except Exception:
-                continue
+            except Exception as exc:
+                _log_error(f"workspace match failed for {slug}: {exc}")
     return ("", None)
 
 
@@ -173,7 +178,17 @@ def _rotate_if_needed(path: Path, max_lines: int) -> None:
 
 
 def _log_error(msg: str) -> None:
+    global _ERR_COUNT, _ERR_WINDOW_START
     try:
+        now = time.time()
+        if now - _ERR_WINDOW_START > _ERR_WINDOW_SECS:
+            _ERR_COUNT = 0
+            _ERR_WINDOW_START = now
+        if _ERR_COUNT > _ERR_RATE_LIMIT:
+            return
+        _ERR_COUNT += 1
+        if _ERR_COUNT > _ERR_RATE_LIMIT:
+            msg = "[rate-limit engaged — further errors suppressed]"
         with _ERR_PATH.open("a", encoding="utf-8") as f:
             f.write(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} {msg}\n")
     except Exception:
