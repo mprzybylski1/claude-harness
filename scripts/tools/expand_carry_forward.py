@@ -72,10 +72,12 @@ def _extract_findings(content: str, session_n: int, finding_n: int) -> list[tupl
         re.MULTILINE,
     )
 
+    # Build combined boundary list: next finding head OR next session head (S9 #4).
+    boundaries = sorted(set(head_positions + [sp for sp, _ in session_positions]))
     results = []
     for m in id_pat.finditer(content):
         start = m.start()
-        end = next((hp for hp in head_positions if hp > start), len(content))
+        end = next((bp for bp in boundaries if bp > start), len(content))
         text = content[start:end].rstrip()
         sn = _session_at(start, session_positions)
         results.append((sn, text))
