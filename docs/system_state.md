@@ -23,7 +23,11 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Open Tickets
 
-_No open tickets._
+**1 open ticket**
+
+| ID | Title | Phase | Age |
+|----|-------|-------|-----|
+| T073 | log_tool_usage.py three carry-forward fixes (race, >= window, expanduser) | process | process | 1 session |
 
 ---
 
