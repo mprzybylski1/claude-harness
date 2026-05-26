@@ -81,11 +81,14 @@ def main() -> None:
     recent_lines = log_lines[-SESSION_LOG_KEEP:]
 
     # Hook errors — tail last N lines of .git/session_tool_log.errors
-    hook_error_lines: list[str] = []
+    from collections import deque
+    hook_errors_tail: list[str] = []
     if errors_file.exists():
-        raw = errors_file.read_text(errors="replace")
-        hook_error_lines = [ln for ln in raw.splitlines() if ln.strip()]
-    hook_errors_tail = hook_error_lines[-HOOK_ERRORS_KEEP:] if hook_error_lines else []
+        with errors_file.open(encoding="utf-8", errors="replace") as _ef:
+            hook_errors_tail = [
+                ln for ln in deque(_ef, maxlen=HOOK_ERRORS_KEEP * 2)
+                if ln.strip()
+            ][-HOOK_ERRORS_KEEP:]
 
     # Output
     print("## Current Phase & Status")

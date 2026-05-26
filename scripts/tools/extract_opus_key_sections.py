@@ -124,27 +124,15 @@ def run_with_carry_forwards(notes_file: Path | None = None) -> None:
     'Note:' line in stdout so it reaches the user regardless of invocation mode.
     """
     import io
-    import subprocess
 
-    # Run extract_carry_forwards as a subprocess so we can capture its stderr cleanly
-    # without interfering with the current process's stderr.
-    script = Path(__file__).resolve().parent / "extract_carry_forwards.py"
-    cmd = [sys.executable, str(script)]
-    if notes_file is not None:
-        # Pass notes path via environment; the script's main() uses sys.argv only for
-        # --threshold, not for the notes file.  We call via import instead.
-        pass
+    scripts_dir = str(Path(__file__).resolve().parent)
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
 
-    # Import and call directly, capturing stderr via redirection
-    import importlib
     captured_stderr = io.StringIO()
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-    # We need a fresh stderr capture around the extract_carry_forwards call
     original_stderr = sys.stderr
     sys.stderr = captured_stderr
     try:
-        # Import fresh each time (may already be cached)
         import extract_carry_forwards as _ecf
         _ecf.main(notes_file=notes_file)
     finally:
@@ -152,7 +140,6 @@ def run_with_carry_forwards(notes_file: Path | None = None) -> None:
 
     warning_text = captured_stderr.getvalue().strip()
     if warning_text:
-        # Re-emit each warning line as a Note: in stdout so the user sees it
         for line in warning_text.splitlines():
             if line.strip():
                 print(f"Note: {line.strip()}")
