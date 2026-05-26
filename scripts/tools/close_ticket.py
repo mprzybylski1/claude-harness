@@ -419,7 +419,19 @@ def main() -> None:
         dest_display = dest.relative_to(ROOT)
     except ValueError:
         dest_display = dest
+
+    if internal is not None:
+        index_path = internal / "tickets" / "INDEX.md"
+    else:
+        index_path = ROOT / "docs" / "tickets" / "INDEX.md"
+    staged_paths = [dest, index_path] + (extra_files or [])
+
     print(f"Closed {ticket_id} → {dest_display}")
+    for p in staged_paths:
+        try:
+            print(f"  staged: {p.relative_to(ROOT)}")
+        except ValueError:
+            print(f"  staged: {p}")
     print()
     print("Suggested commit:")
     print(f'  git commit -m "fix({ticket_id}): {title}"')

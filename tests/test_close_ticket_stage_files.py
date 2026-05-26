@@ -291,3 +291,31 @@ class TestCloseTicketStageFiles:
             f"main.py must be staged in project repo:\n{proj_status}"
         assert "main.py" not in harness_status, \
             f"main.py must not appear in harness repo staging:\n{harness_status}"
+
+    # ── T084: staged-files summary in stdout ─────────────────────────────────
+
+    def test_staging_summary_printed_on_success(self, tmp_path):
+        """After staging, stdout must include 'staged:' lines for the archive and INDEX."""
+        self._setup(tmp_path)
+        result = self._run(tmp_path, "T999", "--resolution", "done")
+        assert result.returncode == 0, result.stderr
+        assert "staged:" in result.stdout.lower(), \
+            f"Expected staging summary in stdout:\n{result.stdout}"
+
+    def test_staging_summary_includes_files_flag_paths(self, tmp_path):
+        """--files paths must appear in the staging summary."""
+        self._setup(tmp_path)
+        scripts_dir = tmp_path / "scripts" / "tools"
+        scripts_dir.mkdir(parents=True, exist_ok=True)
+        code = scripts_dir / "myscript.py"
+        code.write_text("# v1\n")
+        subprocess.run(["git", "-C", str(tmp_path), "add", str(code)],
+                       check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(tmp_path), "commit", "-q", "-m", "add"],
+                       check=True, capture_output=True)
+        code.write_text("# v2\n")
+
+        result = self._run(tmp_path, "T999", "--resolution", "done", "--files", str(code))
+        assert result.returncode == 0, result.stderr
+        assert "myscript.py" in result.stdout, \
+            f"Expected --files path in staging summary:\n{result.stdout}"
