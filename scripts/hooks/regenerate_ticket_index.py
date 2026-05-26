@@ -63,8 +63,8 @@ def _get_docs_path_map() -> dict[str, Path]:
                 result[str(docs / "tickets")] = ws_dir
         # Only cache on success — transient failure leaves None so next call retries.
         _docs_path_cache = result
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"WARNING: _get_docs_path_map failed: {e}", file=sys.stderr)
     return result
 
 

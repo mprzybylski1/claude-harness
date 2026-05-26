@@ -656,12 +656,10 @@ class TestDocsPathMapCache:
     def _reset_cache(self):
         """Clear the module-level cache before and after each test."""
         sys.path.insert(0, str(REPO_ROOT / "scripts" / "hooks"))
-        import importlib
         import regenerate_ticket_index as rti
-        importlib.reload(rti)
         self.rti = rti
+        self.rti._docs_path_cache = None
         yield
-        # Reset for next test
         self.rti._docs_path_cache = None
 
     def test_second_call_returns_cached_result(self, tmp_path):
