@@ -211,18 +211,22 @@ def _regenerate_index(internal: Path | None) -> None:
         print(f"WARNING: generate_ticket_index.py failed: {exc}", file=sys.stderr)
 
 
-def _git_root_for(path: Path) -> str | None:
-    """Return the git worktree root that owns path, or None if not in a git repo."""
+def _git_root_for(path: Path) -> tuple[str | None, str]:
+    """Return (git_root, stderr). git_root is None when path is not in a git repo.
+
+    Uses path directly if it is a directory, path.parent if it is a file.
+    """
+    git_cwd = str(path if path.is_dir() else path.parent)
     try:
         result = subprocess.run(
-            ["git", "-C", str(path.parent), "rev-parse", "--show-toplevel"],
+            ["git", "-C", git_cwd, "rev-parse", "--show-toplevel"],
             capture_output=True, text=True,
         )
         if result.returncode == 0:
-            return result.stdout.strip()
-    except (FileNotFoundError, OSError, subprocess.SubprocessError):
-        pass
-    return None
+            return result.stdout.strip(), ""
+        return None, result.stderr.strip()
+    except (FileNotFoundError, OSError, subprocess.SubprocessError) as exc:
+        return None, str(exc)
 
 
 def _git_stage(
@@ -242,10 +246,11 @@ def _git_stage(
     else:
         index_path = ROOT / "docs" / "tickets" / "INDEX.md"
     paths = [str(ticket_path), str(dest), str(index_path)]
-    git_root = _git_root_for(dest)
+    git_root, git_err = _git_root_for(dest)
     if git_root is None:
+        err_detail = f"\n  git: {git_err}" if git_err else ""
         print(
-            "WARNING: ticket moved to archive but git staging failed — stage manually.\n"
+            f"WARNING: ticket moved to archive but git staging failed — stage manually.{err_detail}\n"
             f"  git rm --cached -- {paths[0]}\n"
             f"  git add -- {' '.join(paths[1:])}",
             file=sys.stderr,
@@ -262,8 +267,8 @@ def _git_stage(
     except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         print(
             "WARNING: ticket moved to archive but git staging failed — stage manually.\n"
-            f"  git rm --cached -- {paths[0]}\n"
-            f"  git add -- {' '.join(paths[1:])}",
+            f"  git -C {git_root} rm --cached -- {paths[0]}\n"
+            f"  git -C {git_root} add -- {' '.join(paths[1:])}",
             file=sys.stderr,
         )
         sys.exit(2)
@@ -274,10 +279,11 @@ def _git_stage(
     from collections import defaultdict
     by_root: dict[str, list[str]] = defaultdict(list)
     for ef in extra_files:
-        ef_root = _git_root_for(ef)
+        ef_root, ef_err = _git_root_for(ef)
         if ef_root is None:
+            err_detail = f"\n  git: {ef_err}" if ef_err else ""
             print(
-                f"WARNING: --files path '{ef}' is not in a git repo — stage manually:\n"
+                f"WARNING: --files path '{ef}' is not in a git repo — stage manually:{err_detail}\n"
                 f"  git add -- {ef}",
                 file=sys.stderr,
             )
@@ -402,7 +408,8 @@ def main() -> None:
     # Stage changed paths in git (plus any --files code paths)
     _git_stage(ticket_path, dest, internal, extra_files or None)
     if not extra_files:
-        _warn_unstaged_code(_git_root_for(dest))
+        root, _ = _git_root_for(dest)
+        _warn_unstaged_code(root)
 
     # Extract title for commit message
     title_m = re.search(r"^title:\s*(.+)$", content, re.MULTILINE)

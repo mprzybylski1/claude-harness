@@ -2,11 +2,11 @@
 id: T082
 title: close_ticket.py polish — _git_root_for stderr, path mismatch
 severity: low
-status: open
+status: closed
 phase: process
 layer: process
 opened: S16 2026-05-26
-closed:
+closed: S17 2026-05-26
 ---
 
 ## Problem
@@ -31,15 +31,15 @@ each is < 5 LoC and they touch adjacent code.
 
 ## Acceptance Criteria
 
-- [ ] `_git_root_for` includes `result.stderr.strip()` text in the WARNING
+- [x] `_git_root_for` includes `result.stderr.strip()` text in the WARNING
       output when git exits non-zero, so the operator sees the real error.
-- [ ] `_git_root_for` resolves the correct path for directories:
+- [x] `_git_root_for` resolves the correct path for directories:
       `git -C str(path if path.is_dir() else path.parent)` — or, equivalently,
       update the docstring to match current behavior and add an `assert` that
       the path is a file.
-- [ ] WARNING text in `_git_stage` includes `cd <git_root>` (or
+- [x] WARNING text in `_git_stage` includes `cd <git_root>` (or
       `git -C <git_root>`) so the operator knows which repo to stage in.
-- [ ] Tests in `tests/test_workspace_path_flags.py` cover:
+- [x] Tests in `tests/test_workspace_path_flags.py` cover:
       (a) non-git path → WARNING includes git's stderr substring,
       (b) WARNING text contains the resolved git root path.
 
@@ -51,7 +51,6 @@ Cosmetic / DX polish; not a correctness bug.
 
 ## Resolution
 
-> **Client-visible:** Ticket-close warnings now include git's actual error
-> message and the working directory you need to run manual staging from.
+Changed _git_root_for to return tuple[str|None, str] (root, stderr). Uses path directly for directories, path.parent for files — fixes the quiet directory bug. _git_stage unpacks the tuple: no-repo WARNING now shows the git error detail; staging-failure WARNING now uses 'git -C <git_root>' in manual instructions. 4 new tests in TestGitRootForPolish.
 
-(Fill in on close.)
+Closed S17 2026-05-26.
