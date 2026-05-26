@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S14 2026-05-26. 5 open tickets.
+Generated S14 2026-05-26. 4 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -11,11 +11,10 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Medium (3)
+## Medium (2)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
-| T068 | Pre-allow Bash(git commit *) in settings.json | process | process | 1 session |
 | T069 | regenerate_ticket_index cache never invalidated | process | process | 1 session |
 | T070 | close_ticket.py BOTH-locations unlink silent failure | process | process | 1 session |
 

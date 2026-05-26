@@ -2,11 +2,11 @@
 id: T068
 title: Pre-allow Bash(git commit *) in settings.json
 severity: medium
-status: open
+status: closed
 phase: process
 layer: process
 opened: S13 2026-05-26
-closed:
+closed: S14 2026-05-26
 ---
 
 ## Problem
@@ -24,11 +24,11 @@ dangerous (adds files not reviewed). Adding `git commit` is consistent with this
 
 ## Acceptance Criteria
 
-- [ ] `"Bash(git commit *)"` is added to the `permissions.allow` list in
+- [x] `"Bash(git commit *)"` is added to the `permissions.allow` list in
   `.claude/settings.json`.
-- [ ] `tests/test_config.py` passes with no changes (the new entry should not introduce
+- [x] `tests/test_config.py` passes with no changes (the new entry should not introduce
   hardcoded paths).
-- [ ] Verified that a `git commit` executed by an agent no longer triggers a permission
+- [x] Verified that a `git commit` executed by an agent no longer triggers a permission
   prompt.
 
 ## Notes
@@ -41,4 +41,6 @@ Related: T067 (worktree isolation strategy affects whether agents commit or not)
 
 ## Resolution
 
-(Fill in on close: what was done and in which session/commit.)
+Added "Bash(git commit *)" to permissions.allow in .claude/settings.json, adjacent to the existing git add entry. test_config.py passes unchanged. S14.
+
+Closed S14 2026-05-26.
