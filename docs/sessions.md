@@ -19,25 +19,27 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Active Work
 
-**S9 — closed T039–T042, T045–T048 (hook abs paths, test isolation, telemetry cleanup, carry-forward tooling, ticket closure script); impl-review hardening (6 findings); merged workflow-review skill; opened T043–T044, T049–T050.**
+**S10 — closed T043, T049, T051, T052, T053 (S9 Opus carry-forward backlog, close_ticket.py correctness, expand_carry_forward boundary bleed, YAML load cache); impl-review hardening (4 findings); S10 Opus review inline fixes (2 findings); opened T054–T056; cleaned sessions.md orphan.**
 
 Files changed:
-- `.claude/settings.json` — T039: hooks use absolute paths (fix silent no-op from workspace cwd); trailing newline added
-- `scripts/hooks/log_tool_usage.py` — T041: removed _extract_exit field from telemetry records
-- `scripts/tools/surface_stale_tickets.py` — T047: absent aging section is clean state, not parse error
-- `scripts/tools/extract_carry_forwards.py` — T048: added session-ref pattern (_PAT_SESSION); threshold lowered to 2; warns when pattern disabled
-- `scripts/tools/close_ticket.py` — T045: new script — full closure dance (AC check, frontmatter, resolution, archive, INDEX, commit suggestion); HARNESS_ROOT env var for test isolation; fail-closed on session/YAML errors; dest-exists guard
-- `scripts/tools/expand_carry_forward.py` — T046: new script — finds numbered Opus finding by ID (S1#3) across all opus_notes files; [From:] headers; --latest flag
-- `scripts/tools/extract_opus_key_sections.py` — T046: --with-carry-forwards now prints expand_carry_forward hint
-- `.claude/skills/session-close/SKILL.md` — T045: Step 2 updated to reference close_ticket.py
-- `.claude/skills/workflow-review/SKILL.md` — merged project-agnostic skill; workspace-scope-aware
-- `tests/test_telemetry.py` — T039/T040: workspace-cwd smoke test; test isolation via mock.patch.object
-- `tests/test_workspace_path_flags.py` — T042/T045/T046/T047/T048: 6 new test classes (22 new tests)
+- `scripts/tools/close_ticket.py` — T051: _docs_paths uses yaml loader (#1); atomic file move write-dest-first (#2); collect-all-matches + --workspace disambiguation (#3)
+- `scripts/tools/expand_carry_forward.py` — T052: session-boundary bleed fix — include session head positions in end-boundary computation
+- `scripts/tools/extract_carry_forwards.py` — T053 #5: document age-relative-to-last-review semantic in docstring
+- `scripts/tools/generate_ticket_index.py` — T053 #6: always emit aging section header; *(none)* body when empty
+- `scripts/tools/surface_stale_tickets.py` — T053 #6: recognise *(none)* body as clean state
+- `scripts/hooks/regenerate_ticket_index.py` — T043: module-level _docs_path_cache (O(workspaces) YAML loads per process); T053 #9: lexical Path.parts; impl-review fix: exception during cache build leaves _docs_path_cache None (retryable); S10 Opus #7: log exception to stderr instead of bare pass
+- `scripts/tools/prepare_opus_context.py` — T053 #10: correct invariants source label; T053 #15: exclude harness_config.py from check_utcnow grep
+- `scripts/tools/analyze_tool_log.py` — T053 #14: comment on empty-string session key
+- `docs/tickets/closed/T026-*.md` — T053 #13: policy-update note on S7 default-on flip
+- `tests/test_telemetry.py` — T053 #12: subprocess f-strings use repr() for path quoting
+- `tests/test_workspace_path_flags.py` — T051: 4 tests (duplicate IDs, workspace flag, atomic move, slug in error); T052: session-boundary bleed regression test; T053: 3 T016 workspace attribution tests; impl-review: slug assertion + no-partial-archive assertion
+- `tests/test_hooks_workspace_scoping.py` — T043/impl-review: 2 cache tests (reuse on second call, exception non-caching); S10 Opus #10: replace importlib.reload with direct _docs_path_cache = None reset
+- `docs/sessions.md` — cleaned orphaned S8 Active Work block
 
-Tickets opened: T043–T050
-Tickets closed: T039, T040, T041, T042, T045, T046, T047, T048
+Tickets opened: T051, T052, T053, T054, T055, T056
+Tickets closed: T043, T049, T051, T052, T053
 
-Remaining open items: T000 stale template row in generate_ticket_index.py (pre-existing)
+Remaining open items: T044 (defense-in-depth boundary check — deferred), T050 (opus archive splitting — deferred), T054 (close_ticket.py remaining correctness — deferred), T055 (carry-forward warning in brief — deferred), T056 (*(none)* shared constant — deferred), T000 (pre-existing stale template row)
 
 ---
 
@@ -55,3 +57,4 @@ S6 2026-05-25: closed T026–T030 (telemetry hook, classify_session fix, invaria
 S7 2026-05-25: closed T031–T033 (workspace session-start gaps, telemetry overhead) + enabled telemetry by default + impl-review hardening (8 findings fixed)
 S8 2026-05-25: closed T034–T038 (carry-forward fixes: ticket attribution, telemetry hardening, fail-closed YAML, retry session isolation, invariants labeling)
 S9 2026-05-26: closed T039–T042, T045–T048 (hook abs paths, carry-forward tooling, close_ticket.py, expand_carry_forward.py); impl-review hardening; merged workflow-review skill
+S10 2026-05-26: closed T043, T049, T051–T053 (S9 carry-forward backlog: close_ticket.py correctness, expand_carry_forward boundary bleed, YAML cache, misc); impl-review hardening (4 findings)
