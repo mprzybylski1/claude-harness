@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S13 2026-05-26. 8 open tickets.
+Generated S13 2026-05-26. 9 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -14,7 +14,7 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 | T064 | close_ticket.py should auto-stage git changes | process | process | this session |
 | T067 | Worktree isolation for parallel agents doesn't hold | process | process | this session |
 
-## Medium (4)
+## Medium (5)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
@@ -22,6 +22,7 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 | T068 | Pre-allow Bash(git commit *) in settings.json | process | process | this session |
 | T069 | regenerate_ticket_index cache never invalidated | process | process | this session |
 | T070 | close_ticket.py BOTH-locations unlink silent failure | process | process | this session |
+| T071 | _log_error rate-limit is per-process, resets every hook call | process | process | this session |
 
 ## Low (2)
 
