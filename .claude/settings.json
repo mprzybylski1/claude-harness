@@ -25,6 +25,15 @@
             "command": "bash -c 'python3 \"$(git rev-parse --show-toplevel)/scripts/hooks/check_ticket_acs.py\"'"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'python3 \"$(git rev-parse --show-toplevel)/scripts/hooks/check_fix_commit_has_code.py\"'"
+          }
+        ]
       }
     ],
     "PostToolUse": [
