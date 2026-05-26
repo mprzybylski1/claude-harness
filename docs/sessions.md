@@ -19,16 +19,19 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Active Work
 
-**S11 — closed T054 (close_ticket.py remaining correctness: atomic move, resolution fallback, stamp regex, parse-failure warning).**
+**S12 — fixed telemetry session-stamping bug (T057) + hook-path revert + impl-review hardening.**
 
 Files changed:
-- `scripts/tools/close_ticket.py` — T054: _atomic_move helper (os.replace tempfile pattern, eliminates partial-write window); _replace_resolution permissive fallback for non-standard placeholder placement + WARNING; fixed re.sub injection bug (lambda replacement); stamp regex tightened to 'Closed S\d+ date' to avoid false-positive on historical session mentions; _docs_paths wraps load_workspace in try/except, warns on parse failure
-- `tests/test_workspace_path_flags.py` — T054: 7 new tests in TestCloseTicketT054
+- `scripts/hooks/log_tool_usage.py` — T057: workspace-aware session/workspace stamping (detect workspace from tool target paths, read right sessions.md directly, add `workspace` field); impl-review: bypass internal_dir for ws_cfg with docs_path, shlex.split for quoted Bash paths, log missing sessions.md to error file
+- `tests/test_telemetry.py` — 11 new tests; 2 obsolete cache-based tests removed (30 total)
+- `.claude/settings.json` — reverted hook commands to absolute paths ($CLAUDE_PROJECT_DIR was empty in hook subshell)
+- `CLAUDE.md` — documented hook-path diagnosis
+- `docs/archive/T057-telemetry-workspace-aware-session-stamping.md` — ticket closed
 
-Tickets opened: —
-Tickets closed: T054
+Tickets opened: T057
+Tickets closed: T057
 
-Remaining open items: T044 (defense-in-depth boundary check — deferred), T050 (opus archive splitting — deferred), T055 (carry-forward warning in brief — deferred), T056 (*(none)* shared constant — deferred), T000 (pre-existing stale template row)
+Remaining open items: T044, T050, T055, T056
 
 ---
 
@@ -48,3 +51,4 @@ S8 2026-05-25: closed T034–T038 (carry-forward fixes: ticket attribution, tele
 S9 2026-05-26: closed T039–T042, T045–T048 (hook abs paths, carry-forward tooling, close_ticket.py, expand_carry_forward.py); impl-review hardening; merged workflow-review skill
 S10 2026-05-26: closed T043, T049, T051–T053 (S9 carry-forward backlog: close_ticket.py correctness, expand_carry_forward boundary bleed, YAML cache, misc); impl-review hardening (4 findings)
 S11 2026-05-26: closed T054 (close_ticket.py: atomic move via os.replace, resolution permissive fallback, stamp regex fix, parse-failure warning)
+S12 2026-05-26: closed T057 (telemetry workspace-aware session stamping); reverted hook paths to absolute; impl-review hardening (3 findings)

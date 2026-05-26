@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S12 2026-05-26. 4 open tickets.
+Generated S12 2026-05-26. 6 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -11,9 +11,12 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Medium (0)
+## Medium (2)
 
-*(none)*
+| ID | Title | Phase | Layer | Age |
+|----|-------|-------|-------|-----|
+| T058 | log_tool_usage workspace detection — ~/ expansion, silent inner-except, =-chain | Ph2 | infra | this session |
+| T059 | log_tool_usage._log_error — rate-limit unbounded error emissions | Ph2 | infra | this session |
 
 ## Low (4)
 
