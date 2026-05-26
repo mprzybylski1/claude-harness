@@ -2,11 +2,11 @@
 id: T079
 title: close_ticket.py should stage code/test files alongside the archive move
 severity: high
-status: open
+status: closed
 phase: process
 layer: process
 opened: S16 2026-05-26
-closed:
+closed: S17 2026-05-26
 ---
 
 ## Problem
@@ -30,21 +30,21 @@ it at ticket-close time.
 
 ## Acceptance Criteria
 
-- [ ] `close_ticket.py` accepts a `--files PATH [PATH...]` flag that includes
+- [x] `close_ticket.py` accepts a `--files PATH [PATH...]` flag that includes
       additional paths in the same `git add` invocation as the archive move,
       so a single `git commit` produces one cohesive per-ticket commit.
-- [ ] When `--files` is omitted, the script prints the current `git diff
+- [x] When `--files` is omitted, the script prints the current `git diff
       HEAD --name-only` output (filtered to code/test paths) and warns: "no
       code files staged — pass --files explicitly or commit code separately."
-- [ ] If any `--files` path does not exist or is not a regular file, the script
+- [x] If any `--files` path does not exist or is not a regular file, the script
       exits non-zero before moving the ticket, leaving the workspace untouched.
-- [ ] Workspace tickets pass the `--files` paths to the correct git root (uses
+- [x] Workspace tickets pass the `--files` paths to the correct git root (uses
       `_git_root_for` for each file, not just the archive destination).
-- [ ] Test added in `tests/test_close_ticket_stage_files.py`: closing a ticket
+- [x] Test added in `tests/test_close_ticket_stage_files.py`: closing a ticket
       with `--files foo.py bar.py` results in all three (foo.py + bar.py +
       archive move + INDEX.md) staged together; `git status` shows clean
       separation between staged and unstaged.
-- [ ] CLAUDE.md "Commit Discipline" section updated to reference `--files`.
+- [x] CLAUDE.md "Commit Discipline" section updated to reference `--files`.
 
 ## Notes
 
@@ -55,8 +55,6 @@ diff-splitting recovery.
 
 ## Resolution
 
-> **Client-visible:** Closing a ticket now stages the code change alongside the
-> archive move, so per-ticket commits are produced in one step instead of
-> requiring manual `git add` discipline.
+Added --files PATH [...] flag to close_ticket.py. Passes extra paths through _git_stage grouped by git root, so code+tests from any repo land in the same commit as the archive move. Validation exits before moving the ticket if any path is missing or not a regular file. When --files is omitted, _warn_unstaged_code runs git diff HEAD --name-only and warns on any non-.md changes. CLAUDE.md Commit Discipline section updated with usage example. 7 tests in tests/test_close_ticket_stage_files.py.
 
-(Fill in on close.)
+Closed S17 2026-05-26.

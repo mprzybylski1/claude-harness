@@ -225,8 +225,18 @@ def _git_root_for(path: Path) -> str | None:
     return None
 
 
-def _git_stage(ticket_path: Path, dest: Path, internal: Path | None) -> None:
-    """Stage the three paths changed by close_ticket via git."""
+def _git_stage(
+    ticket_path: Path,
+    dest: Path,
+    internal: Path | None,
+    extra_files: list[Path] | None = None,
+) -> None:
+    """Stage the paths changed by close_ticket via git.
+
+    Always stages: ticket deletion, archive destination, INDEX.md.
+    Optionally stages extra_files grouped by their git root (may differ from
+    the archive root in workspace setups).
+    """
     if internal is not None:
         index_path = internal / "tickets" / "INDEX.md"
     else:
@@ -258,6 +268,51 @@ def _git_stage(ticket_path: Path, dest: Path, internal: Path | None) -> None:
         )
         sys.exit(2)
 
+    if not extra_files:
+        return
+
+    from collections import defaultdict
+    by_root: dict[str, list[str]] = defaultdict(list)
+    for ef in extra_files:
+        ef_root = _git_root_for(ef)
+        if ef_root is None:
+            print(
+                f"WARNING: --files path '{ef}' is not in a git repo — stage manually:\n"
+                f"  git add -- {ef}",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        by_root[ef_root].append(str(ef))
+    try:
+        for root, file_paths in by_root.items():
+            subprocess.check_call(["git", "-C", root, "add", "--", *file_paths])
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        print("WARNING: failed to stage --files paths — stage manually.", file=sys.stderr)
+        sys.exit(2)
+
+
+def _warn_unstaged_code(git_root: str | None) -> None:
+    """Warn if there are unstaged code changes that should have been passed via --files."""
+    if git_root is None:
+        return
+    try:
+        result = subprocess.run(
+            ["git", "-C", git_root, "diff", "HEAD", "--name-only"],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            return
+        code_files = [p for p in result.stdout.splitlines() if not p.endswith(".md")]
+        if code_files:
+            print(
+                "WARNING: no code files staged — pass --files explicitly or commit code separately.",
+                file=sys.stderr,
+            )
+            for p in code_files:
+                print(f"  {p}", file=sys.stderr)
+    except (subprocess.SubprocessError, OSError):
+        pass
+
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
@@ -276,6 +331,8 @@ def main() -> None:
                         help="Close even if some ACs are still unchecked")
     parser.add_argument("--workspace", metavar="SLUG",
                         help="Workspace slug to search (required when ID is ambiguous)")
+    parser.add_argument("--files", nargs="+", metavar="PATH",
+                        help="Code/test files to stage together with the archive move")
     args = parser.parse_args()
 
     ticket_id = args.ticket_id.upper()
@@ -291,6 +348,19 @@ def main() -> None:
         resolution = res_path.read_text(encoding="utf-8").strip()
     else:
         resolution = args.resolution.strip()
+
+    # Validate --files before any destructive operations
+    extra_files: list[Path] = []
+    if args.files:
+        for raw in args.files:
+            p = Path(raw)
+            if not p.exists():
+                print(f"ERROR: --files path '{raw}' does not exist", file=sys.stderr)
+                sys.exit(1)
+            if not p.is_file():
+                print(f"ERROR: --files path '{raw}' is not a regular file", file=sys.stderr)
+                sys.exit(1)
+            extra_files.append(p)
 
     # AC check
     unchecked = _check_acs(content)
@@ -329,8 +399,10 @@ def main() -> None:
     # Regenerate index
     _regenerate_index(internal)
 
-    # Stage all three changed paths in git
-    _git_stage(ticket_path, dest, internal)
+    # Stage changed paths in git (plus any --files code paths)
+    _git_stage(ticket_path, dest, internal, extra_files or None)
+    if not extra_files:
+        _warn_unstaged_code(_git_root_for(dest))
 
     # Extract title for commit message
     title_m = re.search(r"^title:\s*(.+)$", content, re.MULTILINE)
