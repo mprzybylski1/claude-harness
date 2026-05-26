@@ -454,6 +454,38 @@ class TestWorkspaceAwareStamping:
         sid = ltu._session_for_workspace(ws_dir, cfg)
         assert sid == "S4"
 
+    def test_session_for_workspace_without_docs_path_uses_ws_dir_internal(self, tmp_path):
+        """When docs_path absent, ws_dir/internal/sessions.md is used."""
+        import log_tool_usage as ltu
+        ws_dir = tmp_path / "ws_no_docs"
+        internal = ws_dir / "internal"
+        internal.mkdir(parents=True)
+        (internal / "sessions.md").write_text(
+            "S8 2026-05-25: prior\nS9 2026-05-26: latest\n"
+        )
+        cfg = {"name": "Nodocs", "repos": [{"path": str(tmp_path / "repo"), "role": "primary"}]}
+        sid = ltu._session_for_workspace(ws_dir, cfg)
+        assert sid == "S10"
+
+    def test_session_for_workspace_none_ws_dir_no_docs_path_logs_error(self, tmp_path):
+        """ws_dir=None with no docs_path in cfg returns '' and logs an error."""
+        import log_tool_usage as ltu
+        import unittest.mock as mock
+        cfg = {"name": "Broken", "repos": []}
+        err_path = tmp_path / "errors"
+        with mock.patch.object(ltu, "_ERR_PATH", err_path):
+            sid = ltu._session_for_workspace(None, cfg)
+        assert sid == ""
+        assert err_path.exists(), "expected error to be logged"
+        assert "ws_dir is None" in err_path.read_text()
+
+    def test_candidate_paths_bash_quoted_path_with_spaces(self):
+        """shlex.split handles a shell-quoted path containing spaces."""
+        import log_tool_usage as ltu
+        cmd = 'python foo.py --sessions "/Users/foo/My Project/sessions.md"'
+        paths = ltu._candidate_paths("Bash", {"command": cmd})
+        assert any("My Project" in p for p in paths), f"Expected quoted path in {paths}"
+
     def test_record_includes_workspace_field(self, tmp_path):
         """End-to-end: payload for a workspace file produces a record with
         the correct workspace slug and session.

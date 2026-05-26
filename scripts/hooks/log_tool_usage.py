@@ -69,9 +69,14 @@ def _candidate_paths(tool_name: str, tool_input: dict) -> list[str]:
         fp = tool_input.get("file_path", "")
         return [fp] if fp else []
     if tool_name == "Bash":
+        import shlex
         cmd = tool_input.get("command", "")
+        try:
+            parts = shlex.split(cmd)
+        except ValueError:
+            parts = cmd.split()
         tokens: list[str] = []
-        for raw in cmd.split():
+        for raw in parts:
             t = raw.strip("'\"`")
             if "=" in t and not (t.startswith("/") or t.startswith("~/")):
                 t = t.split("=", 1)[1].strip("'\"`")
@@ -104,20 +109,32 @@ def _detect_workspace(tool_name: str, tool_input: dict) -> tuple[str, dict | Non
 
 
 def _session_for_workspace(ws_dir: Path | None, ws_cfg: dict | None) -> str:
-    """Read sessions.md from the workspace (if any) or harness root, return next S<N>."""
+    """Read sessions.md from the workspace (if any) or harness root, return next S<N>.
+
+    Resolves sessions.md without calling workspace_config.internal_dir so it
+    works correctly even when ws_dir is None (e.g. workspace_dir() failed in
+    main). Priority: cfg['docs_path'] > ws_dir/internal > harness root.
+    """
     import re
     if ws_cfg is not None:
         try:
-            sys.path.insert(0, str(ROOT / "scripts" / "tools"))
-            import workspace_config as _wc
-            sessions_md = _wc.internal_dir(ws_dir, ws_cfg) / "sessions.md"
+            docs_path = ws_cfg.get("docs_path")
+            if docs_path:
+                sessions_md = Path(docs_path).expanduser().resolve() / "sessions.md"
+            elif ws_dir is not None:
+                sessions_md = ws_dir / "internal" / "sessions.md"
+            else:
+                _log_error("workspace detected but ws_dir is None and no docs_path in cfg")
+                return ""
         except Exception as exc:
-            _log_error(f"internal_dir resolution failed: {exc}")
+            _log_error(f"sessions.md path resolution failed: {exc}")
             return ""
     else:
         sessions_md = ROOT / "docs" / "sessions.md"
     try:
         if not sessions_md.exists():
+            if ws_cfg is not None:
+                _log_error(f"sessions.md missing: {sessions_md}")
             return ""
         text = sessions_md.read_text(encoding="utf-8")
         entries = re.findall(r"^S(\d+)\s+\d{4}-\d{2}-\d{2}:", text, re.MULTILINE)
@@ -136,7 +153,6 @@ def _extract_path(tool_name: str, tool_input: dict) -> str:
     if tool_name == "Agent":
         return tool_input.get("description", "")[:120]
     return ""
-
 
 
 def _rotate_if_needed(path: Path, max_lines: int) -> None:
@@ -211,8 +227,9 @@ def main() -> None:
     tool_input = payload.get("tool_input", {})
 
     slug, ws_cfg = _detect_workspace(tool_name, tool_input)
-    ws_dir = None
-    if ws_cfg is not None:
+    ws_dir: Path | None = None
+    if ws_cfg is not None and not ws_cfg.get("docs_path"):
+        # ws_dir only needed when docs_path is absent; errors fall-open.
         try:
             import workspace_config as _wc
             ws_dir = _wc.workspace_dir(slug)
