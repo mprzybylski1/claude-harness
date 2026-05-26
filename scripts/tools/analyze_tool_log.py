@@ -87,6 +87,7 @@ def _retry_sequences(records: list[dict]) -> str:
             cur_tool = cur.get("tool") or ""
             prev_path = prev.get("path") or ""
             cur_path = cur.get("path") or ""
+            # Only report path-bearing retries; path-less records (TaskCreate, bare Bash, etc.) are skipped.
             if not prev_tool or not cur_tool or not cur_path:
                 continue
             if (prev_tool == cur_tool
