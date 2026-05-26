@@ -64,6 +64,10 @@ This file provides guidance to Claude Code when working in this repository.
 `config.yaml` controls [what]. Changing [X setting] affects [Y behaviour].
 -->
 
+### Ticket archive directories
+
+`docs/tickets/closed/` holds T001–T038 (legacy, before the S8 restructure). All tickets closed from T039 onward go to `docs/archive/` via `close_ticket.py`.
+
 ### Hook paths in `.claude/settings.json`
 
 Hook commands use `$(git rev-parse --show-toplevel)` to locate the harness root at

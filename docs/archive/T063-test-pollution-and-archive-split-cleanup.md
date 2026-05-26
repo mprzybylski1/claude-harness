@@ -2,11 +2,11 @@
 id: T063
 title: Test pollution into real telemetry log + closed/ vs archive/ ticket split
 severity: low
-status: open
+status: closed
 phase: 2
 layer: infra
 opened: S12 2026-05-26
-closed:
+closed: S13 2026-05-26
 ---
 
 ## Problem
@@ -19,8 +19,8 @@ Two unrelated minor cleanups batched per /workflow-review S12 recommendation:
 
 ## Acceptance Criteria
 
-- [ ] (1) `TestLogToolUsageHook.test_bootstrap_creates_sentinel_from_yaml` and `test_bootstrap_works_from_workspace_cwd` and `test_exits_zero_with_any_state` no longer write to the real `.git/session_tool_log.jsonl`. Re-run the suite and confirm the log is unchanged.
-- [ ] (2) Decision made: either move all `docs/tickets/closed/*.md` into `docs/archive/` (and delete `closed/`), OR add a one-line note in `CLAUDE.md` documenting the historical split. Either is acceptable.
+- [x] (1) `TestLogToolUsageHook.test_bootstrap_creates_sentinel_from_yaml` and `test_bootstrap_works_from_workspace_cwd` and `test_exits_zero_with_any_state` no longer write to the real `.git/session_tool_log.jsonl`. Re-run the suite and confirm the log is unchanged.
+- [x] (2) Decision made: either move all `docs/tickets/closed/*.md` into `docs/archive/` (and delete `closed/`), OR add a one-line note in `CLAUDE.md` documenting the historical split. Either is acceptable.
 
 ## Notes
 
@@ -28,4 +28,6 @@ Both are tiny. Bundled because neither warrants a standalone ticket. Surfaced by
 
 ## Resolution
 
-(Fill in on close.)
+Converted 4 subprocess TestLogToolUsageHook tests to in-process using mock.patch.object(ltu, ROOT, fake_root) — no more writes to real telemetry log. Added CLAUDE.md note documenting closed/ vs archive/ historical split.
+
+Closed S13 2026-05-26.
