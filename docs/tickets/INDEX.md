@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S18 2026-05-26. 2 open tickets.
+Generated S18 2026-05-26. 1 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -11,11 +11,9 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Medium (1)
+## Medium (0)
 
-| ID | Title | Phase | Layer | Age |
-|----|-------|-------|-------|-----|
-| T087 | Fix _warn_unstaged_code false-positive in close_ticket.py | Ph2 | tooling | this session |
+*(none)*
 
 ## Low (1)
 

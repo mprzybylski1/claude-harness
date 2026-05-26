@@ -201,6 +201,27 @@ class TestCloseTicketStageFiles:
         assert "no code files staged" not in result.stderr.lower(), \
             f"Spurious --files warning when no unstaged code exists:\n{result.stderr}"
 
+    def test_no_files_no_warning_when_code_already_staged(self, tmp_path):
+        """Omitting --files must NOT warn when a code file is already staged (T087)."""
+        self._setup(tmp_path)
+        scripts_dir = tmp_path / "scripts" / "tools"
+        scripts_dir.mkdir(parents=True, exist_ok=True)
+        code = scripts_dir / "already_staged.py"
+        code.write_text("# v1\n")
+        subprocess.run(["git", "-C", str(tmp_path), "add", str(code)],
+                       check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(tmp_path), "commit", "-q", "-m", "add"],
+                       check=True, capture_output=True)
+        code.write_text("# v2\n")
+        # Stage the modification — this is the case that previously triggered a false positive
+        subprocess.run(["git", "-C", str(tmp_path), "add", str(code)],
+                       check=True, capture_output=True)
+
+        result = self._run(tmp_path, "T999", "--resolution", "done")
+        assert result.returncode == 0, result.stderr
+        assert "no code files staged" not in result.stderr.lower(), \
+            f"Spurious warning for already-staged code file:\n{result.stderr}"
+
     # ── Workspace: --files routed to correct git root ────────────────────────
 
     def test_workspace_files_staged_in_project_repo(self, tmp_path):

@@ -298,12 +298,13 @@ def _git_stage(
 
 
 def _warn_unstaged_code(git_root: str | None) -> None:
-    """Warn if there are unstaged code changes that should have been passed via --files."""
+    """Warn if there are unstaged (dirty working-tree) code files not passed via --files."""
     if git_root is None:
         return
     try:
+        # git diff (no --cached) = working tree vs index = unstaged changes only
         result = subprocess.run(
-            ["git", "-C", git_root, "diff", "HEAD", "--name-only"],
+            ["git", "-C", git_root, "diff", "--name-only"],
             capture_output=True, text=True,
         )
         if result.returncode != 0:
