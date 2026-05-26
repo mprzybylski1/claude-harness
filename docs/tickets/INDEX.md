@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S8 2026-05-25. 1 open tickets.
+Generated S9 2026-05-25. 1 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -11,16 +11,16 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Medium (0)
+## Medium (1)
 
-*(none)*
+| ID | Title | Phase | Layer | Age |
+|----|-------|-------|-------|-----|
+| T039 | Telemetry bootstrap silently no-ops when session runs from a workspace cwd | Ph2 | infra | this session |
 
 ## Low (0)
 
 *(none)*
 
-## Unknown (1)
+## Unknown (0)
 
-| ID | Title | Phase | Layer | Age |
-|----|-------|-------|-------|-----|
-| T000 | Short description (keep under 60 chars) | 2 | 3 | 4 | process | backend | frontend | fullstack | infra | process | 8 sessions |
+*(none)*
