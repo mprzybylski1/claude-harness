@@ -36,6 +36,11 @@ import sys
 import time
 from pathlib import Path
 
+try:
+    import fcntl as _fcntl
+except ImportError:
+    _fcntl = None
+
 ROOT = Path(__file__).resolve().parents[2]
 _SENTINEL = ROOT / ".git" / "workflow_telemetry_on"
 
@@ -105,7 +110,7 @@ def _detect_workspace(tool_name: str, tool_input: dict) -> tuple[str, dict | Non
     for path in paths:
         for slug, cfg in workspaces:
             try:
-                if _wc.is_within_workspace(Path(path), cfg):
+                if _wc.is_within_workspace(Path(path).expanduser(), cfg):
                     return (slug, cfg)
             except Exception as exc:
                 _log_error(f"workspace match failed for {slug}: {exc}")
@@ -181,24 +186,25 @@ def _log_error(msg: str) -> None:
         now = time.time()
         count, window_start = 0, 0.0
         try:
-            state = json.loads(_ERR_STATE_PATH.read_text(encoding="utf-8"))
-            count = int(state["count"])
-            window_start = float(state["window_start"])
-        except Exception:
-            pass
-        if now - window_start > _ERR_WINDOW_SECS:
-            count = 0
-            window_start = now
-        if count > _ERR_RATE_LIMIT:
-            return
-        count += 1
-        try:
-            tmp = _ERR_STATE_PATH.parent / f"{_ERR_STATE_PATH.name}.{os.getpid()}.tmp"
-            tmp.write_text(
-                json.dumps({"count": count, "window_start": window_start}),
-                encoding="utf-8",
-            )
-            os.replace(str(tmp), str(_ERR_STATE_PATH))
+            with open(_ERR_STATE_PATH, "a+", encoding="utf-8") as fd:
+                if _fcntl is not None:
+                    _fcntl.flock(fd.fileno(), _fcntl.LOCK_EX)
+                fd.seek(0)
+                try:
+                    state = json.loads(fd.read())
+                    count = int(state["count"])
+                    window_start = float(state["window_start"])
+                except Exception:
+                    pass
+                if now - window_start >= _ERR_WINDOW_SECS:
+                    count = 0
+                    window_start = now
+                if count > _ERR_RATE_LIMIT:
+                    return
+                count += 1
+                fd.seek(0)
+                fd.truncate()
+                fd.write(json.dumps({"count": count, "window_start": window_start}))
         except Exception:
             pass
         if count > _ERR_RATE_LIMIT:

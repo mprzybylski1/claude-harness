@@ -2,11 +2,11 @@
 id: T073
 title: log_tool_usage.py three carry-forward fixes (race, >= window, expanduser)
 severity: medium
-status: open
+status: closed
 phase: process
 layer: process
 opened: S15 2026-05-26
-closed:
+closed: S16 2026-05-26
 ---
 
 ## Problem
@@ -58,4 +58,6 @@ runs in hook subprocesses on Linux/macOS).
 
 ## Resolution
 
-(Fill in on close.)
+Fixed three carry-forward issues in log_tool_usage.py: (1) added fcntl.flock to _log_error state file RMW to eliminate TOCTOU races under concurrent processes; (2) changed > to >= for window reset so the boundary case correctly resets; (3) added .expanduser() to Path(path) in workspace match for explicitness. Tests: boundary reset test, concurrent cross-process test (30 simultaneous procs).
+
+Closed S16 2026-05-26.

@@ -754,3 +754,53 @@ class TestLogErrorRateLimit:
             subprocess.run([sys.executable, "-c", script], check=True)
         lines = err_path.read_text().splitlines() if err_path.exists() else []
         assert len(lines) <= 11, f"Expected ≤ 11 lines across 100 processes, got {len(lines)}"
+
+    def test_rate_limit_window_resets_at_exact_boundary(self, tmp_path):
+        """Window resets when elapsed == _ERR_WINDOW_SECS (>= not just >).
+
+        Sets count=11 (at limit) with window_start=0, then calls _log_error
+        with time.time() returning exactly window_start + _ERR_WINDOW_SECS.
+        Expects the error to be logged (window reset), not suppressed.
+        """
+        import log_tool_usage as ltu
+        import unittest.mock as mock
+        err_path = tmp_path / "errors"
+        state_path = tmp_path / "errors.state"
+        state_path.write_text(
+            json.dumps({"count": 11, "window_start": 0.0}), encoding="utf-8"
+        )
+        boundary = float(ltu._ERR_WINDOW_SECS)
+        with mock.patch.object(ltu, "_ERR_PATH", err_path), \
+             mock.patch.object(ltu, "_ERR_STATE_PATH", state_path), \
+             mock.patch("log_tool_usage.time") as mock_time:
+            mock_time.time.return_value = boundary
+            mock_time.strftime.side_effect = time.strftime
+            mock_time.gmtime.side_effect = time.gmtime
+            ltu._log_error("boundary reset")
+        assert err_path.exists(), "Error should have been logged after window reset at exact boundary"
+        lines = err_path.read_text().splitlines()
+        assert len(lines) == 1, f"Expected 1 line after boundary reset, got {len(lines)}"
+
+    def test_rate_limit_cross_process_concurrent(self, tmp_path):
+        """Concurrent cross-process _log_error calls produce ≤ 11 total lines.
+
+        Spawns 30 processes simultaneously (all started before any finishes)
+        to exercise real TOCTOU races. Without flock this may produce > 11.
+        """
+        err_path = tmp_path / "errors"
+        state_path = tmp_path / "errors.state"
+        hooks_dir = str(ROOT / "scripts" / "hooks")
+        script = (
+            "import sys; "
+            f"sys.path.insert(0, {repr(hooks_dir)}); "
+            "import log_tool_usage as ltu; "
+            "from pathlib import Path; "
+            f"ltu._ERR_PATH = Path({repr(str(err_path))}); "
+            f"ltu._ERR_STATE_PATH = Path({repr(str(state_path))}); "
+            "ltu._log_error('concurrent')"
+        )
+        procs = [subprocess.Popen([sys.executable, "-c", script]) for _ in range(30)]
+        for p in procs:
+            p.wait()
+        lines = err_path.read_text().splitlines() if err_path.exists() else []
+        assert len(lines) <= 11, f"Expected ≤ 11 lines (concurrent), got {len(lines)}"
