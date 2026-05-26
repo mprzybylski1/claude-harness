@@ -265,9 +265,10 @@ def check_utcnow(root: Path) -> str:
         return "SKIP  no production directories found (scripts/ and tests/ absent)"
     r = subprocess.run(
         ["grep", "-rn", "--include=*.py",
-         "--exclude=prepare_opus_context.py",   # avoid self-match on grep pattern string
-         "--exclude=run_static_analysis.py",    # imports check_utcnow — not a usage site
-         "--exclude=harness_config.py",         # docstring lists 'utcnow' as example name
+         "--exclude=prepare_opus_context.py",              # avoid self-match on grep pattern string
+         "--exclude=run_static_analysis.py",               # imports check_utcnow — not a usage site
+         "--exclude=harness_config.py",                    # docstring lists 'utcnow' as example name
+         "--exclude=test_static_analysis_symlink_boundary.py",  # writes utcnow() as fixture string content
          "utcnow"] + existing,
         capture_output=True, text=True,
     )

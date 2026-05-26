@@ -110,7 +110,6 @@ def _detect_workspace(tool_name: str, tool_input: dict) -> tuple[str, dict | Non
                     return (slug, cfg)
             except Exception as exc:
                 _log_error(f"workspace match failed for {slug}: {exc}")
-                return ("", None)
     return ("", None)
 
 

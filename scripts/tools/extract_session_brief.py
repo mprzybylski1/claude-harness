@@ -86,7 +86,7 @@ def main() -> None:
     if errors_file.exists():
         with errors_file.open(encoding="utf-8", errors="replace") as _ef:
             hook_errors_tail = [
-                ln for ln in deque(_ef, maxlen=HOOK_ERRORS_KEEP * 2)
+                ln.rstrip() for ln in deque(_ef, maxlen=HOOK_ERRORS_KEEP * 2)
                 if ln.strip()
             ][-HOOK_ERRORS_KEEP:]
 
