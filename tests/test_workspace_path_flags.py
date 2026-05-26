@@ -444,3 +444,93 @@ class TestIsClosedTicket:
             abs_path.touch()
             path = str(abs_path)
         assert self.fn(path) is expected
+
+
+# ── Tests: surface_stale_tickets.py (T047) ───────────────────────────────────
+
+class TestSurfaceStaleTickets:
+    """T047: missing '## Aging Tickets' section must be treated as clean, not a parse error."""
+
+    @pytest.fixture(autouse=True)
+    def _import(self):
+        sys.path.insert(0, str(ROOT / "scripts" / "tools"))
+        import surface_stale_tickets as sst
+        self.parse = sst.parse_aging_section
+
+    def test_no_warning_when_aging_section_absent(self, tmp_path):
+        """INDEX.md with no aging section → no parse_warning (T047 regression guard)."""
+        index = tmp_path / "INDEX.md"
+        index.write_text("## Medium (1)\n\n| T001 | title | Ph2 | tooling | this session |\n")
+        result = self.parse(index)
+        assert result.parse_warning is None
+        assert result.section_found is True
+        assert result.tickets == []
+
+    def test_no_warning_on_real_index(self):
+        """Current docs/tickets/INDEX.md must parse without any warning."""
+        result = self.parse()
+        assert result.parse_warning is None
+
+    def test_parse_aging_section_when_present(self, tmp_path):
+        """Tickets in the aging section are returned with correct age."""
+        index = tmp_path / "INDEX.md"
+        index.write_text(
+            "## Aging Tickets (open ≥ 10 sessions)\n\n"
+            "- **T001** — Old ticket (open 12 sessions, since S1 2026-01-01)\n"
+            "- **T002** — Very old (open 55 sessions, since S1 2026-01-01)\n"
+        )
+        result = self.parse(index, threshold=50)
+        assert result.parse_warning is None
+        assert result.section_found is True
+        assert len(result.tickets) == 1
+        assert result.tickets[0][1] == 55  # age is index 1: (ticket_id, age, title)
+
+
+# ── Tests: extract_carry_forwards.py (T048) ──────────────────────────────────
+
+class TestExtractCarryForwards:
+    """T048: carry-forwards must be detected from Opus's actual phrasing patterns."""
+
+    @pytest.fixture(autouse=True)
+    def _import(self):
+        sys.path.insert(0, str(ROOT / "scripts" / "tools"))
+        import extract_carry_forwards as ecf
+        self.extract = ecf.extract
+
+    def _opus(self, tmp_path: Path, body: str, session_n: int = 9) -> Path:
+        p = tmp_path / "opus_notes.md"
+        p.write_text(f"# Opus Review — S{session_n} 2026-05-26\n\n{body}\n")
+        return p
+
+    def test_explicit_count_pattern(self, tmp_path):
+        """'carry-forward 3 sessions' matches and returns age 3."""
+        f = self._opus(tmp_path, "Some item — carry-forward 3 sessions unaddressed.")
+        items = self.extract(threshold=2, notes_file=f)
+        assert len(items) == 1
+        assert items[0][0] == 3
+
+    def test_session_reference_pattern(self, tmp_path):
+        """'carry-forward from S7' in an S9 review → age 2."""
+        f = self._opus(tmp_path, "[carry-forward from S7 Concern #5] some fix needed.", session_n=9)
+        items = self.extract(threshold=2, notes_file=f)
+        assert len(items) == 1
+        assert items[0][0] == 2
+
+    def test_below_threshold_excluded(self, tmp_path):
+        """Age-1 carry-forward is excluded when threshold=2."""
+        f = self._opus(tmp_path, "[carry-forward from S8 Concern #1] minor.", session_n=9)
+        items = self.extract(threshold=2, notes_file=f)
+        assert items == []
+
+    def test_no_carry_forwards_returns_empty(self, tmp_path):
+        """Notes with no carry-forward patterns → empty list."""
+        f = self._opus(tmp_path, "Everything is great. No issues.")
+        items = self.extract(threshold=2, notes_file=f)
+        assert items == []
+
+    def test_default_threshold_is_two(self, tmp_path):
+        """Default threshold is 2, so a 2-session carry-forward appears by default."""
+        f = self._opus(tmp_path, "[carry-forward from S7 Concern #5] fix needed.", session_n=9)
+        import extract_carry_forwards as ecf
+        items = ecf.extract(notes_file=f)   # uses DEFAULT_THRESHOLD
+        assert len(items) == 1

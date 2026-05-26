@@ -2,7 +2,7 @@
 id: T047
 title: Fix surface_stale_tickets.py parse format drift
 severity: low
-status: open
+status: closed
 phase: 2
 layer: tooling
 opened: S9 2026-05-26
@@ -28,4 +28,13 @@ Surfaced by workflow-review S9.
       exit 0 with no WARNING.
 
 ## Resolution
-(Fill in on close.)
+
+Root cause: `parse_aging_section` returned a parse_warning when the `## Aging Tickets`
+section was simply absent — but absence is the normal state when no ticket is old enough
+to appear there. One-line fix: treat missing section as `ParseResult([], section_found=True)`
+(clean), not as a format error. The warning is now only emitted when the section header
+exists but the entry regex matches nothing (genuine format drift). Tests added:
+`test_no_warning_when_aging_section_absent`, `test_no_warning_on_real_index`,
+`test_parse_aging_section_when_present`. 8/8 pass.
+
+Closed S9 2026-05-26.

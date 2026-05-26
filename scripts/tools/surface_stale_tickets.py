@@ -52,11 +52,8 @@ def parse_aging_section(index_path: Path = INDEX_MD, threshold: int = TRIAGE_THR
 
     aging_match = re.search(r"## Aging Tickets.*?$", content, re.MULTILINE)
     if not aging_match:
-        return ParseResult(
-            [],
-            section_found=False,
-            parse_warning="surface_stale_tickets.py could not parse INDEX.md aging section — format may have drifted",
-        )
+        # Section absent = no tickets old enough to appear — clean state, not an error.
+        return ParseResult([], section_found=True)
 
     aging_section = content[aging_match.start():]
 
