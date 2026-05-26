@@ -200,7 +200,11 @@ def _atomic_move(ticket_path: Path, dest: Path, content: str) -> None:
 def _regenerate_index(internal: Path | None) -> None:
     cmd = [sys.executable, str(ROOT / "scripts" / "tools" / "generate_ticket_index.py")]
     if internal is not None:
-        cmd += ["--sessions", str(internal / "sessions.md")]
+        cmd += [
+            "--sessions", str(internal / "sessions.md"),
+            "--tickets-dir", str(internal / "tickets"),
+            "--output", str(internal / "tickets" / "INDEX.md"),
+        ]
     try:
         subprocess.check_call(cmd, stdout=subprocess.DEVNULL)
     except subprocess.CalledProcessError as exc:
