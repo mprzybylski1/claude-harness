@@ -58,12 +58,16 @@ Read these files **sequentially** (use workspace-scoped paths if in a workspace)
 
 1. `docs/architecture_invariants.md` — hard constraints; always read from harness root
 2. Run `python scripts/tools/extract_session_brief.py` with the correct sessions.md path
-   and read its output — prints Current Phase & Status, Active Work, and last 5 Session Log entries.
+   and read its output — prints Current Phase & Status, Active Work, last 5 Session Log entries,
+   and a **Hook errors (last 5)** section tailing `.git/session_tool_log.errors`.
+   If the errors file is absent or empty the section shows "none".
    If in a workspace, pass the workspace path:
    ```
    python scripts/tools/extract_session_brief.py --sessions <INTERNAL>/sessions.md
    ```
    Do not read sessions.md directly.
+   **If Hook errors shows any lines**, surface them in the Step 3 briefing under a
+   "Hook errors detected" heading so the operator sees them immediately.
 3. Run `python scripts/tools/extract_opus_key_sections.py --with-carry-forwards` with the
    correct opus_notes.md path:
    ```
@@ -124,6 +128,9 @@ Run the appropriate command to get the session ID:
 
 **Last session:** [one-line summary from Session Log tail]
 
+**Hook errors detected:**
+- [Last 5 lines from Hook errors section, or "None"]
+
 **Suggested focus:**
 - [1-3 specific tickets most relevant to current gate or critical/high severity]
 ---
@@ -141,6 +148,7 @@ Do not begin implementation until the user responds.
 - Invariant violations from the prior Opus review are acknowledged
 - The user knows phase gate status without asking
 - Aging tickets are visible
+- Hook errors from `.git/session_tool_log.errors` are surfaced if present
 - The user is asked before work begins
 
 ## Do not use this skill when

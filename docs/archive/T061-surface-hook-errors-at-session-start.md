@@ -2,11 +2,11 @@
 id: T061
 title: Surface .git/session_tool_log.errors tail in /session-start briefing
 severity: medium
-status: open
+status: closed
 phase: 2
 layer: infra
 opened: S12 2026-05-26
-closed:
+closed: S13 2026-05-26
 ---
 
 ## Problem
@@ -17,10 +17,10 @@ There is no automated mechanism that signals hook failure to the operator. The n
 
 ## Acceptance Criteria
 
-- [ ] `/session-start` Step 1 (or a new Step 1c) tails `.git/session_tool_log.errors` and prints the last ~5 lines in the briefing.
-- [ ] If the file is empty or absent, briefing says "Hook errors: none" — no false positive.
+- [x] `/session-start` Step 1 (or a new Step 1c) tails `.git/session_tool_log.errors` and prints the last ~5 lines in the briefing.
+- [x] If the file is empty or absent, briefing says "Hook errors: none" — no false positive.
 - [ ] Optionally: include count of errors since last session-close (requires storing a marker).
-- [ ] Test: with a fake errors file containing 10 lines, briefing shows the last 5; with no errors file, briefing shows "none".
+- [x] Test: with a fake errors file containing 10 lines, briefing shows the last 5; with no errors file, briefing shows "none".
 
 ## Notes
 
@@ -32,4 +32,6 @@ Surfaced by /workflow-review S12.
 
 ## Resolution
 
-(Fill in on close.)
+extract_session_brief.py now tails .git/session_tool_log.errors (last 5 lines) in Hook errors section. Empty/absent file shows 'none'. SKILL.md updated. 2 tests added.
+
+Closed S13 2026-05-26.

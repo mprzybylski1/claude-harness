@@ -21,7 +21,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 SESSIONS_FILE = ROOT / "docs" / "sessions.md"
+ERRORS_FILE = ROOT / ".git" / "session_tool_log.errors"
 SESSION_LOG_KEEP = 5
+HOOK_ERRORS_KEEP = 5
 
 
 def extract_section(content: str, heading: str) -> str | None:
@@ -38,8 +40,10 @@ def main() -> None:
     import argparse
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--sessions", default=None, metavar="PATH")
+    p.add_argument("--errors", default=None, metavar="PATH")
     args, _ = p.parse_known_args()
     sessions_file = Path(args.sessions) if args.sessions else SESSIONS_FILE
+    errors_file = Path(args.errors) if args.errors else ERRORS_FILE
 
     if not sessions_file.exists():
         print(f"ERROR: {sessions_file} not found", file=sys.stderr)
@@ -76,6 +80,13 @@ def main() -> None:
     log_lines = [ln for ln in session_log.splitlines() if re.match(r"^S\d+", ln.strip())]
     recent_lines = log_lines[-SESSION_LOG_KEEP:]
 
+    # Hook errors — tail last N lines of .git/session_tool_log.errors
+    hook_error_lines: list[str] = []
+    if errors_file.exists():
+        raw = errors_file.read_text(errors="replace")
+        hook_error_lines = [ln for ln in raw.splitlines() if ln.strip()]
+    hook_errors_tail = hook_error_lines[-HOOK_ERRORS_KEEP:] if hook_error_lines else []
+
     # Output
     print("## Current Phase & Status")
     print()
@@ -89,6 +100,14 @@ def main() -> None:
     print()
     for line in recent_lines:
         print(line)
+    print()
+    print(f"## Hook errors (last {HOOK_ERRORS_KEEP})")
+    print()
+    if hook_errors_tail:
+        for line in hook_errors_tail:
+            print(line)
+    else:
+        print("none")
 
 
 if __name__ == "__main__":

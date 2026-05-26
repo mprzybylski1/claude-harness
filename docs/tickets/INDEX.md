@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S13 2026-05-26. 7 open tickets.
+Generated S13 2026-05-26. 4 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -11,14 +11,11 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Medium (2)
+## Medium (0)
 
-| ID | Title | Phase | Layer | Age |
-|----|-------|-------|-------|-----|
-| T060 | current_session.py persists shared cache regardless of --sessions arg | Ph2 | infra | 1 session |
-| T061 | Surface .git/session_tool_log.errors tail in /session-start briefing | Ph2 | infra | 1 session |
+*(none)*
 
-## Low (5)
+## Low (4)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
@@ -26,7 +23,6 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 | T050 | Split opus_notes archive by session range when over line threshold | Ph2 | tooling | 4 sessions |
 | T055 | S10 — carry-forward warning swallowed in brief output (S9 #6) | Ph2 | infra | 3 sessions |
 | T056 | S10 — *(none)* aging marker duplicated across generator and consumer | Ph2 | infra | 3 sessions |
-| T063 | Test pollution into real telemetry log + closed/ vs archive/ ticket split | Ph2 | infra | 1 session |
 
 ## Unknown (0)
 
