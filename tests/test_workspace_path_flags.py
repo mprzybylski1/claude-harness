@@ -1499,3 +1499,88 @@ class TestExpandCarryForward:
         # Must NOT bleed into S6 content
         assert "S6 only" not in result.stdout
         assert "second session finding" not in result.stdout
+
+
+# ── Tests: generate_ticket_index.py T074 — auto-descend into open/ ────────────
+
+MINIMAL_TICKET = """\
+---
+id: T001
+title: Real ticket
+severity: low
+status: open
+phase: 2
+layer: process
+opened: S1 2026-01-01
+closed:
+---
+
+## Problem
+
+Synthetic.
+
+## Acceptance Criteria
+
+- [ ] Done.
+
+## Resolution
+
+(Fill in on close.)
+"""
+
+SESSIONS_STUB = "## Session Log\n\nS1 2026-01-01: init\n"
+
+
+class TestGenerateTicketIndexTicketsDir:
+    """T074: --tickets-dir with open/ subdir must scan open/, not root dir."""
+
+    def _run(self, *extra_args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(TOOLS / "generate_ticket_index.py"), *extra_args],
+            capture_output=True, text=True,
+        )
+
+    def test_auto_descends_into_open_subdir_excludes_template(self, tmp_path):
+        """Passing <tickets>/ where <tickets>/open/ exists scans open/, skips TEMPLATE.md."""
+        tickets_dir = tmp_path / "tickets"
+        open_dir = tickets_dir / "open"
+        open_dir.mkdir(parents=True)
+        (tickets_dir / "TEMPLATE.md").write_text(
+            "---\nid: T000\ntitle: Template\nseverity: low\nstatus: open\n"
+            "phase: 2\nlayer: process\nopened: S0 2026-01-01\nclosed:\n---\n"
+        )
+        (open_dir / "T001-real-ticket.md").write_text(MINIMAL_TICKET)
+        sessions = tmp_path / "sessions.md"
+        sessions.write_text(SESSIONS_STUB)
+        output = tmp_path / "INDEX.md"
+
+        result = self._run(
+            "--tickets-dir", str(tickets_dir),
+            "--output", str(output),
+            "--sessions-file", str(sessions),
+        )
+        assert result.returncode == 0, result.stderr
+        content = output.read_text()
+        assert "T001" in content, "real ticket must appear in index"
+        assert "T000" not in content, "TEMPLATE.md at root must not appear"
+
+    def test_no_open_subdir_scans_dir_directly(self, tmp_path):
+        """--tickets-dir <dir> without open/ scans <dir> directly (backward-compatible)."""
+        tickets_dir = tmp_path / "tickets"
+        tickets_dir.mkdir()
+        (tickets_dir / "T001-real-ticket.md").write_text(MINIMAL_TICKET)
+        sessions = tmp_path / "sessions.md"
+        sessions.write_text(SESSIONS_STUB)
+        output = tmp_path / "INDEX.md"
+
+        result = self._run(
+            "--tickets-dir", str(tickets_dir),
+            "--output", str(output),
+            "--sessions-file", str(sessions),
+        )
+        assert result.returncode == 0, result.stderr
+        assert "T001" in output.read_text()
+
+
+# ── Tests: close_ticket.py T075 — workspace INDEX not clobbered ──────────────
+

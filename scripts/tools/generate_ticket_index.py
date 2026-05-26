@@ -209,6 +209,9 @@ def main() -> None:
 
     project_root = os.getcwd()
     open_dir = args.tickets_dir if args.tickets_dir else os.path.join(project_root, OPEN_DIR)
+    _open_candidate = Path(open_dir) / "open"
+    if _open_candidate.is_dir():
+        open_dir = str(_open_candidate)
     output_path = args.output if args.output else os.path.join(project_root, OUTPUT_FILE)
     today = datetime.date.today().isoformat()
 
