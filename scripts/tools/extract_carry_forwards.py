@@ -56,6 +56,15 @@ def extract(threshold: int = DEFAULT_THRESHOLD, notes_file: Path | None = None) 
     found: dict[str, int] = {}     # norm_key -> max age
     original: dict[str, str] = {}  # norm_key -> display description
 
+    session_ref_lines = [ln for ln in text.splitlines() if _PAT_SESSION.search(ln)]
+    if session_ref_lines and current_sn is None:
+        import sys as _sys
+        print(
+            "WARNING: extract_carry_forwards.py found 'carry-forward from S<N>' lines but "
+            "no 'Opus Review — SN' header in notes file — session-reference pattern disabled",
+            file=_sys.stderr,
+        )
+
     for line in text.splitlines():
         count: int | None = None
 

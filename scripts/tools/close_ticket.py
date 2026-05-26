@@ -69,13 +69,14 @@ def _docs_paths(ws_dir: Path) -> list[Path]:
         return []
     try:
         text = ws_yaml.read_text(encoding="utf-8")
-        m = re.search(r"^\s*docs_path\s*:\s*(.+)$", text, re.MULTILINE)
-        if m:
-            p = Path(m.group(1).strip()).expanduser()
-            if p.is_dir():
-                return [p]
-    except Exception:
-        pass
+    except OSError as exc:
+        print(f"ERROR: cannot read {ws_yaml}: {exc}", file=sys.stderr)
+        sys.exit(2)
+    m = re.search(r"^\s*docs_path\s*:\s*(.+)$", text, re.MULTILINE)
+    if m:
+        p = Path(m.group(1).strip()).expanduser()
+        if p.is_dir():
+            return [p]
     return []
 
 
@@ -85,9 +86,10 @@ def _current_session(internal: Path | None) -> str:
     if internal is not None:
         cmd += ["--sessions", str(internal / "sessions.md")]
     try:
-        return subprocess.check_output(cmd, text=True).strip()
-    except subprocess.CalledProcessError:
-        return "S?"
+        return subprocess.check_output(cmd, text=True, stderr=subprocess.PIPE).strip()
+    except subprocess.CalledProcessError as exc:
+        print(f"ERROR: current_session.py failed (exit {exc.returncode}): {exc.stderr.strip()}", file=sys.stderr)
+        sys.exit(2)
 
 
 def _check_acs(content: str) -> list[str]:
@@ -98,7 +100,7 @@ def _check_acs(content: str) -> list[str]:
 def _update_frontmatter(content: str, session: str) -> str:
     today = date.today().isoformat()
     content = re.sub(r"^(status:\s*)open\s*$", r"\1closed", content, flags=re.MULTILINE)
-    content = re.sub(r"^(closed:)\s*$", rf"\1 {session} {today}", content, flags=re.MULTILINE)
+    content = re.sub(r"^(closed:).*$", rf"\1 {session} {today}", content, flags=re.MULTILINE)
     return content
 
 
@@ -112,8 +114,8 @@ def _replace_resolution(content: str, resolution: str) -> str:
     )
     if placeholder.search(content):
         return placeholder.sub(r"\g<1>" + resolution.rstrip() + "\n", content)
-    # Fallback: append after ## Resolution header if placeholder not found
-    return re.sub(r"(## Resolution\s*\n)", r"\1" + resolution.rstrip() + "\n", content, flags=re.DOTALL)
+    print("ERROR: ## Resolution placeholder '(Fill in on close.)' not found — ticket format unexpected", file=sys.stderr)
+    sys.exit(2)
 
 
 def _regenerate_index(internal: Path | None) -> None:
@@ -185,6 +187,9 @@ def main() -> None:
     archive_dir.mkdir(parents=True, exist_ok=True)
 
     dest = archive_dir / ticket_path.name
+    if dest.exists():
+        print(f"ERROR: {dest} already exists in archive — ticket may already be closed", file=sys.stderr)
+        sys.exit(2)
     ticket_path.write_text(content, encoding="utf-8")
     ticket_path.rename(dest)
 
