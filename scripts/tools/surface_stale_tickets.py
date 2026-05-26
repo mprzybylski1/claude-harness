@@ -19,6 +19,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 INDEX_MD = ROOT / "docs" / "tickets" / "INDEX.md"
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from ticket_constants import AGING_EMPTY_MARKER
+
 TRIAGE_THRESHOLD = int(os.environ.get("TRIAGE_THRESHOLD", "50"))
 
 
@@ -57,8 +60,8 @@ def parse_aging_section(index_path: Path = INDEX_MD, threshold: int = TRIAGE_THR
 
     aging_section = content[aging_match.start():]
 
-    # Generator emits "*(none)*" when no stale tickets exist (S9 #6) — clean state.
-    if re.search(r"^\*\(none\)\*", aging_section, re.MULTILINE):
+    # Generator emits AGING_EMPTY_MARKER when no stale tickets exist (S9 #6) — clean state.
+    if re.search(rf"^{re.escape(AGING_EMPTY_MARKER)}", aging_section, re.MULTILINE):
         return ParseResult([], section_found=True)
 
     pattern = re.compile(

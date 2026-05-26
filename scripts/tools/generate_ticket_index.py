@@ -20,6 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import harness_config as _hc
+from ticket_constants import AGING_EMPTY_MARKER
 
 OPEN_DIR = _hc.tickets_dir()
 OUTPUT_FILE = "docs/tickets/INDEX.md"
@@ -137,7 +138,7 @@ def render_index(tickets: list[dict], current_session: int, today: str) -> str:
         lines.append(header)
         lines.append("")
         if not group:
-            lines.append("*(none)*")
+            lines.append(AGING_EMPTY_MARKER)
             lines.append("")
             continue
 
@@ -179,7 +180,7 @@ def render_index(tickets: list[dict], current_session: int, today: str) -> str:
             age = current_session - session_number(t["opened"])
             lines.append(f"- **{t['id']}** — {t['title']} (open {age} sessions, since {t['opened']})")
     else:
-        lines.append("*(none)*")
+        lines.append(AGING_EMPTY_MARKER)
     lines.append("")
 
     return "\n".join(lines)
