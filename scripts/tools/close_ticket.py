@@ -115,13 +115,26 @@ def _current_session(internal: Path | None) -> str:
 
 
 def _check_acs(content: str) -> list[str]:
-    """Return list of unchecked AC lines (- [ ] ...)."""
-    return [ln.strip() for ln in content.splitlines() if re.match(r"\s*-\s+\[ \]", ln)]
+    """Return list of unchecked AC lines within the Acceptance Criteria section."""
+    ac_header = re.search(r"^## Acceptance Criteria\s*$", content, flags=re.MULTILINE)
+    if not ac_header:
+        return [ln.strip() for ln in content.splitlines() if re.match(r"\s*-\s+\[ \]", ln)]
+    next_section = re.search(r"^## ", content[ac_header.end():], flags=re.MULTILINE)
+    ac_end = ac_header.end() + next_section.start() if next_section else len(content)
+    ac_block = content[ac_header.end():ac_end]
+    return [ln.strip() for ln in ac_block.splitlines() if re.match(r"\s*-\s+\[ \]", ln)]
 
 
 def _tick_acs(content: str) -> str:
-    """Rewrite all unchecked '- [ ]' AC boxes to '- [x]'."""
-    return re.sub(r"^(\s*-)\s+\[ \]", r"\1 [x]", content, flags=re.MULTILINE)
+    """Rewrite unchecked '- [ ]' boxes to '- [x]' within the Acceptance Criteria section only."""
+    ac_header = re.search(r"^## Acceptance Criteria\s*$", content, flags=re.MULTILINE)
+    if not ac_header:
+        return content
+    next_section = re.search(r"^## ", content[ac_header.end():], flags=re.MULTILINE)
+    ac_end = ac_header.end() + next_section.start() if next_section else len(content)
+    ac_block = content[ac_header.end():ac_end]
+    ticked = re.sub(r"^(\s*-)\s+\[ \]", r"\1 [x]", ac_block, flags=re.MULTILINE)
+    return content[:ac_header.end()] + ticked + content[ac_end:]
 
 
 def _update_frontmatter(content: str, session: str) -> str:
@@ -235,20 +248,52 @@ def _git_root_for(path: Path) -> tuple[str | None, str]:
 
 
 def _check_gitignored(paths: list[Path]) -> list[Path]:
-    """Return subset of paths that are ignored by git. Best-effort: returns [] on errors."""
+    """Return subset of paths that are ignored by git.
+
+    Runs 'git -C <git_root> check-ignore' per git root so files in different repos
+    are checked against the correct .gitignore.
+
+    git check-ignore exit codes: 0 = some paths ignored, 1 = none ignored, 128 = git error.
+    Fails closed (exits 2) on subprocess errors or git errors so the check cannot be silently bypassed.
+    """
     if not paths:
         return []
-    try:
-        result = subprocess.run(
-            ["git", "check-ignore", "--", *[str(p) for p in paths]],
-            capture_output=True, text=True,
-        )
+
+    from collections import defaultdict
+    by_root: dict[str, list[Path]] = defaultdict(list)
+    for p in paths:
+        git_root, git_err = _git_root_for(p)
+        if git_root is None:
+            # Path is not inside any git repo — cannot check; proceed (staging will catch it)
+            continue
+        by_root[git_root].append(p)
+
+    ignored: list[Path] = []
+    for git_root, root_paths in by_root.items():
+        try:
+            result = subprocess.run(
+                ["git", "-C", git_root, "check-ignore", "--", *[str(p) for p in root_paths]],
+                capture_output=True, text=True,
+            )
+        except (FileNotFoundError, OSError, subprocess.SubprocessError) as exc:
+            print(f"ERROR: could not run 'git check-ignore' to validate --files: {exc}", file=sys.stderr)
+            sys.exit(2)
+
         if result.returncode == 0:
             ignored_names = set(result.stdout.splitlines())
-            return [p for p in paths if str(p) in ignored_names]
-        return []
-    except (FileNotFoundError, OSError, subprocess.SubprocessError):
-        return []
+            ignored.extend(p for p in root_paths if str(p) in ignored_names)
+        elif result.returncode == 1:
+            pass  # none ignored in this root — clean
+        else:
+            # returncode >= 128: git error
+            print(
+                f"ERROR: 'git check-ignore' failed (exit {result.returncode}) — cannot verify --files paths:\n"
+                f"  {result.stderr.strip()}",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+
+    return ignored
 
 
 def _stage_extra_files(extra_files: list[Path]) -> None:
@@ -272,7 +317,11 @@ def _stage_extra_files(extra_files: list[Path]) -> None:
         for root, file_paths in by_root.items():
             subprocess.check_call(["git", "-C", root, "add", "--", *file_paths])
     except (subprocess.CalledProcessError, FileNotFoundError, OSError):
-        print("WARNING: failed to stage --files paths — stage manually.", file=sys.stderr)
+        print(
+            "WARNING: failed to stage --files paths — stage manually.\n"
+            "  Some paths from earlier repos may already be staged; run 'git reset HEAD' to unstage.",
+            file=sys.stderr,
+        )
         sys.exit(2)
 
 

@@ -463,3 +463,71 @@ Synthetic.
         result = self._run(tmp_path, "T999", "--resolution", "done")
         assert result.returncode != 0
         assert "unchecked" in result.stderr.lower() or "AC" in result.stderr
+
+    def test_tick_acs_scoped_to_ac_section_only(self, tmp_path):
+        """--tick-acs must not rewrite '- [ ]' checkboxes outside the Acceptance Criteria section."""
+        docs = tmp_path / "docs"
+        (docs / "tickets" / "open").mkdir(parents=True)
+        (docs / "archive").mkdir(parents=True)
+        (docs / "tickets" / "INDEX.md").write_text("# Ticket Index\n", encoding="utf-8")
+        (docs / "sessions.md").write_text("## Session Log\n\nS1 2026-01-01: init\n")
+        tools = tmp_path / "scripts" / "tools"
+        tools.mkdir(parents=True)
+        (tools / "current_session.py").write_text("import sys\nprint('S9')\n")
+        (tools / "generate_ticket_index.py").write_text(
+            "import os; from pathlib import Path\n"
+            "root = Path(os.environ.get('HARNESS_ROOT', '.'))\n"
+            "(root / 'docs' / 'tickets' / 'INDEX.md').write_text('# Updated\\n')\n"
+        )
+        ticket_content = """\
+---
+id: T999
+title: Tick scope test
+severity: low
+status: open
+phase: 2
+layer: tooling
+opened: S1 2026-01-01
+closed:
+---
+
+## Problem
+
+- [ ] This checkbox is in Problem, not ACs — must NOT be ticked
+
+## Acceptance Criteria
+
+- [ ] AC one
+- [ ] AC two
+
+## Resolution
+(Fill in on close.)
+"""
+        ticket = docs / "tickets" / "open" / "T999-synthetic-test-ticket.md"
+        ticket.write_text(ticket_content, encoding="utf-8")
+        for cmd in [
+            ["git", "-C", str(tmp_path), "init", "-q"],
+            ["git", "-C", str(tmp_path), "config", "user.email", "t@t.com"],
+            ["git", "-C", str(tmp_path), "config", "user.name", "Test"],
+            ["git", "-C", str(tmp_path), "config", "commit.gpgsign", "false"],
+            ["git", "-C", str(tmp_path), "add", "-A"],
+            ["git", "-C", str(tmp_path), "commit", "-q", "-m", "init"],
+        ]:
+            subprocess.run(cmd, check=True, capture_output=True)
+
+        import os as _os
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "tools" / "close_ticket.py"),
+             "T999", "--resolution", "done", "--tick-acs"],
+            capture_output=True, text=True,
+            env={**_os.environ, "HARNESS_ROOT": str(tmp_path), "PYTHONPATH": str(ROOT)},
+        )
+        assert result.returncode == 0, f"Expected success:\n{result.stderr}"
+        archive = docs / "archive" / "T999-synthetic-test-ticket.md"
+        content = archive.read_text(encoding="utf-8")
+        # ACs ticked
+        assert "- [x] AC one" in content
+        assert "- [x] AC two" in content
+        # Problem checkbox NOT ticked
+        assert "- [ ] This checkbox is in Problem" in content, \
+            "Problem-section checkbox must not be ticked by --tick-acs"

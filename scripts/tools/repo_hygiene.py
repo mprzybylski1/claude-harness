@@ -203,16 +203,46 @@ def check_test_imports(tests_dir: Path) -> list[Finding]:
 
     findings = []
     combined = result.stdout + result.stderr
-    # Pytest reports "ERROR collecting <file>" and "ImportError: ..." lines
-    for line in combined.splitlines():
-        if "ERROR collecting" in line or "ImportError" in line or "ModuleNotFoundError" in line:
+    # Pytest reports "ERROR collecting <file>" and "ImportError: ..." lines.
+    # Pair them: collect the ERROR line and the next ImportError/ModuleNotFoundError line together.
+    lines = combined.splitlines()
+    for i, line in enumerate(lines):
+        if "ERROR collecting" in line:
+            detail = line.strip()
+            # Append the next ImportError/ModuleNotFoundError line if present
+            for lookahead in lines[i + 1:i + 5]:
+                if "ImportError" in lookahead or "ModuleNotFoundError" in lookahead:
+                    detail += " | " + lookahead.strip()
+                    break
             findings.append(Finding(
                 severity="WARN",
                 category="test-import-error",
                 location="tests/",
-                detail=line.strip()[:120],
+                detail=detail[:200],
                 hint="Fix the import error — broken test files prevent the full suite from running",
             ))
+        elif ("ImportError" in line or "ModuleNotFoundError" in line) and not any(
+            "ERROR collecting" in lines[j] for j in range(max(0, i - 5), i)
+        ):
+            # Standalone import error not already captured above
+            findings.append(Finding(
+                severity="WARN",
+                category="test-import-error",
+                location="tests/",
+                detail=line.strip()[:200],
+                hint="Fix the import error — broken test files prevent the full suite from running",
+            ))
+
+    if not findings:
+        # pytest returned non-zero but no specific marker matched — emit a generic fallback
+        snippet = (combined.strip()[:200]) or "(no output)"
+        findings.append(Finding(
+            severity="WARN",
+            category="test-import-error",
+            location="tests/",
+            detail=f"pytest --collect-only failed (exit {result.returncode}): {snippet}",
+            hint="Fix the collection error — run 'pytest --collect-only -q tests/' for details",
+        ))
     return findings
 
 
@@ -304,7 +334,10 @@ def main() -> None:
 
     tests_dir = REPO_ROOT / "tests"
     for i, arg in enumerate(sys.argv):
-        if arg == "--tests-dir" and i + 1 < len(sys.argv):
+        if arg == "--tests-dir":
+            if i + 1 >= len(sys.argv) or sys.argv[i + 1].startswith("-"):
+                print("ERROR: --tests-dir requires a path argument", file=sys.stderr)
+                sys.exit(1)
             tests_dir = Path(sys.argv[i + 1])
             break
 

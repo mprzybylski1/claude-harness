@@ -20,10 +20,10 @@ class TestPytestCollectCheck:
     """T101: repo_hygiene warns when pytest --collect-only finds import errors."""
 
     def test_clean_repo_shows_no_collect_warning(self):
-        """Running against the real harness (all imports OK) shows no collect error."""
+        """Running against the real harness (all imports OK) shows no test-import-error WARN."""
         result = _run("--warn-only")
         assert result.returncode == 0
-        assert "collect" not in result.stdout.lower() or "ERROR" not in result.stdout, \
+        assert "test-import-error" not in result.stdout and "test-import-error" not in result.stderr, \
             f"Unexpected collect warning on clean repo:\n{result.stdout}"
 
     def test_broken_import_surfaced_as_warn(self, tmp_path):
@@ -44,16 +44,15 @@ class TestPytestCollectCheck:
             f"Expected broken module/file name in output:\n{combined}"
 
     def test_missing_pytest_does_not_crash(self, tmp_path):
-        """If pytest binary is unavailable, the check is silently skipped (exit 0)."""
-        import os
-        (tmp_path / "tests").mkdir()
-        # Replace PATH with a dir that has only python, not pytest
-        env = {k: v for k, v in os.environ.items()}
-        env["PATH"] = str(Path(sys.executable).parent)
-        result = subprocess.run(
-            [sys.executable, str(HYGIENE), "--warn-only",
-             "--tests-dir", str(tmp_path / "tests")],
-            capture_output=True, text=True, env=env,
-        )
-        assert result.returncode == 0, \
-            f"hygiene must exit 0 even when pytest is missing:\n{result.stderr}"
+        """If python -m pytest raises FileNotFoundError/ImportError, the check is skipped (exit 0)."""
+        import importlib.util
+        tests_dir = tmp_path / "tests"
+        tests_dir.mkdir()
+        # Import check_test_imports directly and call it with a patched subprocess.run
+        import unittest.mock as mock
+        spec = importlib.util.spec_from_file_location("repo_hygiene", HYGIENE)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        with mock.patch("subprocess.run", side_effect=FileNotFoundError("no pytest")):
+            findings = mod.check_test_imports(tests_dir)
+        assert findings == [], f"Expected no findings when pytest is missing, got: {findings}"
