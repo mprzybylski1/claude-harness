@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S13 2026-05-26. 4 open tickets.
+Generated S13 2026-05-26. 1 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -15,14 +15,11 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Low (4)
+## Low (1)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
-| T044 | S1 #3 — run_static_analysis boundary check inside check functions | Ph2 | infra | 4 sessions |
 | T050 | Split opus_notes archive by session range when over line threshold | Ph2 | tooling | 4 sessions |
-| T055 | S10 — carry-forward warning swallowed in brief output (S9 #6) | Ph2 | infra | 3 sessions |
-| T056 | S10 — *(none)* aging marker duplicated across generator and consumer | Ph2 | infra | 3 sessions |
 
 ## Unknown (0)
 
