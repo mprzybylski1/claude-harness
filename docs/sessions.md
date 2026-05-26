@@ -19,22 +19,23 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Active Work
 
-**S18 — closed T086–T090 (5 tickets); 0 open tickets at close.**
+**S19 — closed T091–T102 (12 tickets); 0 open tickets at close.**
 
 Files changed:
-- `scripts/hooks/check_fix_commit_has_code.py` — T086: workspace-aware git root parsing, broadened archive exclusion to filename pattern, scoped -m scan to post-commit tokens
-- `scripts/tools/close_ticket.py` — T087: `_warn_unstaged_code` uses `git diff` (unstaged only) + `git ls-files --others`; impl-review fix
-- `tests/test_check_fix_commit_has_code.py` — T086: 3 new workspace tests (13 total)
-- `tests/test_close_ticket_stage_files.py` — T087: 1 new already-staged false-positive test (10 total)
-- `tests/test_close_ticket_hook_integration.py` — T088: new file, 2 integration tests (close+hook seam)
-- `scripts/tools/create_ticket.py` — T089: new script, auto-picks T-number, writes frontmatter+ACs, workspace-aware
-- `tests/test_create_ticket.py` — T089: 7 tests
-- `scripts/tools/analyze_tool_log.py` — T090: retry heuristic requires same tool + same path
-- `tests/test_telemetry.py` — T090: 1 new different-path negative test (46 total)
+- `tests/test_check_fix_commit_has_code.py` — T091: 6 unit tests for `_parse_fix_commit` flag forms (19 total); T097: rewrote archive+code test to prove filename-regex
+- `scripts/tools/create_ticket.py` — T092: `--layer` arg + `_LAYER_VALUES` enum; T093: `--repo` arg; T094: `O_CREAT|O_EXCL` retry loop
+- `tests/test_create_ticket.py` — T092/T093: 5 new tests (12 total)
+- `docs/tickets/TEMPLATE.md` — T092: `tooling` added to layer enum; T102: embedded-into comment
+- `scripts/tools/close_ticket.py` — T095: docstring fix; T098: `_check_gitignored()` per-git-root; T099: `_stage_extra_files()` before `_atomic_move()`; T100: `--tick-acs` + scoped `_tick_acs()`; impl-review: fail-closed rc>=128, scoped `_check_acs()`, partial-stage error msg
+- `tests/test_close_ticket_stage_files.py` — T098/T099/T100: 5 new tests + scope test (16 total)
+- `scripts/tools/analyze_tool_log.py` — T096: comment documenting empty-path skip
+- `scripts/tools/repo_hygiene.py` — T101: `check_test_imports()` with `--tests-dir`; impl-review: generic fallback WARN, paired lines, 200-char limit, `--tests-dir` validation
+- `tests/test_repo_hygiene.py` — T101: new file, 3 tests; impl-review: tightened assertions, mock-based missing-pytest test
+- `docs/archive/` — T091–T102 archived (12 tickets)
 
-Tickets closed: T086–T090 (5 tickets)
-Impl review: 4 findings fixed inline (archive exclusion, -m scan scope, untracked warning, docstring)
-Workflow review: opened T089–T090; both implemented same session.
+Tickets closed: T091–T102 (12 tickets: 7 from Opus S18 concerns + 5 from S19 workflow-review)
+Workflow review: opened T098–T102; all implemented same session.
+Impl review: 10 Opus findings; 9 fixed inline (fail-closed gitignore, scoped AC gate, hygiene fallback, partial-stage msg, test tautologies); 1 deferred (architecture_invariants.md placeholder stubs).
 
 Remaining open: none
 
@@ -63,3 +64,4 @@ S15 2026-05-26: closed T072 (workspace git staging wrong repo) + T050 (opus arch
 S16 2026-05-26: closed T073-T077 (log_tool_usage triad, generate_ticket_index, close_ticket workspace index, rotate_opus_notes h2, classify_session no-yaml); workflow-review opened T079-T082
 S17 2026-05-26: closed T078-T085 (8 tickets: S16 workflow-review backlog + T083-T085 from S17 workflow-review); 0 open at close
 S18 2026-05-26: closed T086-T090 (Opus S17 concerns + workflow-review T089-T090); impl-review 4 inline fixes; 0 open at close
+S19 2026-05-26: closed T091-T102 (12 tickets: Opus S18 concerns + workflow-review T098-T102); impl-review 9 inline fixes; 0 open at close

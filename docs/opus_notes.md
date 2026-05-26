@@ -1,55 +1,3 @@
-# Opus Review — S17
-
-Scope: closed T078–T085 (8 tickets) clearing the S16 workflow-review backlog. Net changes: new PreToolUse hook `check_fix_commit_has_code.py` (~128 LoC + 10 tests), `close_ticket.py` grew `--files`/`--path-only` flags, staged-files summary, `_git_root_for` tuple return; `log_tool_usage.py:_log_error` bootstrap guard + `state_ok` sentinel; SKILL/CLAUDE.md doc updates. ~1234 insertions / 81 deletions across 20 files. Backlog at 0 open tickets, but the new commit-hook and the `_warn_unstaged_code` helper introduce real false-positive / false-negative paths.
-
-## Invariant Violations
-
-None directly. Invariant 4 (fail-closed) is *strengthened* in `_log_error`: the new `state_ok` sentinel prevents the prior bypass where a state-file I/O failure fell through to write `_ERR_PATH` unbounded — a fail-closed gap S16 #1 explicitly flagged. The bootstrap guard at `_ERR_STATE_PATH.parent.exists()` correctly returns early with one stderr emit. Both fixes are right-shaped.
-
-Invariant 5 (workspace isolation) is *weakened* — but only at the hook layer, not at the data-read layer. See Concern #1: the new fix-commit hook does not detect a workspace's actual git repo, so its policy is enforced inconsistently between harness-root and workspace commits.
-
-## Architectural Concerns
-
-1. **`scripts/hooks/check_fix_commit_has_code.py:70-90` — `_staged_code_files` runs `git diff --cached` in the hook's cwd, which means workspace `fix(TXXX):` commits get inconsistent enforcement.** [Concrete bug, REGRESSION risk] The hook is documented to block `fix(TXXX):` commits with no code staged; it runs `git diff --cached --name-only` with no `-C` argument, so cwd determines which repo is queried. For a workspace ticket close where the user (or a future automation) runs `git -C /external/project commit -m "fix(T999): ..."`, the hook fires in Claude's cwd (harness root), queries the harness repo's index, finds nothing staged there, and BLOCKS the commit — even when the external project repo has code staged correctly. Conversely, the *archive-only* exclusion list (`docs/archive/`, `docs/tickets/`) covers harness paths but NOT workspace archive layouts (`workspaces/<slug>/internal/archive/` or external `<proj>/.harness/archive/`), so a workspace fix-commit with only the archive move staged is silently ALLOWED. Two opposite failure modes from the same root cause: the hook is not workspace-aware. Fix: derive git root from the commit command (parse `-C <path>` if present, else use cwd), pass it to `git -C <root> diff --cached`, and broaden the exclusion to any `*/archive/T*.md` and `*/tickets/T*.md` path.
-
-2. **`scripts/hooks/check_fix_commit_has_code.py:42-47` — `git -C <path> commit` is silently ignored.** [Concrete bug, low impact, related to #1] `_parse_fix_commit` requires `tokens[git_idx + 1] == "commit"`. For `git -C /path commit -m "fix(T001): x"`, the token after "git" is "-C", so the function returns None and the hook bypasses. The bash-wrapped form `bash -c 'git commit -m "fix(T001): x"'` also bypasses (no token equals "git" at top level because shlex unwraps the outer `bash -c`'s arg into one token). Neither is exotic — close_ticket.py itself uses `git -C <root>` for staging, and any agent-issued composite command could land in the bash-c form. Fix: scan all tokens for the first one equal to `git`, then walk forward past any options (`-C`, `--git-dir`, `--work-tree`) until "commit".
-
-3. **`scripts/tools/close_ticket.py:340-353` — `_warn_unstaged_code` produces false positives.** [Concrete bug, moderate noise] The helper runs `git diff HEAD --name-only`, which lists everything different from HEAD — **staged + unstaged combined**, per git semantics. After `_git_stage` has just staged the archive move and INDEX.md, those would be in the diff but get filtered by `endswith(".md")`. The hole is any pre-existing `.py` file already `git add`-ed before close_ticket runs (e.g. from earlier in the same session, or from another active branch): it appears in `git diff HEAD --name-only`, fails the `.md` filter, and triggers the WARNING "no code files staged — pass --files explicitly" — *even though the user already staged them*. The test suite covers only the truly-unstaged-modified case (`test_no_files_warns_when_unstaged_code_exists`) and the no-change case; the false-positive-on-already-staged case is uncovered. Fix: use `git diff --name-only` (working tree vs index, unstaged only) AND `git diff --cached --name-only` (index vs HEAD, staged only) separately; warn only when there are unstaged code changes that look like they belong with the ticket.
-
-4. **`scripts/tools/close_ticket.py:441-447` — staged-files summary omits the deleted source ticket.** [Display lie, low impact] `staged_paths = [dest, index_path] + (extra_files or [])` — but `_git_stage` also stages the *deletion* of `ticket_path` from `open/`. The user sees "staged: docs/archive/T999-x.md, docs/tickets/INDEX.md" but not "staged: docs/tickets/open/T999-x.md (deleted)". For someone reviewing what's about to be committed, this is misleading. Fix: add `ticket_path` to `staged_paths` with a "(deleted)" annotation, or list all three paths consistently.
-
-5. **`scripts/hooks/check_fix_commit_has_code.py:70-81` — `_staged_code_files` swallows non-zero git exit silently → wrong error message.** [Fail-closed concern, minor] When `git diff --cached` exits non-zero (not in a repo, corrupted index), the function returns `[]`. The caller then BLOCKS with "no code files staged" — but the real problem is git itself. User sees a misleading message and a `--files` suggestion that won't help. Fix: distinguish "git unavailable" from "git ran, returned no code files"; for the former, exit 0 (the regular pre-commit will surface the real error) or print a different stderr.
-
-6. **`scripts/hooks/check_fix_commit_has_code.py:31-36` — `_code_paths` silently falls back to defaults when `harness_config` import fails.** [Fail-closed concern, minor] Any exception (broken yaml, missing dependency, harness_config refactor) reverts to `("scripts/", "src/", "lib/", "tests/")` without logging. A workspace whose `code_paths` includes e.g. `app/`, `MyApp/` would be misclassified — `app/foo.swift` is NOT in defaults, so a fix-commit with only Swift code staged would be BLOCKED. Either log the fallback to stderr (one-shot) or just exit 0 when config is unreadable (the existing close_ticket.py already protects via `--files`).
-
-7. **`scripts/hooks/log_tool_usage.py:189` — bootstrap-guard `_BOOTSTRAP_STDERR_LOGGED` is per-process, not per-invocation.** [Minor / by-design] Once set in a long-lived process (which Claude Code hooks are NOT — each hook call is a fresh subprocess), further bootstrap errors are silent. This is correct for hooks (each spawn re-imports the module), but the test `test_state_io_failure_does_not_bypass_rate_limit` explicitly resets it (`ltu._BOOTSTRAP_STDERR_LOGGED = False`) — which is a tell that the in-process semantics are subtle. Not a bug; flag as something to document in the docstring so future test authors don't blame stale module state.
-
-## Architectural Concerns — Test Gaps
-
-1. **`check_fix_commit_has_code.py` is untested for `git -C <path> commit` and `bash -c '…'` forms.** Both bypass the hook today (Concern #2). The current 10 tests all use the bare `git commit` form.
-
-2. **`check_fix_commit_has_code.py` is untested for the workspace-cwd scenario.** No test runs the hook from a harness cwd while the staged changes are in an external project repo (the case that S15 T072 fixed for `_git_stage`, but the new hook re-introduces).
-
-3. **`_warn_unstaged_code` false-positive-on-already-staged case (Concern #3) is untested.** Add a test: stage `foo.py` BEFORE running close_ticket, then assert the warning is NOT emitted.
-
-4. **No e2e test verifies the new hook plays well with `close_ticket.py`'s recommended workflow.** `close_ticket.py` prints `git commit -m "fix(T999): ..."` as the suggested next command, but no test runs that exact command through the hook + verifies it succeeds when `--files` was used at close time. A 20-line integration test would catch Concerns #1 and #5 simultaneously.
-
-5. **Carry-forward S16 Test Gap #3: `count==11` marker line still untested.** Now 4 sessions unaddressed. New `test_rate_limit_caps_at_ten_plus_marker` exists and asserts `"rate-limit" in lines[-1]` — that IS the marker test. **RESOLVED implicitly** by S17 (good). Withdraw this carry-forward.
-
-## Suggested Next Session Focus
-
-1. **Fix the workspace bypass/false-block in `check_fix_commit_has_code.py` (Concerns #1, #2).** Highest priority — the hook's value proposition is enforcing the "fix(TXXX) commits must have code" rule, but workspace commits today either bypass it entirely (wrong archive prefix) or get blocked when correct (wrong git repo queried). Parse `-C <path>` from the commit command, run `git -C <root> diff --cached`, broaden the archive-exclusion to any `*/archive/*` and `*/tickets/*` path. Add 2 tests for the two failure modes. ~30 LoC + 2 tests.
-
-2. **Fix the `_warn_unstaged_code` false-positive (Concern #3).** Replace `git diff HEAD --name-only` with separate `git diff` (unstaged) and `git diff --cached` (staged) queries; warn only on unstaged code. ~10 LoC + 1 test. Without this fix, the warning becomes background noise users learn to ignore — defeating its purpose.
-
-3. **Add the missing integration test (Test Gap #4).** Drive `close_ticket.py --files foo.py` end-to-end, then run the recommended `git commit` through the hook, assert success. Catches regressions across the close-ticket + commit-hook seam. ~25 LoC.
-
-## Carry-forwards (issues unresolved ≥ 2 sessions)
-
-- None. The S16 carry-forward (count==11 marker test) is resolved by the new `test_rate_limit_caps_at_ten_plus_marker` test in S17. Clean slate going into S18.
-
----
-
 # Opus Review — S18
 
 Scope: closed T086–T090 (5 tickets) addressing the entire S17 review-concern set + workflow-review opens T089–T090. Net: ~280 LoC across 4 production files + 4 new/expanded test files (1 new integration test file, 1 new tool `create_ticket.py`). All three S17 priority concerns (#1 workspace bypass, #2 `git -C` parsing, #3 warn-unstaged false-positive) addressed; integration test added (S17 Test Gap #4). Clean follow-through. Three new concerns surface, none invariant-violating.
@@ -93,3 +41,51 @@ None. T086 *restores* Invariant 5 alignment at the hook layer that S17 flagged a
 ## Carry-forwards (issues unresolved ≥ 2 sessions)
 
 None. All S17 priority concerns addressed in T086–T088. The remaining items are S18-original.
+
+# Opus Review — S19
+
+Scope: closed T091–T102 (12 tickets) addressing all 6 S18 architectural concerns + 5 S19 workflow-review opens. Net: substantial work in `close_ticket.py` (`_check_gitignored`, `_stage_extra_files` extracted, scoped `_check_acs`/`_tick_acs`, `--tick-acs` flag mutually exclusive with `--force`), new `check_test_imports` in `repo_hygiene.py`, `create_ticket.py` gained `--layer`/`--repo`/`O_EXCL` retry. 16 close-ticket tests + 3 repo_hygiene tests + 5 create_ticket tests. Strong follow-through on every S18 priority. Three small concerns surface; none invariant-violating.
+
+## Invariant Violations
+
+None confirmed. The harness-level invariants 1–2 are placeholders ("[Name]") and invariant 3 is conditional. Invariant 4 (fail-closed) is *strengthened* by T098: `_check_gitignored` exits 2 on subprocess failure and on git returncode >= 128, rather than treating unknown rc as "not ignored". Invariant 5 (workspace isolation) is unaffected — `_check_gitignored` correctly groups paths by their actual git root via `_git_root_for(p)` so checks run against the correct repo.
+
+The S18 carry-forward "`layer: tooling` schema mismatch" is addressed at the create-ticket-script layer (T092 adds `--layer` enum including `tooling`) but the `docs/architecture_invariants.md` placeholder enum was NOT updated to include `tooling` (still says `backend | frontend | fullstack | infra | process` per the template embedded in opus_review_context.md). The session-close notes acknowledge this as "1 deferred (architecture_invariants.md placeholder stubs)". Not an invariant violation because the doc enum is the placeholder, but the schema-of-record drift remains and should be reconciled.
+
+## Architectural Concerns
+
+1. **`scripts/tools/close_ticket.py:284-294` — `_tick_acs` silently no-ops when `## Acceptance Criteria` header is missing, while `_check_acs` falls back to whole-content scan. Asymmetric.** [Concrete bug, low impact] If a ticket lacks the literal header (e.g. typo "Acceptance criteria" lowercase, or missing entirely), `_check_acs` walks the whole file and finds unchecked boxes everywhere, but `_tick_acs` returns content unchanged. Result with `--tick-acs`: the gate still fires (unchecked ACs found via fallback) and close fails with a confusing message — user passed `--tick-acs` expecting it to tick boxes, sees the gate fail anyway. Fix: either (a) make `_tick_acs` symmetric (rewrite all `- [ ]` in the whole file when header missing), or (b) print a clearer error like "`--tick-acs` requires a `## Acceptance Criteria` section". The test `test_tick_acs_scoped_to_ac_section_only` only exercises the happy path where the header exists.
+
+2. **`scripts/tools/repo_hygiene.py:185-244` — `check_test_imports` reports "missing pytest" as a `test-import-error` WARN via the generic fallback, contradicting the docstring "Best-effort: if pytest is unavailable...returns []".** [Concrete bug, moderate noise] The exception handler at line 199 only catches `FileNotFoundError, subprocess.TimeoutExpired, OSError`. When pytest is not installed but Python is, `python -m pytest` exits with returncode 1 and stderr `No module named pytest`. That falls through to the parsing logic; the "ModuleNotFoundError"-grep branch (line 219) matches and emits a WARN naming pytest itself, not a user test file. The AC was explicit: "Check is best-effort: missing pytest does not fail the script" — it doesn't fail, but it lies. Fix: pre-check `importlib.util.find_spec("pytest")` and return `[]` if missing. The test `test_missing_pytest_does_not_crash` mocks `subprocess.run` with `FileNotFoundError`, which does not exercise the real "pytest not installed but Python is" path — so this gap is uncovered.
+
+3. **`scripts/tools/repo_hygiene.py:230-242` — generic fallback WARN truncates `combined` to 200 chars without indicating truncation, hiding the actual error.** [Display bug, low impact] When pytest exits non-zero but neither "ERROR collecting" nor "ImportError" patterns match, the fallback emits `f"pytest --collect-only failed (exit {result.returncode}): {snippet}"` where snippet is silently sliced. A long traceback gets chopped mid-line. Fix: append `...` when truncated, or write the full output to a temp file and reference it.
+
+4. **`scripts/tools/close_ticket.py:259-264` — `_check_gitignored` silently skips paths whose `_git_root_for` returns None.** [Coverage gap, low impact] The comment says "Path is not inside any git repo — cannot check; proceed (staging will catch it)". That's true today because `_stage_extra_files` runs next and exits 2 for the same path, so the user sees an error. But the two checks are coupled by control flow only — if a future refactor reorders or wraps `_stage_extra_files` in a try/except, the gitignore check would silently no-op. Defense-in-depth: also exit 2 here with a clear "path not in any git repo" message rather than relying on the next stage.
+
+5. **`scripts/tools/repo_hygiene.py:335-339` — manual `sys.argv` walk for `--tests-dir` does not coexist with `--warn-only` if a user combines them as `--warn-only --tests-dir foo`.** [Diff suggests; low confidence — minor] The arg detection works for either flag in any position but neither uses argparse, so `--tests-dir=foo` (=-form) would not parse. Trivial today, but if more flags accrue this pattern will collapse. Convert to `argparse.ArgumentParser` next time anything is added.
+
+6. **`scripts/tools/close_ticket.py:316-325` — `_stage_extra_files` failure message advises `git reset HEAD` but only if there were multiple roots; the message is unconditional.** [Display lie, low impact] "Some paths from earlier repos may already be staged" appears even when there's only one git root and no partial state can exist. Fix: check `len(by_root) > 1` before printing the "earlier repos" line, or rephrase to "any earlier paths from this run may already be staged".
+
+## Architectural Concerns — Test Gaps
+
+1. **`_tick_acs` has no test for the missing-header case (Concern #1).** Add a ticket with no `## Acceptance Criteria` header and assert close behavior — currently it would fail confusingly.
+
+2. **`check_test_imports` has no test for the real "pytest not installed" path (Concern #2).** The existing test mocks `FileNotFoundError`, which is the wrong failure mode. Add a test using a subprocess in a venv without pytest, or mock `subprocess.run` to return `CompletedProcess(returncode=1, stderr="No module named pytest")` and assert the result is `[]`.
+
+3. **`_check_gitignored` has no test for the not-in-any-git-repo path (Concern #4).** Add a test passing a `/tmp/file.py` (outside any git repo) and assert the failure mode (today: silently skipped, then staging fails; after fix: gitignore check fails first with clear message).
+
+4. **`_check_gitignored` has no test for the `git check-ignore` rc >= 128 fail-closed path.** The new fail-closed branch (lines 287-294) is exercised only by code review. Add a test: mock `subprocess.run` to return rc=128 with a stderr message and assert `SystemExit(2)`.
+
+5. **No test verifies `_check_gitignored` works when --files spans multiple git roots.** Per-root grouping is the whole point of the change vs. the simpler single-call implementation, but the test suite has only single-root cases. A workspace ticket with `--files harness/foo.py /external/proj/bar.py` would exercise the grouping logic.
+
+## Suggested Next Session Focus
+
+1. **Fix the "missing pytest" misreport in `check_test_imports` (Concern #2, Test Gap #2).** ~5 LoC + 1 test. Add `importlib.util.find_spec("pytest")` early-return. Without this fix, every machine that runs `repo_hygiene.py --warn-only` without pytest installed gets a spurious WARN — the check becomes self-defeating noise.
+
+2. **Reconcile the `architecture_invariants.md` placeholder vs. actual ticket schema (deferred from S19).** Either fill in invariants 1–2 with real rules and align the layer enum to include `tooling`, or remove the placeholder template entirely and point Opus to `docs/tickets/TEMPLATE.md` as the schema of record. The "deferred to next session" note is real technical debt — Opus sees the placeholder enum in every review context.
+
+3. **Tighten `_tick_acs` symmetry with `_check_acs` (Concern #1, Test Gap #1).** ~5 LoC + 1 test. Cheap, prevents a confusing user experience for the first ticket that lacks the standard header.
+
+## Carry-forwards (issues unresolved ≥ 2 sessions)
+
+- **`architecture_invariants.md` is a placeholder file.** Now 2+ sessions of acknowledgment without action. The S18 review noted the `layer: tooling` enum mismatch (Concern #2); S19 implemented `--layer` in create_ticket.py but explicitly deferred updating the invariants doc. Until the doc has real invariants, every Opus review's "Invariant Violations" section is structurally weak — there's nothing concrete to check against.
