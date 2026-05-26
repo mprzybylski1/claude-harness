@@ -160,3 +160,59 @@ class TestFixCommitHasCode:
         combined = result.stdout + result.stderr
         assert "--files" in combined or "close_ticket" in combined, \
             f"Expected --files suggestion in output:\n{combined}"
+
+
+class TestWorkspaceAwareness:
+    """T086: hook must query the correct git repo when git -C <path> is used."""
+
+    def test_workspace_commit_with_code_staged_allowed(self, tmp_path):
+        """git -C <project> commit fix(TXXX): → allowed when code is staged in project repo."""
+        project = tmp_path / "project"
+        project.mkdir()
+        _make_git_repo(project)
+        scripts_dir = project / "scripts"
+        scripts_dir.mkdir()
+        code = scripts_dir / "app.py"
+        code.write_text("# v1")
+        subprocess.run(["git", "-C", str(project), "add", str(code)],
+                       check=True, capture_output=True)
+
+        command = f'git -C {project} commit -m "fix(T042): workspace fix"'
+        result = _run_hook_in_repo(tmp_path, command)
+        assert result.returncode == 0, \
+            f"Expected allow for workspace commit with code staged\nstderr={result.stderr}"
+
+    def test_workspace_commit_archive_only_blocked(self, tmp_path):
+        """git -C <project> commit fix(TXXX): → blocked when only archive/ is staged."""
+        project = tmp_path / "project"
+        project.mkdir()
+        _make_git_repo(project)
+        archive_dir = project / "docs" / "archive"
+        archive_dir.mkdir(parents=True)
+        archive_file = archive_dir / "T042-foo.md"
+        archive_file.write_text("closed")
+        subprocess.run(["git", "-C", str(project), "add", str(archive_file)],
+                       check=True, capture_output=True)
+
+        command = f'git -C {project} commit -m "fix(T042): workspace fix"'
+        result = _run_hook_in_repo(tmp_path, command)
+        assert result.returncode != 0, \
+            f"Expected block for workspace commit with only archive staged\nstderr={result.stderr}"
+
+    def test_workspace_archive_at_any_depth_excluded(self, tmp_path):
+        """Paths containing 'archive' anywhere in the tree are excluded from code count."""
+        project = tmp_path / "project"
+        project.mkdir()
+        _make_git_repo(project)
+        # Workspace-style path: .harness/archive/T042-foo.md
+        ws_archive = project / ".harness" / "archive"
+        ws_archive.mkdir(parents=True)
+        archive_file = ws_archive / "T042-foo.md"
+        archive_file.write_text("closed")
+        subprocess.run(["git", "-C", str(project), "add", str(archive_file)],
+                       check=True, capture_output=True)
+
+        command = f'git -C {project} commit -m "fix(T042): workspace fix"'
+        result = _run_hook_in_repo(tmp_path, command)
+        assert result.returncode != 0, \
+            f"Expected block for commit with only .harness/archive staged\nstderr={result.stderr}"

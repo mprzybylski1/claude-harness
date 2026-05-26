@@ -36,14 +36,35 @@ def _code_paths() -> tuple[str, ...]:
         return _DEFAULT_CODE_PATHS
 
 
-def _parse_fix_commit(tokens: list[str]) -> str | None:
-    """Return ticket ID if tokens are a fix(TXXX): git commit, else None."""
-    # Must be a git commit command
+def _parse_fix_commit(tokens: list[str]) -> tuple[str, str | None] | None:
+    """Return (ticket_id, git_cwd) if tokens are a fix(TXXX): git commit, else None.
+
+    git_cwd is the path from `-C <path>` if present, else None (use hook's cwd).
+    Handles: `git commit`, `git -C <path> commit`, `git --git-dir=... commit`.
+    """
     try:
         git_idx = tokens.index("git")
     except ValueError:
         return None
-    if git_idx + 1 >= len(tokens) or tokens[git_idx + 1] != "commit":
+
+    # Walk past git flags to find "commit"
+    git_cwd: str | None = None
+    i = git_idx + 1
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok == "commit":
+            break
+        if tok in ("-C", "--work-tree", "--git-dir") and i + 1 < len(tokens):
+            if tok == "-C":
+                git_cwd = tokens[i + 1]
+            i += 2
+            continue
+        if tok.startswith("-"):
+            i += 1
+            continue
+        # Non-option, non-"commit" subcommand — not a commit call
+        return None
+    else:
         return None
 
     # --no-verify → bypass
@@ -51,29 +72,35 @@ def _parse_fix_commit(tokens: list[str]) -> str | None:
         return None
 
     # Find -m <message>
-    for i, tok in enumerate(tokens):
-        if tok == "-m" and i + 1 < len(tokens):
-            msg = tokens[i + 1]
+    for j, tok in enumerate(tokens):
+        if tok == "-m" and j + 1 < len(tokens):
+            msg = tokens[j + 1]
             m = re.match(r"^fix\(T(\d+)\):", msg)
             if m:
-                return f"T{m.group(1)}"
-        # Also handle -m"message" (no space) — shlex handles this, but guard anyway
+                return f"T{m.group(1)}", git_cwd
         if tok.startswith("-m") and len(tok) > 2:
             msg = tok[2:].strip("\"'")
             m = re.match(r"^fix\(T(\d+)\):", msg)
             if m:
-                return f"T{m.group(1)}"
+                return f"T{m.group(1)}", git_cwd
 
     return None
 
 
-def _staged_code_files(code_prefixes: tuple[str, ...]) -> list[str]:
+def _is_archive_path(path: str) -> bool:
+    """Return True for ticket archive/open paths at any depth in the tree."""
+    parts = Path(path).parts
+    return "archive" in parts or "tickets" in parts
+
+
+def _staged_code_files(code_prefixes: tuple[str, ...], git_cwd: str | None = None) -> list[str]:
     """Return staged file paths that match code_prefixes."""
+    cmd = ["git"]
+    if git_cwd:
+        cmd += ["-C", git_cwd]
+    cmd += ["diff", "--cached", "--name-only"]
     try:
-        result = subprocess.run(
-            ["git", "diff", "--cached", "--name-only"],
-            capture_output=True, text=True,
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             return []
         staged = result.stdout.splitlines()
@@ -82,8 +109,7 @@ def _staged_code_files(code_prefixes: tuple[str, ...]) -> list[str]:
 
     code_files = []
     for path in staged:
-        # Exclude docs/archive/ explicitly — archive moves are not code
-        if path.startswith("docs/archive/") or path.startswith("docs/tickets/"):
+        if _is_archive_path(path):
             continue
         if any(path.startswith(prefix) for prefix in code_prefixes):
             code_files.append(path)
@@ -105,12 +131,13 @@ def main() -> None:
     except ValueError:
         tokens = command.split()
 
-    ticket_id = _parse_fix_commit(tokens)
-    if ticket_id is None:
+    parsed = _parse_fix_commit(tokens)
+    if parsed is None:
         sys.exit(0)
+    ticket_id, git_cwd = parsed
 
     code_prefixes = _code_paths()
-    code_files = _staged_code_files(code_prefixes)
+    code_files = _staged_code_files(code_prefixes, git_cwd)
 
     if not code_files:
         print(
