@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S16 2026-05-26. 3 open tickets.
+Generated S16 2026-05-26. 2 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -18,11 +18,9 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 | T073 | log_tool_usage.py three carry-forward fixes (race, >= window, expanduser) | process | process | 1 session |
 | T078 | Background Opus agent denied filesystem access to workspace repo | Ph2 | process | this session |
 
-## Low (1)
+## Low (0)
 
-| ID | Title | Phase | Layer | Age |
-|----|-------|-------|-------|-----|
-| T077 | classify_session.py returns docs for code-changing workspace sessions | Ph2 | process | this session |
+*(none)*
 
 ## Unknown (0)
 
