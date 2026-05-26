@@ -37,12 +37,24 @@ This file provides guidance to Claude Code when working in this repository.
 
 ## Key Constraints & Honest Limitations
 
-<!-- TODO: what does this system NOT do well? What are the real risks?
-     Being honest here saves future debugging time.
+### `isolation: "worktree"` does not prevent main-repo writes
 
-- [Limitation 1]
-- [Limitation 2]
--->
+Claude Code's `isolation: "worktree"` on the `Agent` tool creates a separate git
+worktree, but isolation is at the **git level only** — it does not prevent agents
+from reading or writing absolute paths outside the worktree directory. When agent
+prompts contain absolute main-repo paths (e.g. ticket file paths, docs paths),
+agents will operate directly on the main repo, not the worktree.
+
+Observed S13: 3 of 5 parallel agents with `isolation: "worktree"` wrote to main-repo
+paths, causing a ghost-tracked file and a stale INDEX.md committed to `master`.
+
+**Do not use `isolation: "worktree"` for parallel harness-root work.**
+
+**Recommended parallel strategy:** open N separate Claude Code sessions (terminal
+tabs or IDE windows), each tackling one independent ticket, without worktree
+isolation. Alternatively, run tickets sequentially within one session. Do not spawn
+multiple `Agent` calls with `isolation: "worktree"` when their prompts contain
+absolute main-repo paths.
 
 ---
 

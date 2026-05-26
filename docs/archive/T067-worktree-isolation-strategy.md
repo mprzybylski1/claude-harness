@@ -2,11 +2,11 @@
 id: T067
 title: Worktree isolation for parallel agents doesn't hold
 severity: high
-status: open
+status: closed
 phase: process
 layer: process
 opened: S13 2026-05-26
-closed:
+closed: S14 2026-05-26
 ---
 
 ## Problem
@@ -36,12 +36,12 @@ Option A is recommended.
 
 ## Acceptance Criteria
 
-- [ ] CLAUDE.md documents the worktree isolation limitation with a concrete recommendation
+- [x] CLAUDE.md documents the worktree isolation limitation with a concrete recommendation
   (Option A preferred: don't use `isolation: "worktree"` for parallel harness-root work).
-- [ ] CLAUDE.md or the relevant skill documents an alternative parallel strategy
+- [x] CLAUDE.md or the relevant skill documents an alternative parallel strategy
   (e.g., "for N independent tickets, open N separate Claude Code instances each without
   worktree isolation, or run sequentially").
-- [ ] A note is added to `.claude/skills/session-start/SKILL.md` or `CLAUDE.md` warning
+- [x] A note is added to `.claude/skills/session-start/SKILL.md` or `CLAUDE.md` warning
   that `isolation: "worktree"` does not prevent agents from writing to main-repo paths
   when absolute paths appear in their prompts.
 
@@ -56,4 +56,6 @@ the agent prompt at spawn time — currently not exposed by Claude Code's Agent 
 
 ## Resolution
 
-(Fill in on close: what was done and in which session/commit.)
+Added 'isolation: worktree does not prevent main-repo writes' subsection to CLAUDE.md Key Constraints & Honest Limitations. Documents the S13 incident, recommends Option A (no worktree isolation for parallel harness work), and prescribes the N-sessions or sequential alternative. All three ACs satisfied via CLAUDE.md. S14.
+
+Closed S14 2026-05-26.

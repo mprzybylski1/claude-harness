@@ -1,17 +1,15 @@
 # Ticket Index
 
-Generated S14 2026-05-26. 7 open tickets.
+Generated S14 2026-05-26. 6 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
 
 *(none)*
 
-## High (1)
+## High (0)
 
-| ID | Title | Phase | Layer | Age |
-|----|-------|-------|-------|-----|
-| T067 | Worktree isolation for parallel agents doesn't hold | process | process | 1 session |
+*(none)*
 
 ## Medium (4)
 
