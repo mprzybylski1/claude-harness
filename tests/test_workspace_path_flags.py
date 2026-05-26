@@ -653,6 +653,8 @@ Synthetic.
         (docs / "sessions.md").write_text(
             "## Session Log\n\nS1 2026-01-01: init\n", encoding="utf-8"
         )
+        # INDEX.md must be committed so git add succeeds when close_ticket stages it
+        (docs / "tickets" / "INDEX.md").write_text("# Ticket Index\n", encoding="utf-8")
         # Stub generate_ticket_index.py so it exits cleanly
         tools = tmp_path / "scripts" / "tools"
         tools.mkdir(parents=True)
@@ -663,6 +665,18 @@ Synthetic.
         # Plant the ticket
         ticket_path = docs / "tickets" / "open" / "T999-synthetic-test-ticket.md"
         ticket_path.write_text(self.OPEN_TICKET, encoding="utf-8")
+        # Init git repo so _git_stage succeeds
+        subprocess.run(["git", "-C", str(tmp_path), "init", "-q"], check=True)
+        subprocess.run(["git", "-C", str(tmp_path), "config", "user.email", "t@test.com"],
+                       check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(tmp_path), "config", "user.name", "Test"],
+                       check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(tmp_path), "config", "commit.gpgsign", "false"],
+                       check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(tmp_path), "add", "-A"],
+                       check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(tmp_path), "commit", "-q", "-m", "init"],
+                       check=True, capture_output=True)
         return ticket_path
 
     def test_happy_path_closes_ticket(self, tmp_path):
@@ -834,12 +848,24 @@ Synthetic.
         (docs / "sessions.md").write_text(
             "## Session Log\n\nS1 2026-01-01: init\n", encoding="utf-8"
         )
+        (docs / "tickets" / "INDEX.md").write_text("# Ticket Index\n", encoding="utf-8")
         tools = tmp_path / "scripts" / "tools"
         tools.mkdir(parents=True)
         (tools / "generate_ticket_index.py").write_text("import sys; sys.exit(0)\n")
         (tools / "current_session.py").write_text("import sys\nprint('S9')\n")
         ticket_path = docs / "tickets" / "open" / "T999-synthetic-test-ticket.md"
         ticket_path.write_text(self.OPEN_TICKET, encoding="utf-8")
+        subprocess.run(["git", "-C", str(tmp_path), "init", "-q"], check=True)
+        subprocess.run(["git", "-C", str(tmp_path), "config", "user.email", "t@test.com"],
+                       check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(tmp_path), "config", "user.name", "Test"],
+                       check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(tmp_path), "config", "commit.gpgsign", "false"],
+                       check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(tmp_path), "add", "-A"],
+                       check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(tmp_path), "commit", "-q", "-m", "init"],
+                       check=True, capture_output=True)
         return ticket_path
 
     # ── Fix 2: _replace_resolution permissive fallback ────────────────────────
@@ -943,6 +969,115 @@ Synthetic.
         assert dest.read_text() == "new content", "archive must have correct content"
         assert not list(archive_dir.glob("*.tmp")), "no temp files should remain"
         assert ticket_path.exists(), "source ticket must still exist when unlink failed"
+
+
+# ── Tests: close_ticket.py T064 — git staging ────────────────────────────────
+
+class TestCloseTicketGitStaging:
+    """T064: close_ticket.py auto-stages git changes after closure."""
+
+    OPEN_TICKET = """\
+---
+id: T999
+title: Synthetic test ticket
+severity: low
+status: open
+phase: 2
+layer: tooling
+opened: S1 2026-01-01
+closed:
+---
+
+## Problem
+
+Synthetic.
+
+## Acceptance Criteria
+
+- [x] AC one done
+- [x] AC two done
+
+## Resolution
+(Fill in on close.)
+"""
+
+    def _run(self, tmp_root: Path, *extra_args: str) -> subprocess.CompletedProcess:
+        import os as _os
+        return subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "tools" / "close_ticket.py"), *extra_args],
+            capture_output=True, text=True,
+            env={**_os.environ, "HARNESS_ROOT": str(tmp_root), "PYTHONPATH": str(ROOT)},
+        )
+
+    def _setup_git_repo(self, tmp_path: Path) -> Path:
+        """Minimal harness + git repo with initial commit, INDEX.md committed."""
+        docs = tmp_path / "docs"
+        (docs / "tickets" / "open").mkdir(parents=True)
+        (docs / "archive").mkdir(parents=True)
+        index = docs / "tickets" / "INDEX.md"
+        index.write_text("# Ticket Index\n", encoding="utf-8")
+        (docs / "sessions.md").write_text(
+            "## Session Log\n\nS1 2026-01-01: init\n", encoding="utf-8"
+        )
+        tools = tmp_path / "scripts" / "tools"
+        tools.mkdir(parents=True)
+        (tools / "current_session.py").write_text("import sys\nprint('S9')\n")
+        # Stub that modifies INDEX.md so it shows as a staged change
+        (tools / "generate_ticket_index.py").write_text(
+            "import os; from pathlib import Path\n"
+            "root = Path(os.environ.get('HARNESS_ROOT', '.'))\n"
+            "(root / 'docs' / 'tickets' / 'INDEX.md').write_text('# Updated\\n')\n"
+        )
+        ticket = docs / "tickets" / "open" / "T999-synthetic-test-ticket.md"
+        ticket.write_text(self.OPEN_TICKET, encoding="utf-8")
+        subprocess.run(["git", "-C", str(tmp_path), "init", "-q"], check=True)
+        subprocess.run(["git", "-C", str(tmp_path), "config", "user.email", "t@test.com"],
+                       check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(tmp_path), "config", "user.name", "Test"],
+                       check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(tmp_path), "config", "commit.gpgsign", "false"],
+                       check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(tmp_path), "add", "-A"],
+                       check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(tmp_path), "commit", "-q", "-m", "init"],
+                       check=True, capture_output=True)
+        return ticket
+
+    def test_closes_and_stages_all_three_paths(self, tmp_path):
+        """After close, deletion of open ticket, archive file, and INDEX.md are all staged."""
+        self._setup_git_repo(tmp_path)
+        result = self._run(tmp_path, "T999", "--resolution", "done")
+        assert result.returncode == 0, result.stderr
+
+        status_out = subprocess.run(
+            ["git", "-C", str(tmp_path), "status", "--porcelain"],
+            capture_output=True, text=True, check=True,
+        ).stdout
+        staged = [ln for ln in status_out.splitlines() if ln[:1] not in ("", " ", "?")]
+        staged_str = "\n".join(staged)
+        assert any("T999" in ln and "open" in ln for ln in staged), \
+            f"open/ ticket deletion not staged:\n{staged_str}"
+        assert any("T999" in ln and "archive" in ln for ln in staged), \
+            f"archive file not staged:\n{staged_str}"
+        assert any("INDEX.md" in ln for ln in staged), \
+            f"INDEX.md not staged:\n{staged_str}"
+
+    def test_git_failure_warns_and_exits_nonzero(self, tmp_path):
+        """When not inside a git repo, close_ticket warns and exits non-zero."""
+        docs = tmp_path / "docs"
+        (docs / "tickets" / "open").mkdir(parents=True)
+        (docs / "archive").mkdir(parents=True)
+        (docs / "tickets" / "INDEX.md").write_text("# Index\n")
+        (docs / "sessions.md").write_text("## Session Log\n\nS1 2026-01-01: init\n")
+        tools = tmp_path / "scripts" / "tools"
+        tools.mkdir(parents=True)
+        (tools / "current_session.py").write_text("import sys\nprint('S9')\n")
+        (tools / "generate_ticket_index.py").write_text("import sys; sys.exit(0)\n")
+        ticket = docs / "tickets" / "open" / "T999-synthetic-test-ticket.md"
+        ticket.write_text(self.OPEN_TICKET, encoding="utf-8")
+        result = self._run(tmp_path, "T999", "--resolution", "done")
+        assert result.returncode != 0
+        assert "WARNING" in result.stderr
 
 
 # ── Tests: surface_stale_tickets.py (T047) ───────────────────────────────────

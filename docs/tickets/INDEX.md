@@ -1,17 +1,16 @@
 # Ticket Index
 
-Generated S14 2026-05-26. 8 open tickets.
+Generated S14 2026-05-26. 7 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
 
 *(none)*
 
-## High (2)
+## High (1)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
-| T064 | close_ticket.py should auto-stage git changes | process | process | 1 session |
 | T067 | Worktree isolation for parallel agents doesn't hold | process | process | 1 session |
 
 ## Medium (4)

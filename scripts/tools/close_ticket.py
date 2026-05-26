@@ -207,6 +207,30 @@ def _regenerate_index(internal: Path | None) -> None:
         print(f"WARNING: generate_ticket_index.py failed: {exc}", file=sys.stderr)
 
 
+def _git_stage(ticket_path: Path, dest: Path, internal: Path | None) -> None:
+    """Stage the three paths changed by close_ticket via git."""
+    if internal is not None:
+        index_path = internal / "tickets" / "INDEX.md"
+    else:
+        index_path = ROOT / "docs" / "tickets" / "INDEX.md"
+    paths = [str(ticket_path), str(dest), str(index_path)]
+    try:
+        subprocess.check_call(
+            ["git", "-C", str(ROOT), "rm", "--cached", "--ignore-unmatch", "--", str(ticket_path)],
+            stdout=subprocess.DEVNULL,
+        )
+        to_add = [str(p) for p in [dest, index_path] if p.exists()]
+        if to_add:
+            subprocess.check_call(["git", "-C", str(ROOT), "add", "--", *to_add])
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        print(
+            "WARNING: git staging failed — changes are NOT staged.\n"
+            f"  Run manually: git add -- {' '.join(paths)}",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -276,6 +300,9 @@ def main() -> None:
 
     # Regenerate index
     _regenerate_index(internal)
+
+    # Stage all three changed paths in git
+    _git_stage(ticket_path, dest, internal)
 
     # Extract title for commit message
     title_m = re.search(r"^title:\s*(.+)$", content, re.MULTILINE)
