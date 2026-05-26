@@ -328,7 +328,7 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("ticket_id", metavar="T###", help="Ticket ID to close, e.g. T045")
-    res_group = parser.add_mutually_exclusive_group(required=True)
+    res_group = parser.add_mutually_exclusive_group(required=False)
     res_group.add_argument("--resolution", "-r", metavar="TEXT",
                            help="Resolution text (inline)")
     res_group.add_argument("--resolution-file", metavar="PATH",
@@ -339,9 +339,22 @@ def main() -> None:
                         help="Workspace slug to search (required when ID is ambiguous)")
     parser.add_argument("--files", nargs="+", metavar="PATH",
                         help="Code/test files to stage together with the archive move")
+    parser.add_argument("--path-only", action="store_true",
+                        help="Print the ticket file path and exit; no other action taken")
     args = parser.parse_args()
 
     ticket_id = args.ticket_id.upper()
+
+    if args.path_only:
+        if args.resolution or args.resolution_file:
+            parser.error("--path-only cannot be combined with --resolution or --resolution-file")
+        ticket_path, _ = _find_ticket(ticket_id, args.workspace)
+        print(ticket_path)
+        sys.exit(0)
+
+    if not args.resolution and not args.resolution_file:
+        parser.error("one of the arguments --resolution/-r --resolution-file is required")
+
     ticket_path, internal = _find_ticket(ticket_id, args.workspace)
     content = ticket_path.read_text(encoding="utf-8")
 
