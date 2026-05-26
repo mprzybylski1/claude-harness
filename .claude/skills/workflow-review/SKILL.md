@@ -29,35 +29,65 @@ Run at any point during or after a session. Most valuable either right before
 
 ---
 
-## Step 1 — Detect mode and gather context
+## Step 1 — Detect scope and gather context
 
-**Determine mode:**
-- **Warm mode** (in-session): you have direct recall of what happened this session.
-  Use that recall as primary signal; files confirm or extend it.
-- **Cold mode** (periodic audit or new session): no recall available.
-  Files are the only signal — read them more thoroughly.
-
-**Read these files in order (both modes):**
+### 1a — Determine workspace scope (run this first)
 
 ```bash
-python3 scripts/tools/current_session.py          # or --sessions <INTERNAL>/sessions.md
-python3 scripts/tools/extract_session_brief.py    # or --sessions flag for workspace
-python3 scripts/tools/extract_opus_key_sections.py --with-carry-forwards  # Opus complaints
+python3 scripts/tools/workspace.py list
+```
+
+**If a workspace is active this session** (user selected one at session-start, or
+`workspace.yaml` exists in CWD):
+
+- The review scope is **that workspace only**. Analyse its workflow experience:
+  its session log, tickets, opus notes, and how harness tooling served it.
+- Do NOT produce harness-global findings during a workspace review. Harness
+  infrastructure improvements belong in a harness-root session.
+- Resolve the workspace docs root:
+  ```bash
+  python3 scripts/tools/workspace_internal_path.py <WORKSPACE_SLUG>
+  ```
+  Record the output as `INTERNAL`. Use `INTERNAL` for all path substitutions below.
+
+**If no workspace is active** (harness root session):
+
+- The review scope is the **harness itself** — skills, hooks, scripts, CLAUDE.md.
+- Use the harness-root paths below (no `INTERNAL` substitution needed).
+
+### 1b — Determine warm/cold mode
+
+- **Warm mode** (in-session): you have direct recall of this session's events.
+  Use recall as primary signal; files confirm or extend it.
+- **Cold mode** (periodic audit): no session recall. Files are the only signal.
+
+### 1c — Read context files
+
+```bash
+python3 scripts/tools/current_session.py
+# workspace: python3 scripts/tools/current_session.py --sessions <INTERNAL>/sessions.md
+
+python3 scripts/tools/extract_session_brief.py
+# workspace: python3 scripts/tools/extract_session_brief.py --sessions <INTERNAL>/sessions.md
+
+python3 scripts/tools/extract_opus_key_sections.py --with-carry-forwards
+# workspace: add --opus <INTERNAL>/opus_notes.md
 ```
 
 Then read:
-1. `CLAUDE.md` — Session Start Protocol section and Working Style
+1. `CLAUDE.md` — Session Start Protocol section and Working Style (harness root always)
 2. `.claude/skills/session-start/SKILL.md`
 3. `.claude/skills/session-close/SKILL.md`
-4. `ls scripts/tools/` and `ls scripts/hooks/` — inventory what exists
-5. `.claude/settings.json` — which hooks are wired and how
-6. `docs/sessions.md` — last 20 lines of Session Log (session frequency/length signal)
-7. `docs/tickets/INDEX.md` — open tickets (to avoid duplicating existing tracking)
+4. `ls scripts/tools/` and `ls scripts/hooks/` — inventory what exists (harness root always)
+5. `.claude/settings.json` — which hooks are wired and how (harness root always)
+6. Sessions log — last 20 lines (frequency/length signal):
+   - harness root: `docs/sessions.md`
+   - workspace: `<INTERNAL>/sessions.md`
+7. Tickets index — open tickets (avoid duplicating existing tracking):
+   - harness root: `docs/tickets/INDEX.md`
+   - workspace: `<INTERNAL>/tickets/INDEX.md`
 
-For workspace sessions, substitute `<INTERNAL>/sessions.md`, `<INTERNAL>/tickets/INDEX.md`,
-etc. per session-start workspace path substitution rules.
-
-Do **not** read individual ticket files, `opus_notes.md` in full, or any production source.
+Do **not** read individual ticket files, full `opus_notes.md`, or any production source.
 
 ---
 
@@ -68,6 +98,9 @@ If `workflow_telemetry: true` is set in `harness.yaml`, run:
 ```bash
 python3 scripts/tools/analyze_tool_log.py --session S[CURRENT_SESSION]
 ```
+
+This always reads from the harness-root `.git/session_tool_log.jsonl` — telemetry is
+global regardless of workspace. Filter by session to isolate workspace-session traffic.
 
 Use the output as objective signal alongside qualitative findings. If telemetry is
 disabled or the log is empty, note it in the output and move on.
@@ -141,10 +174,10 @@ Also ask (warm mode):
 
 ### Dimension 5 — Growing files and SKILL gaps
 
-**Growing files — check:**
-- `docs/sessions.md` Session Log — one line per session, never trimmed
-- `docs/opus_notes.md` — should be held to ~2 sessions by rotation script
-- `docs/archive/` — should grow but not be re-read
+**Growing files — check** (use workspace paths when in a workspace):
+- sessions.md Session Log — one line per session, never trimmed
+- opus_notes.md — should be held to ~2 sessions by rotation script
+- archive/ — should grow but not be re-read
 
 For each: at what line count does it become a meaningful token cost? Is there already
 a rotation/archiving mechanism?
@@ -199,8 +232,10 @@ Present each as:
 > Open this ticket? [y/n]
 
 Only write the ticket file after the user confirms. Use `docs/tickets/TEMPLATE.md`.
-Assign the next available T-number by checking the highest existing ID in
-`docs/tickets/open/` and `docs/archive/`.
+Assign the next available T-number by checking the highest existing ID in the active
+tickets location:
+- harness root: `docs/tickets/open/` and `docs/archive/`
+- workspace: `<INTERNAL>/tickets/open/` and `<INTERNAL>/archive/`
 
 Low-severity findings: batch them and ask once whether to open all, some, or skip.
 
@@ -209,7 +244,8 @@ Low-severity findings: batch them and ask once whether to open all, some, or ski
 ## Step 6 — Log to sessions.md (optional)
 
 If the review surfaced meaningful findings, add a brief note to the **Active Work**
-section of sessions.md:
+section of the active sessions.md (`docs/sessions.md` at harness root,
+`<INTERNAL>/sessions.md` in a workspace):
 
 ```
 Workflow review: [N] friction points; [N] tickets proposed; [N] opened.
