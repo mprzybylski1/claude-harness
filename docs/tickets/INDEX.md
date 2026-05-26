@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S19 2026-05-26. 2 open tickets.
+Generated S19 2026-05-26. 1 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -11,11 +11,9 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Medium (1)
+## Medium (0)
 
-| ID | Title | Phase | Layer | Age |
-|----|-------|-------|-------|-----|
-| T101 | repo_hygiene.py: add WARN check for pytest --collect-only errors | Ph2 | tooling | this session |
+*(none)*
 
 ## Low (1)
 

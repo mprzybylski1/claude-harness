@@ -13,6 +13,7 @@ Usage:
 """
 
 import re
+import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import datetime
@@ -181,6 +182,40 @@ def _is_extra_exempt(rel: str, extra: set[str]) -> bool:
     return False
 
 
+def check_test_imports(tests_dir: Path) -> list[Finding]:
+    """WARN for each test file that fails pytest --collect-only (broken imports).
+
+    Best-effort: if pytest is unavailable or the tests dir doesn't exist, returns [].
+    """
+    if not tests_dir.is_dir():
+        return []
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pytest", "--collect-only", "-q", str(tests_dir)],
+            capture_output=True, text=True,
+            timeout=30,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return []
+
+    if result.returncode == 0:
+        return []
+
+    findings = []
+    combined = result.stdout + result.stderr
+    # Pytest reports "ERROR collecting <file>" and "ImportError: ..." lines
+    for line in combined.splitlines():
+        if "ERROR collecting" in line or "ImportError" in line or "ModuleNotFoundError" in line:
+            findings.append(Finding(
+                severity="WARN",
+                category="test-import-error",
+                location="tests/",
+                detail=line.strip()[:120],
+                hint="Fix the import error — broken test files prevent the full suite from running",
+            ))
+    return findings
+
+
 def check_stale_files() -> list[Finding]:
     findings = []
     for severity, rel, hint in STALE_FILES:
@@ -267,7 +302,18 @@ def check_stale_ops_digest() -> list[Finding]:
 def main() -> None:
     warn_only = "--warn-only" in sys.argv
 
-    findings = check_stale_files() + check_grep_patterns() + check_stale_ops_digest()
+    tests_dir = REPO_ROOT / "tests"
+    for i, arg in enumerate(sys.argv):
+        if arg == "--tests-dir" and i + 1 < len(sys.argv):
+            tests_dir = Path(sys.argv[i + 1])
+            break
+
+    findings = (
+        check_stale_files()
+        + check_grep_patterns()
+        + check_stale_ops_digest()
+        + check_test_imports(tests_dir)
+    )
 
     if warn_only:
         findings = [f for f in findings if f.severity == "WARN"]
