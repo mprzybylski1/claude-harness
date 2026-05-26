@@ -64,6 +64,19 @@ This file provides guidance to Claude Code when working in this repository.
 `config.yaml` controls [what]. Changing [X setting] affects [Y behaviour].
 -->
 
+### Hook paths in `.claude/settings.json`
+
+Hook commands use the **absolute** harness path
+(`/Users/mprzybylski/PycharmProjects/claude-harness/...`) rather than
+`$CLAUDE_PROJECT_DIR`. The env var was empty in the hook subshell on this Claude Code
+build, so every hook (telemetry, ticket ACs, index regen, skill-bash check, session-log
+check) silently failed with `python3: can't open file '/scripts/hooks/...'` — bash exits
+non-zero before Python runs, and Claude Code discards the hook exit code, so nothing
+surfaces in `.git/session_tool_log.errors`.
+
+If the harness is ever cloned to a different path, update the five `command:` lines in
+`.claude/settings.json` to match. Diagnosed S3 2026-05-26.
+
 ---
 
 ## Session Start Protocol
