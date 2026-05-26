@@ -315,6 +315,22 @@ class TestAnalyzeToolLog:
         )
         assert "Edit × 2" in result.stdout
 
+    def test_retry_detection_different_path_not_flagged(self, tmp_path):
+        """Two Edit calls within 5s on DIFFERENT files must not appear as a retry."""
+        log = tmp_path / "tool_log.jsonl"
+        ts = time.time()
+        records = [
+            {"ts": ts, "tool": "Edit", "path": "a.py", "exit": 0, "session": "S1"},
+            {"ts": ts + 3, "tool": "Edit", "path": "b.py", "exit": 0, "session": "S1"},
+        ]
+        _make_log(log, records)
+        result = subprocess.run(
+            [sys.executable, str(ANALYZE), "--log", str(log)],
+            capture_output=True, text=True,
+        )
+        assert "Edit × 2" not in result.stdout, \
+            "Different-path same-tool calls must not be flagged as retries"
+
     def test_malformed_lines_skipped_and_reported(self, tmp_path):
         """Malformed JSON lines are silently skipped; count shown in header."""
         log = tmp_path / "tool_log.jsonl"

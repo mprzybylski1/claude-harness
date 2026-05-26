@@ -14,7 +14,7 @@ Output sections:
     1. Tool call frequency by type
     2. Top-10 most-read files
     3. Top-10 most-edited files
-    4. Error / retry sequences (same tool within 30s)
+    4. Error / retry sequences (same tool + same command/path within 30s)
     5. Session-start and session-close tool-call costs
 """
 from __future__ import annotations
@@ -69,14 +69,14 @@ def _top_files(records: list[dict], tool_names: set[str], n: int = 10) -> str:
 
 
 def _retry_sequences(records: list[dict]) -> str:
-    """Find same-tool calls within _RETRY_WINDOW_S — likely retries.
+    """Find same-tool + same-path calls within _RETRY_WINDOW_S — likely retries.
 
-    Computed per-session to avoid false positives at session boundaries.
+    Requires both the tool name AND the path/command to be identical so that
+    normal incremental work (consecutive Bash calls with different commands) is
+    not flagged. Computed per-session to avoid false positives at boundaries.
     """
     by_session: dict[str, list[dict]] = defaultdict(list)
     for r in records:
-        # Records with no session field (malformed) group under "" — they share a bucket
-        # but the empty key is never printed as a session label in output (S9 #14).
         by_session[r.get("session") or ""].append(r)
 
     retries: list[str] = []
@@ -85,12 +85,15 @@ def _retry_sequences(records: list[dict]) -> str:
             prev, cur = sess_records[i - 1], sess_records[i]
             prev_tool = prev.get("tool") or ""
             cur_tool = cur.get("tool") or ""
-            if not prev_tool or not cur_tool:
+            prev_path = prev.get("path") or ""
+            cur_path = cur.get("path") or ""
+            if not prev_tool or not cur_tool or not cur_path:
                 continue
             if (prev_tool == cur_tool
+                    and prev_path == cur_path
                     and cur.get("ts", 0) - prev.get("ts", 0) <= _RETRY_WINDOW_S):
                 delta = cur.get("ts", 0) - prev.get("ts", 0)
-                path = (cur.get("path") or "")[:60]
+                path = cur_path[:60]
                 retries.append(f"  {cur_tool} × 2 within {delta:.1f}s  path={path!r}")
     return "\n".join(retries) if retries else "  (none)"
 
@@ -132,7 +135,7 @@ def report(log_path: Path, session_filter: str | None) -> str:
         "## Tool call frequency\n" + _frequency(records),
         "## Top-10 most-read files\n" + _top_files(records, read_tools),
         "## Top-10 most-edited files\n" + _top_files(records, edit_tools),
-        "## Error / retry sequences (same tool ≤30s)\n" + _retry_sequences(records),
+        "## Error / retry sequences (same tool + same path ≤30s)\n" + _retry_sequences(records),
         "## Tool-call cost per session\n" + _session_costs(records),
     ]
     return "\n\n".join(sections)
