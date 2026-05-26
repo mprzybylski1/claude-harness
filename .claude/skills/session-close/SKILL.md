@@ -163,8 +163,13 @@ python scripts/tools/prepare_opus_context.py \
   --output <INTERNAL>/opus_review_context.md
 ```
 
-Then spawn the **Opus review agent** (`subagent_type: "general-purpose"`, `model: "opus"`,
-`run_in_background: true`) with the workspace-scoped context:
+Then spawn the **Opus review agent** (`subagent_type: "general-purpose"`, `model: "opus"`)
+with the workspace-scoped context.
+
+<!-- TODO T078: background agents are denied Read/Bash on workspace repo paths — the agent
+     inherits a more restrictive permission set than the main session and the workspace
+     path is not on the implicit allow-list. Use foreground (no run_in_background) for
+     workspace sessions until T078 is resolved. Harness-root sessions may use background. -->
 
 ```
 You are doing a post-session review for [WORKSPACE NAME].

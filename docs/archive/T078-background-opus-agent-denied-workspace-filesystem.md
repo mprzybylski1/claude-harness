@@ -2,11 +2,11 @@
 id: T078
 title: Background Opus agent denied filesystem access to workspace repo
 severity: medium
-status: open
+status: closed
 phase: 2
 layer: process
 opened: S16 2026-05-26
-closed:
+closed: S17 2026-05-26
 ---
 
 ## Problem
@@ -35,7 +35,7 @@ Option 1 is the correct fix; option 2 is an acceptable interim if option 1 is co
 
 - [ ] Post-session Opus review agent with `run_in_background: true` can read files in the
   workspace repo path declared in `workspace.yaml`.
-- [ ] OR: `session-close` SKILL is updated to use foreground review for workspace sessions
+- [x] OR: `session-close` SKILL is updated to use foreground review for workspace sessions
   with a `# TODO T078` comment, and this ticket is updated to reflect the workaround.
 
 ## Notes
@@ -46,4 +46,6 @@ workspace session.
 
 ## Resolution
 
-(Fill in on close.)
+Implemented option 2 (acceptable interim): updated session-close SKILL.md to use foreground Opus review for workspace sessions. Removed run_in_background: true from the workspace Opus agent spawn instruction and added a HTML comment block (TODO T078) documenting the root cause — background agents inherit a more restrictive permission set and cannot access workspace repo paths outside the harness. Harness-root sessions are unaffected and may still use background. Option 1 (programmatic permission allow-list) deferred: the Agent tool has no permissions parameter to set at spawn time.
+
+Closed S17 2026-05-26.
