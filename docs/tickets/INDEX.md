@@ -1,17 +1,15 @@
 # Ticket Index
 
-Generated S19 2026-05-26. 6 open tickets.
+Generated S19 2026-05-26. 5 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
 
 *(none)*
 
-## High (1)
+## High (0)
 
-| ID | Title | Phase | Layer | Age |
-|----|-------|-------|-------|-----|
-| T091 | Fix _parse_fix_commit to handle --git-dir= and --work-tree= flag forms | Ph2 | tooling | this session |
+*(none)*
 
 ## Medium (1)
 
