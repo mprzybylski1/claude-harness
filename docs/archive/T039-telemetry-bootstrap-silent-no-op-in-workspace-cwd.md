@@ -2,7 +2,7 @@
 id: T039
 title: Telemetry bootstrap silently no-ops when session runs from a workspace cwd
 severity: medium
-status: open
+status: closed
 phase: 2
 layer: infra
 opened: S9 2026-05-25
@@ -100,4 +100,22 @@ the bug is a missing test for that scenario. Add the test before
 re-fixing.
 
 ## Resolution
-(Fill in on close.)
+
+**Root cause confirmed:** Hook commands in `.claude/settings.json` used relative paths
+(`python3 scripts/hooks/log_tool_usage.py`). When Claude Code runs hooks from a workspace
+cwd (e.g. `workspaces/scrabble-score/`), the shell resolves the path relative to that
+cwd — no `scripts/` directory exists there, so the subprocess silently fails to start.
+No error file is written, sentinel is never touched, no log entries appear.
+
+**Fix:** Changed all four hook commands in `.claude/settings.json` to use absolute paths:
+```json
+"command": "bash -c 'python3 \"/home/marcin/PycharmProjects/claude-harness/scripts/hooks/log_tool_usage.py\"'"
+```
+The hook scripts themselves already derive `ROOT` from `Path(__file__).resolve().parents[2]`,
+so they are cwd-independent once invoked. The only broken link was the invocation path.
+
+**Smoke test added:** `test_bootstrap_works_from_workspace_cwd` in `tests/test_telemetry.py`
+runs the hook via absolute script path with `cwd=tmp_path` (non-harness-root) and asserts
+the sentinel is created. Exercises the exact scenario that was silently failing.
+
+Closed S9 2026-05-26.

@@ -125,6 +125,36 @@ class TestLogToolUsageHook:
             elif not sentinel_existed and sentinel.exists():
                 sentinel.unlink()
 
+    def test_bootstrap_works_from_workspace_cwd(self, tmp_path):
+        """Hook invoked via absolute path from a non-harness-root cwd still bootstraps.
+
+        Regression test for T039: settings.json previously used a relative
+        'python3 scripts/hooks/...' command, which silently failed when Claude Code
+        ran hooks from a workspace subdirectory (no 'scripts/' dir there).
+        The fix uses an absolute path; this test verifies the sentinel is created
+        even when the subprocess cwd is outside the harness root.
+        """
+        sentinel = ROOT / ".git" / "workflow_telemetry_on"
+        sentinel_existed = sentinel.exists()
+        if sentinel_existed:
+            sentinel.unlink()
+        try:
+            result = subprocess.run(
+                [sys.executable, str(HOOK)],  # absolute path — mirrors fixed settings.json
+                input=json.dumps({"tool_name": "Read", "tool_input": {"file_path": "x.py"}}),
+                capture_output=True, text=True,
+                cwd=str(tmp_path),  # non-harness-root cwd — simulates workspace session
+            )
+            assert result.returncode == 0
+            assert sentinel.exists(), (
+                "Bootstrap must create sentinel even when cwd is not the harness root"
+            )
+        finally:
+            if sentinel_existed and not sentinel.exists():
+                sentinel.touch()
+            elif not sentinel_existed and sentinel.exists():
+                sentinel.unlink()
+
     def test_exits_zero_with_any_state(self):
         """Hook exits 0 regardless of telemetry state (never breaks tool calls)."""
         payload = {"tool_name": "Edit", "tool_input": {"file_path": "foo.py"}}

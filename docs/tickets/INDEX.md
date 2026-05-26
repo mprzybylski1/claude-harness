@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S9 2026-05-25. 1 open tickets.
+Generated S9 2026-05-26. 0 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -11,11 +11,9 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Medium (1)
+## Medium (0)
 
-| ID | Title | Phase | Layer | Age |
-|----|-------|-------|-------|-----|
-| T039 | Telemetry bootstrap silently no-ops when session runs from a workspace cwd | Ph2 | infra | this session |
+*(none)*
 
 ## Low (0)
 
