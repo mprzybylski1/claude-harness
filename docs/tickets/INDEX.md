@@ -1,17 +1,15 @@
 # Ticket Index
 
-Generated S16 2026-05-26. 5 open tickets.
+Generated S16 2026-05-26. 4 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
 
 *(none)*
 
-## High (1)
+## High (0)
 
-| ID | Title | Phase | Layer | Age |
-|----|-------|-------|-------|-----|
-| T075 | close_ticket.py clobbers harness INDEX.md from workspace context | Ph2 | process | this session |
+*(none)*
 
 ## Medium (3)
 
