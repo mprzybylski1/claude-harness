@@ -37,22 +37,6 @@ Files changed:
 Tickets opened: T043–T050
 Tickets closed: T039, T040, T041, T042, T045, T046, T047, T048
 
-**S8 — closed T034–T038 (Opus carry-forward fixes: ticket attribution, telemetry hardening, fail-closed YAML, retry session isolation, invariants source labeling)**
-
-Files changed:
-- `scripts/hooks/regenerate_ticket_index.py` — T034: passes --sessions to get_current_session in workspace mode; _is_closed_ticket uses path-component check
-- `scripts/hooks/log_tool_usage.py` — T035: bootstrap exits after sentinel touch (drops first record cleanly); `_extract_exit` handles non-dict tool_response
-- `scripts/tools/toggle_telemetry.py` — T035: regex tightened to avoid `trueblue` false match
-- `scripts/hooks/check_session_log.py` — T035: removed dead sessions_path branch; sessions_display pattern for clean error messages
-- `scripts/tools/harness_config.py` — T036: load_for_repo exits 2 on malformed workspace harness.yaml (fail-closed)
-- `scripts/tools/analyze_tool_log.py` — T037: _retry_sequences groups by session before computing pairs
-- `scripts/tools/prepare_opus_context.py` — T038: labels invariants source (repo-local vs harness fallback) in context header
-- `tests/test_telemetry.py` — T033/T035: test_exits_silently_when_both_off also disables yaml; bootstrap test; test_exits_on_invalid_yaml uses subprocess/exit 2
-- `tests/test_workspace_path_flags.py` — T036: test_exits_on_invalid_yaml updated to expect exit 2
-
-Tickets opened: (none)
-Tickets closed: T034, T035, T036, T037, T038
-
 Remaining open items: T000 stale template row in generate_ticket_index.py (pre-existing)
 
 ---
