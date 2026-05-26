@@ -39,6 +39,34 @@ def get_current_session(project_root: str, sessions_file: str | None = None) -> 
     return None
 
 
+# Module-level cache of docs_path ticket roots → workspace dir. Populated once per
+# process on first slow-path call. Eliminates O(edits × workspaces) YAML loads (T043).
+_docs_path_cache: dict[str, Path] | None = None
+
+
+def _get_docs_path_map() -> dict[str, Path]:
+    """Return {str(docs/tickets path): ws_dir} built once per process."""
+    global _docs_path_cache
+    if _docs_path_cache is not None:
+        return _docs_path_cache
+    result: dict[str, Path] = {}
+    try:
+        ws_base = workspaces_base()
+        if ws_base.exists():
+            for ws_dir in sorted(ws_base.iterdir()):
+                if not ws_dir.is_dir() or ws_dir.name == "archive":
+                    continue
+                cfg = load_workspace(ws_dir)
+                if not cfg or not cfg.get("docs_path"):
+                    continue
+                docs = _internal_dir(ws_dir, cfg)
+                result[str(docs / "tickets")] = ws_dir
+    except Exception:
+        pass
+    _docs_path_cache = result
+    return result
+
+
 def _detect_workspace_from_path(file_path: str) -> Path | None:
     """Return workspace dir if file_path is under any workspace's internal/tickets/."""
     try:
@@ -55,19 +83,12 @@ def _detect_workspace_from_path(file_path: str) -> Path | None:
             pass
 
         # Slow path: file may be under a custom docs_path in a workspace repo.
-        if ws_base.exists():
-            for ws_dir in sorted(ws_base.iterdir()):
-                if not ws_dir.is_dir() or ws_dir.name == "archive":
-                    continue
-                cfg = load_workspace(ws_dir)
-                if not cfg or not cfg.get("docs_path"):
-                    continue
-                docs = _internal_dir(ws_dir, cfg)
-                try:
-                    resolved.relative_to(docs / "tickets")
-                    return ws_dir
-                except ValueError:
-                    pass
+        # Uses a module-level cache so YAML is loaded once per process (T043).
+        docs_map = _get_docs_path_map()
+        resolved_str = str(resolved)
+        for tickets_root, ws_dir in docs_map.items():
+            if resolved_str.startswith(tickets_root + os.sep) or resolved_str == tickets_root:
+                return ws_dir
     except Exception:
         pass
     return None
@@ -105,7 +126,9 @@ def _detect_sessions_file(file_path: str, project_root: str) -> str:
 
 def _is_closed_ticket(file_path: str) -> bool:
     """Return True if the file is under a tickets/closed/ directory."""
-    parts = Path(file_path).resolve().parts
+    # Lexical parts only — Path.resolve() follows symlinks and can diverge across Python
+    # versions; path-component check does not require the file to exist (S9 #9).
+    parts = Path(file_path).parts
     for i in range(1, len(parts)):
         if parts[i - 1] == "tickets" and parts[i] == "closed":
             return True

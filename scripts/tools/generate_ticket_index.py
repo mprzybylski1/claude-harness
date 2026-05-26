@@ -165,20 +165,22 @@ def render_index(tickets: list[dict], current_session: int, today: str) -> str:
             lines.append(f"| {t['id']} | {t['title']} | {phase_label} | {layer} | {age_str} |")
         lines.append("")
 
-    # Aging summary
+    # Aging summary — always emit header so absence of content is unambiguous (S9 #6).
     aging = [
         t for t in tickets
         if session_number(t["opened"]) is not None
         and (current_session - session_number(t["opened"])) >= AGING_THRESHOLD
     ]
+    lines.append("## Aging Tickets (open ≥ 10 sessions)")
+    lines.append("")
     if aging:
-        lines.append("## Aging Tickets (open ≥ 10 sessions)")
-        lines.append("")
         aging.sort(key=lambda t: session_number(t["opened"]) or 999)
         for t in aging:
             age = current_session - session_number(t["opened"])
             lines.append(f"- **{t['id']}** — {t['title']} (open {age} sessions, since {t['opened']})")
-        lines.append("")
+    else:
+        lines.append("*(none)*")
+    lines.append("")
 
     return "\n".join(lines)
 

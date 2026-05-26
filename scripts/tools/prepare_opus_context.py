@@ -231,6 +231,7 @@ def check_utcnow(root: Path) -> str:
         ["grep", "-rn", "--include=*.py",
          "--exclude=prepare_opus_context.py",   # avoid self-match on grep pattern string
          "--exclude=run_static_analysis.py",    # imports check_utcnow — not a usage site
+         "--exclude=harness_config.py",         # docstring lists 'utcnow' as example name
          "utcnow"] + existing,
         capture_output=True, text=True,
     )
@@ -398,12 +399,16 @@ def main() -> None:
             print(f"WARNING: --opus {opus_path} not found, skipping", file=sys.stderr)
 
     # ── docs/architecture_invariants.md ──────────────────────────────────────
-    # When --repo points at a workspace, prefer the repo's own invariants file.
+    # When --repo is given, prefer the repo's own invariants file.
+    # When --repo is absent, repo_root == ROOT, so the file is harness root (S9 #10).
     inv_path = repo_root / "docs" / "architecture_invariants.md"
-    inv_source = "repo-local"
-    if not inv_path.exists():
+    if args.repo and inv_path.exists():
+        inv_source = "repo-local"
+    elif args.repo:
         inv_path = ROOT / "docs" / "architecture_invariants.md"
         inv_source = "harness fallback"
+    else:
+        inv_source = "harness root"
     if inv_path.exists():
         parts.append(_section(
             f"docs/architecture_invariants.md  [Source: {inv_source} — {inv_path}]",

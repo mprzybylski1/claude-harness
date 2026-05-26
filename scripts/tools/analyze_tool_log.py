@@ -75,6 +75,8 @@ def _retry_sequences(records: list[dict]) -> str:
     """
     by_session: dict[str, list[dict]] = defaultdict(list)
     for r in records:
+        # Records with no session field (malformed) group under "" — they share a bucket
+        # but the empty key is never printed as a session label in output (S9 #14).
         by_session[r.get("session") or ""].append(r)
 
     retries: list[str] = []

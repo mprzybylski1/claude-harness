@@ -361,10 +361,12 @@ class TestLoadForRepoFallback:
         repo.mkdir()
         (repo / "harness.yaml").write_text(": invalid: yaml: }{")
         # Call via subprocess so sys.exit(2) doesn't kill the test process
+        tools_path = str(ROOT / "scripts" / "tools")
+        repo_str = str(repo)
         result = subprocess.run(
             [sys.executable, "-c",
-             f"import sys; sys.path.insert(0, '{ROOT}/scripts/tools');"
-             f"import harness_config as _hc; _hc.load_for_repo('{repo}')"],
+             f"import sys; sys.path.insert(0, {tools_path!r});"
+             f"import harness_config as _hc; _hc.load_for_repo({repo_str!r})"],
             capture_output=True, text=True,
         )
         assert result.returncode == 2

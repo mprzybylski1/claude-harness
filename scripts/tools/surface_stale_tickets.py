@@ -57,6 +57,10 @@ def parse_aging_section(index_path: Path = INDEX_MD, threshold: int = TRIAGE_THR
 
     aging_section = content[aging_match.start():]
 
+    # Generator emits "*(none)*" when no stale tickets exist (S9 #6) — clean state.
+    if re.search(r"^\*\(none\)\*", aging_section, re.MULTILINE):
+        return ParseResult([], section_found=True)
+
     pattern = re.compile(
         r"-\s+\*\*(T\d+)\*\*\s+—\s+(.+?)\s+\(open\s+(\d+)\s+sessions",
         re.MULTILINE,
@@ -64,7 +68,7 @@ def parse_aging_section(index_path: Path = INDEX_MD, threshold: int = TRIAGE_THR
     all_entries = list(pattern.finditer(aging_section))
 
     if not all_entries:
-        # Header exists but zero list items matched — likely format drift
+        # Header exists but zero list items and no *(none)* — likely format drift
         return ParseResult(
             [],
             section_found=False,

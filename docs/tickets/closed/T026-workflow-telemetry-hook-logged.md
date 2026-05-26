@@ -42,3 +42,5 @@ cluttering the working tree, and is naturally scoped to one repo checkout.
 ## Resolution
 
 S6 2026-05-25: Implemented `scripts/hooks/log_tool_usage.py` (PostToolUse; appends JSON to `.git/session_tool_log.jsonl`; rotation via keep-last-N truncation; off by default). Implemented `scripts/tools/analyze_tool_log.py` (frequency, top files, retry sequences, per-session costs; `--log`, `--session` flags). Added opt-in comment block to `harness.yaml` with `workflow_telemetry` and `workflow_telemetry_max_lines`. Added Step 1b to workflow-review SKILL.md. Hook registered in `.claude/settings.json` PostToolUse with `".*"` matcher.
+
+**Policy update (S7 2026-05-25):** Default changed from opt-in to **default-on** (`workflow_telemetry: true` in `harness.yaml`, commit b6a82d9). The AC "off by default" above reflects the original S6 implementation; the S7 flip was a deliberate policy decision to accumulate baseline data immediately rather than waiting for opt-in. Opt out via `python scripts/tools/toggle_telemetry.py off`.

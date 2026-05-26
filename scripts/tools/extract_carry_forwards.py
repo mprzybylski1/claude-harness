@@ -29,7 +29,13 @@ _PAT_SESSION = re.compile(r'carry.forward\s+from\s+S(\d+)', re.IGNORECASE)
 
 
 def _current_session_number(notes_file: Path) -> int | None:
-    """Derive the session number from the most recent '# Opus Review — SN' header."""
+    """Derive the session number from the most recent '# Opus Review — SN' header.
+
+    Ages computed here are relative to the LAST WRITTEN REVIEW, not the live session.
+    During an active session (before session-close writes the new header) the current
+    session has no header yet, so ages are off by one. This is intentional — the script
+    is designed for session-start archaeology, not mid-session use.
+    """
     text = notes_file.read_text(encoding="utf-8")
     headers = re.findall(r'^#{1,2} Opus Review.*?S(\d+)', text, re.MULTILINE)
     if headers:
