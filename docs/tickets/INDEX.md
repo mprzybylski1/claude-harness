@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S19 2026-05-26. 3 open tickets.
+Generated S19 2026-05-26. 2 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -11,11 +11,10 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Medium (2)
+## Medium (1)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
-| T100 | close_ticket.py: add --tick-acs to auto-check ACs at close | Ph2 | tooling | this session |
 | T101 | repo_hygiene.py: add WARN check for pytest --collect-only errors | Ph2 | tooling | this session |
 
 ## Low (1)
