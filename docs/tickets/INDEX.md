@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S15 2026-05-26. 1 open tickets.
+Generated S15 2026-05-26. 0 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -15,11 +15,9 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Low (1)
+## Low (0)
 
-| ID | Title | Phase | Layer | Age |
-|----|-------|-------|-------|-----|
-| T050 | Split opus_notes archive by session range when over line threshold | Ph2 | tooling | 6 sessions |
+*(none)*
 
 ## Unknown (0)
 
