@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S9 2026-05-26. 6 open tickets.
+Generated S9 2026-05-26. 5 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -11,11 +11,10 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Medium (2)
+## Medium (1)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
-| T045 | close_ticket.py — single-command ticket closure | Ph2 | tooling | this session |
 | T046 | expand_carry_forward.py — surface Opus archive context by finding ID | Ph2 | tooling | this session |
 
 ## Low (4)

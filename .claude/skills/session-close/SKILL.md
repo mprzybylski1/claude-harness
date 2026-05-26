@@ -105,15 +105,21 @@ python scripts/tools/update_system_state.py
 This runs from harness root and reads `docs/sessions.md` for global phase status.
 If the workspace's session data should also update global state, do so manually.
 
-## Step 2 — Move closed tickets and write Resolution text
+## Step 2 — Close tickets
 
 For any ticket being closed this session:
-1. Tick all satisfied ACs. For incomplete items add `— DEFERRED to T[N]` or `— N/A: <reason>`.
-2. Move file from `<INTERNAL>/tickets/open/` to `<INTERNAL>/tickets/closed/`.
-3. Set frontmatter: `closed: S[CURRENT_SESSION] YYYY-MM-DD`
-4. Write Resolution section. First token must be `S[CURRENT_SESSION] YYYY-MM-DD:`.
+1. Tick all satisfied ACs in the ticket file. For incomplete items add `— DEFERRED to T[N]` or `— N/A: <reason>`.
+2. Run the closure script:
+   ```bash
+   python scripts/tools/close_ticket.py T### --resolution "What was done."
+   # or for workspace tickets: HARNESS_ROOT is auto-detected; no extra flags needed
+   # use --resolution-file /tmp/res.txt for multi-paragraph resolutions
+   # use --force to close despite unchecked ACs
+   ```
+   This updates frontmatter, replaces the Resolution placeholder, moves to archive/,
+   regenerates INDEX.md, and prints a suggested git commit message.
 
-**After writing Resolution, commit the workspace repo immediately** (see Commit discipline).
+**After running close_ticket.py, commit immediately** (see Commit discipline).
 
 ## Step 3 — Classify the session: code-touching or docs-only
 

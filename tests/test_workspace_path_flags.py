@@ -446,6 +446,120 @@ class TestIsClosedTicket:
         assert self.fn(path) is expected
 
 
+# ── Tests: close_ticket.py (T045) ────────────────────────────────────────────
+
+class TestCloseTicket:
+    """Round-trip tests for scripts/tools/close_ticket.py."""
+
+    OPEN_TICKET = """\
+---
+id: T999
+title: Synthetic test ticket
+severity: low
+status: open
+phase: 2
+layer: tooling
+opened: S1 2026-01-01
+closed:
+---
+
+## Problem
+
+Synthetic.
+
+## Acceptance Criteria
+
+- [x] AC one done
+- [x] AC two done
+
+## Resolution
+(Fill in on close.)
+"""
+
+    def _run(self, tmp_root: Path, *extra_args: str) -> subprocess.CompletedProcess:
+        """Run close_ticket.py with HARNESS_ROOT redirected to tmp_root."""
+        import os as _os
+        return subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "tools" / "close_ticket.py"), *extra_args],
+            capture_output=True, text=True,
+            env={**_os.environ, "HARNESS_ROOT": str(tmp_root), "PYTHONPATH": str(ROOT)},
+        )
+
+    def _setup(self, tmp_path: Path) -> Path:
+        """Build a minimal harness layout in tmp_path and return the open tickets dir."""
+        # Harness structure
+        docs = tmp_path / "docs"
+        (docs / "tickets" / "open").mkdir(parents=True)
+        (docs / "tickets" / "closed").mkdir(parents=True)
+        (docs / "archive").mkdir(parents=True)
+        (docs / "sessions.md").write_text(
+            "## Session Log\n\nS1 2026-01-01: init\n", encoding="utf-8"
+        )
+        # Stub generate_ticket_index.py so it exits cleanly
+        tools = tmp_path / "scripts" / "tools"
+        tools.mkdir(parents=True)
+        (tools / "generate_ticket_index.py").write_text("import sys; sys.exit(0)\n")
+        (tools / "current_session.py").write_text(
+            "import sys\nprint('S9')\n"
+        )
+        # Plant the ticket
+        ticket_path = docs / "tickets" / "open" / "T999-synthetic-test-ticket.md"
+        ticket_path.write_text(self.OPEN_TICKET, encoding="utf-8")
+        return ticket_path
+
+    def test_happy_path_closes_ticket(self, tmp_path):
+        """Round-trip: ticket moves to archive with updated frontmatter and resolution."""
+        ticket = self._setup(tmp_path)
+        result = self._run(tmp_path, "T999", "--resolution", "It worked.")
+        assert result.returncode == 0, result.stderr
+
+        archive = tmp_path / "docs" / "archive" / ticket.name
+        assert archive.exists(), "ticket must be in archive/"
+        assert not ticket.exists(), "ticket must be removed from open/"
+
+        content = archive.read_text()
+        assert "status: closed" in content
+        assert "closed: S9" in content
+        assert "It worked." in content
+
+    def test_unchecked_ac_blocks_closure(self, tmp_path):
+        """Ticket with an unchecked AC must be rejected without --force."""
+        self._setup(tmp_path)
+        # Replace with a version that has unchecked AC
+        ticket = tmp_path / "docs" / "tickets" / "open" / "T999-synthetic-test-ticket.md"
+        ticket.write_text(self.OPEN_TICKET.replace("- [x] AC one done", "- [ ] AC one done"))
+
+        result = self._run(tmp_path, "T999", "--resolution", "should fail")
+        assert result.returncode != 0
+        assert "unchecked" in result.stderr.lower()
+
+    def test_force_bypasses_ac_check(self, tmp_path):
+        """--force closes even with unchecked ACs."""
+        self._setup(tmp_path)
+        ticket = tmp_path / "docs" / "tickets" / "open" / "T999-synthetic-test-ticket.md"
+        ticket.write_text(self.OPEN_TICKET.replace("- [x] AC one done", "- [ ] AC one done"))
+
+        result = self._run(tmp_path, "T999", "--resolution", "forced close", "--force")
+        assert result.returncode == 0, result.stderr
+        archive = tmp_path / "docs" / "archive" / ticket.name
+        assert archive.exists()
+
+    def test_missing_ticket_exits_nonzero(self, tmp_path):
+        """Unknown ticket ID exits with a clear error."""
+        self._setup(tmp_path)
+        result = self._run(tmp_path, "T000", "--resolution", "no such ticket")
+        assert result.returncode != 0
+        assert "not found" in result.stderr.lower()
+
+    def test_prints_commit_suggestion(self, tmp_path):
+        """Output includes a suggested git commit message."""
+        self._setup(tmp_path)
+        result = self._run(tmp_path, "T999", "--resolution", "done")
+        assert result.returncode == 0
+        assert "git commit" in result.stdout
+        assert "T999" in result.stdout
+
+
 # ── Tests: surface_stale_tickets.py (T047) ───────────────────────────────────
 
 class TestSurfaceStaleTickets:
