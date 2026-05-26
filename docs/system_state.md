@@ -1,6 +1,6 @@
 # System State
 
-_Last updated: S16 2026-05-26_
+_Last updated: S17 2026-05-26_
 
 ---
 
@@ -23,15 +23,7 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Open Tickets
 
-**5 open tickets**
-
-| ID | Title | Phase | Age |
-|----|-------|-------|-----|
-| T079 | close_ticket.py should stage code/test files alongside the archive move | process | process | this session |
-| T078 | Background Opus agent denied filesystem access to workspace repo | Ph2 | process | this session |
-| T080 | Pre-commit hook blocks fix(TXXX) commits with no code files staged | process | process | this session |
-| T081 | log_tool_usage.py bootstrap-path errors bypass rate-limit | process | infra | this session |
-| T082 | close_ticket.py polish — _git_root_for stderr, path mismatch | process | process | this session |
+_No open tickets._
 
 ---
 

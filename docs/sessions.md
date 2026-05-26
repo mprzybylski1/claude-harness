@@ -19,22 +19,25 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Active Work
 
-**S16 — closed T073-T077 (5 tickets: log_tool_usage triad + 4 scrabble-score S4 findings); workflow-review opened T079-T082.**
+**S17 — closed T078–T085 (8 tickets); 0 open tickets at close.**
 
 Files changed:
-- `scripts/hooks/log_tool_usage.py` — T073: `fcntl.flock` on `_log_error` state RMW; `>` → `>=` for window reset; `.expanduser()` at workspace match site
-- `scripts/tools/generate_ticket_index.py` — T074: auto-descend into `open/` subdir when `--tickets-dir` passed; avoids scanning TEMPLATE.md
-- `scripts/tools/close_ticket.py` — T075: `_regenerate_index()` passes `--tickets-dir` and `--output` for workspace context; prevents harness INDEX.md clobber
-- `scripts/tools/rotate_opus_notes.py` — T076: `_SECTION_RE` changed to `^#{1,2} Opus Review` to match workspace h2 section format
-- `scripts/tools/classify_session.py` — T077: added `_classify_no_config()` conservative fallback for repos without `harness.yaml`
-- `tests/test_telemetry.py` — T073: boundary-reset test + 30-process concurrent test
-- `tests/test_workspace_path_flags.py` — T074+T075+T077: three new test classes
-- `tests/test_rotate_opus_notes.py` — T076: `TestRotateOpusNotesH2Format` class
+- `scripts/tools/close_ticket.py` — T079: `--files` flag; T082: `_git_root_for()` tuple return; T084: staged-files summary; T085: `--path-only` flag
+- `scripts/hooks/log_tool_usage.py` — T081: bootstrap guard + `state_ok` sentinel
+- `scripts/hooks/check_fix_commit_has_code.py` — T080: new PreToolUse hook (fix(TXXX) commits require staged code)
+- `.claude/settings.json` — T080: wired new hook
+- `.claude/skills/session-close/SKILL.md` — T078: foreground-only Opus for workspace sessions
+- `CLAUDE.md` — T079: `--files` usage example
+- `tests/test_close_ticket_stage_files.py` — T079 + T084: 9 tests total
+- `tests/test_telemetry.py` — T081: 3 new tests
+- `tests/test_workspace_path_flags.py` — T082: 4 new tests
+- `tests/test_check_fix_commit_has_code.py` — T080: 10 tests
+- `tests/test_close_ticket_path_only.py` — T085: 5 tests
 
-Tickets opened: T074-T078 from scrabble-score S4 handoff; T079-T082 from S16 workflow-review
-Tickets closed: T073 (log_tool_usage triad), T074 (generate_ticket_index wrong dir), T075 (close_ticket harness INDEX clobber), T076 (rotate_opus_notes regex), T077 (classify_session docs-for-code)
+Tickets closed: T078–T085 (8 tickets)
+Workflow review: surfaced 25% tool-call overhead for ticket mechanics; T083 confirmed stale (already fixed), T084+T085 implemented same session.
 
-Remaining open: T078 (background Opus filesystem access), T079-T082 (workflow-review backlog)
+Remaining open: none
 
 ---
 
@@ -59,3 +62,4 @@ S13 2026-05-26: hook portability (git rev-parse); closed T044, T055, T056, T058�
 S14 2026-05-26: closed T064–T071 (S13 workflow-review backlog); cross-process rate-limit, close_ticket git-staging, worktree docs; impl-review fixed 2 findings
 S15 2026-05-26: closed T072 (workspace git staging wrong repo) + T050 (opus archive tests); impl-review fixed 5 findings; all tickets closed
 S16 2026-05-26: closed T073-T077 (log_tool_usage triad, generate_ticket_index, close_ticket workspace index, rotate_opus_notes h2, classify_session no-yaml); workflow-review opened T079-T082
+S17 2026-05-26: closed T078-T085 (8 tickets: S16 workflow-review backlog + T083-T085 from S17 workflow-review); 0 open at close

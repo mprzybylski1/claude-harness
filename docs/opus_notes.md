@@ -1,159 +1,3 @@
-# Opus Review — S12 2026-05-26
-
-Scope: closed T057 (telemetry workspace-aware session stamping), reverted hook commands from `$CLAUDE_PROJECT_DIR` to absolute paths after diagnosing empty-env-var bug, three impl-review hardening fixes on `log_tool_usage.py`. ~225 insertions / 50 deletions across 6 files. Touched the file that's been carrying the unbounded `_log_error` carry-forward for 4 sessions — but did not address it.
-
-## Invariant Violations
-
-None. Static analysis is clean. Invariant 5 (workspace isolation) is *strengthened* by T057 — telemetry now records which workspace each tool call touched, giving the boundary check a forensic trail it lacked. `_detect_workspace` reads only cfg from `_list_workspaces()` and calls `is_within_workspace(Path(path), cfg)`; never reaches into a foreign workspace's files. The per-call sessions.md read uses cfg-derived paths only, no cross-workspace leakage.
-
-## Architectural Concerns
-
-1. **`scripts/hooks/log_tool_usage.py` — `_detect_workspace` inner `except Exception: continue` silently masks workspace-matching errors.** [Fail-closed violation in spirit] Malformed cfg that raises causes the loop to skip; if all raise, the tool call is stamped harness-root with no error trail. Fix: log the exception (rate-limited per #5) so cfg corruption surfaces.
-
-2. **`scripts/hooks/log_tool_usage.py` — Bash `=` value extractor mishandles chained `=`.** [Concrete bug, low impact] For `KEY=val=/path`, LHS-strip yields `val=/path` which fails the `startswith("/")` check and gets dropped. The heuristic is loose and untested.
-
-3. **`scripts/hooks/log_tool_usage.py` — `~/` paths in Bash commands never match workspaces.** [Concrete bug — REGRESSION introduced S12] `_candidate_paths` accepts tokens starting with `/` or `~/`, but `Path("~/foo")` does NOT expand `~`. Workspaces declare absolute paths, so `cat ~/PycharmProjects/scrabble-score/foo.md` is stamped as harness-root, not the workspace. Fix: `Path(path).expanduser()` before `is_within_workspace`.
-
-4. **`scripts/hooks/log_tool_usage.py` — `workspace_config` imported twice in `_detect_workspace`.** [Minor] Redundant but harmless. Pass `_wc` from `_list_workspaces` or hoist to module scope.
-
-5. **`scripts/hooks/log_tool_usage.py` — bootstrap-failure rate-limit STILL not addressed; S12 added MORE `_log_error` call sites.** [Carry-forward from S8 #4 / S9 #8 / S10 #8 / S11 #9 — 4 sessions unaddressed; aggravated by S12] Went from ~1-2 error sites pre-S12 to ~6 post-S12. Ticket overdue.
-
-6. **`scripts/hooks/log_tool_usage.py` — `ws_dir` resolution branch is asymmetric with `_session_for_workspace`'s cfg-first policy.** [Concern, minor] `main()` only computes `ws_dir` when `not ws_cfg.get("docs_path")`. A future change adding a docs_path edge case using ws_dir would silently break. Move ws_dir computation into `_session_for_workspace`.
-
-7. **Hook path revert is correct but silent-failure root cause not fixed.** [Architectural] CLAUDE.md documents that `$CLAUDE_PROJECT_DIR` is empty in the hook subshell; absolute paths work around this, but the "hook fails silently when bash can't find the script" mode persists for any future misconfiguration. Consider a startup self-test or trap-based marker.
-
-8. **Test gap: `_candidate_paths` `=`-stripping branch is uncovered.** Add tests for `--sessions=/path/file`, `KEY=val`, `KEY=val=/path` (Concern #2's ambiguous case).
-
-9. **Test gap: `_detect_workspace` inner-except branch is uncovered.** A regression that throws on cfg lookup wouldn't be caught.
-
-10. **Test gap: end-to-end `test_record_includes_workspace_field` does not cover the harness-root path.** Asserts workspace match only; no e2e counterpart for harness-root + empty workspace string.
-
-11. **`scripts/tools/extract_carry_forwards.py` — S9 #6 warning swallowed in brief.** [Carry-forward S9 #6 / S10 #4 / S11 #8 — 3 sessions, T055 still open]
-
-12. **`scripts/tools/surface_stale_tickets.py` — `*(none)*` literal duplicated.** [Carry-forward S10 #11 / S11 #10 — 2 sessions, T056 still open]
-
-13. **`scripts/hooks/regenerate_ticket_index.py:_get_docs_path_map` cache never invalidated.** [Carry-forward S10 #6 / S11 #11 — 2 sessions, no ticket]
-
-14. **`scripts/tools/close_ticket.py:189` — `ticket_path.unlink()` BOTH-locations failure mode.** [Carry-forward S10 #1 / S11 #1 — 2 sessions, no ticket]
-
-15. **`scripts/tools/close_ticket.py:34` — `_ws_internal_dir` unused import.** [Carry-forward S11 #4 — 1 session]
-
-16. **`scripts/tools/close_ticket.py` — re.sub injection fix and permissive-fallback content-preservation lack tests.** [Carry-forward S11 #5 / #6 — 1 session]
-
-## Suggested Next Session Focus
-
-- **Open and close a ticket for `log_tool_usage.py` `_log_error` rate-limit (S8 #4 et al, 4 sessions).** S12 added new error-emit sites; smallest scope: module-level counter + 60-second window, max ~10 errors per window. ~15 LoC + 2 tests.
-- **Tighten `_detect_workspace` silent-continue and `~/` expansion (Concerns #1 and #3).** Two small fixes in the file just touched. Bundles cleanly with the rate-limit ticket.
-- **Close T055 (carry-forward warning in brief) — 3 sessions unaddressed.** Was suggested #2 in both S10 and S11. Continued deferral is a pattern; either close it or close-by-policy.
-
-Opus carry-forwards (>= 2 sessions):
-S8 #4 / S9 #8 / S10 #8 / S11 #9: log_tool_usage.py `_log_error` rate-limit (4 sessions; aggravated by S12)
-S9 #6 / S10 #4 / S11 #8: extract_carry_forwards warning swallowed in brief — T055 (3 sessions)
-S10 #1 / S11 #1: close_ticket.py BOTH-locations on unlink failure (2 sessions, no ticket)
-S10 #11 / S11 #10: surface_stale_tickets *(none)* duplicated literal — T056 (2 sessions)
-S10 #6 / S11 #11: regenerate_ticket_index `_get_docs_path_map` cache invalidation (2 sessions, no ticket)
-
----
-
-# Opus Review S14
-
-Scope: 8 tickets closed (T064–T071) — cleared the entire S13 workflow-review backlog. Two impl-review fixes (PID-unique tmp filename, clarified git-staging warning) and three S13-post-review fixes (revert _detect_workspace return→continue, hook errors rstrip, check_utcnow skip meta-tests) landed mid-session via b79a37f and 9566ff2. ~520 insertions / ~80 deletions across 8 files. Backlog cleared, but a real regression introduced in `close_ticket.py` for workspace tickets — see Bug #1 below.
-
-## Invariant Violations
-
-None. Invariant 4 (fail-closed) is strengthened in close_ticket.py: `_git_stage` exits with code 2 when git operations fail rather than silently leaving things half-done. Invariant 5 (workspace isolation) unchanged — telemetry boundary intact, no cross-workspace reads in S14 diff.
-
-## Architectural Concerns
-
-1. **`scripts/tools/close_ticket.py:218-224` — `_git_stage` is broken for workspace tickets with external `docs_path`.** [Concrete bug, high impact — REGRESSION introduced S14] When `internal is not None` and the workspace's `docs_path` points outside the harness git tree (e.g. scrabble-score's `/Users/mprzybylski/Documents/Projects/ScrabbleScore/.harness`), `_git_stage` calls `git -C $ROOT add /Users/...` which fails with `fatal: '<path>' is outside repository at '<ROOT>'`. The archive has already been moved; the tool then `sys.exit(2)` with the "stage manually" warning. So every workspace ticket closure now exits non-zero in production, even when everything else succeeded. Fix: if `internal` is not None and not under `ROOT`, either skip `_git_stage` entirely (the user manages that repo separately) or detect the correct git repo for `ticket_path` (`git -C str(ticket_path.parent)` with rev-parse to find the toplevel). Tests don't catch this because `test_workspace_flag_disambiguates` uses a tmp_path-internal workspace which IS inside the same git repo. The Scrabble Score workspace cfg in the live repo would exercise the bug.
-
-2. **`scripts/hooks/log_tool_usage.py:179-209` — cross-process state file has a TOCTOU race that can overrun the rate-limit substantially.** The new flow is: read state → check window → increment → atomic-rename write. With concurrent hook processes (which happen when batch tool calls fire), both processes can read count=N at the same time, both write count=N+1, both append errors. The atomic rename only guarantees the *final state file* isn't half-written; it does NOT prevent lost-update increments. T071's cross-process test is sequential (one subprocess at a time), so it cannot detect this. With ~10 concurrent hooks (realistic during a multi-Edit operation), the effective per-window cap could be ~20+ errors. Fix options: (a) `fcntl.flock` on the state file; (b) accept the looseness and document explicitly that the cap is approximate; (c) bound errors via log-file truncation instead of a counter.
-
-3. **`scripts/tools/close_ticket.py:175-197` — `_atomic_move` + `_git_stage` ordering means the index ends up in an inconsistent state if `_git_stage` exits.** Sequence: (1) `_atomic_move` moves ticket to archive and unlinks open/ (commit-pending). (2) `_regenerate_index` updates INDEX.md (commit-pending). (3) `_git_stage` fails — exits 2 with warning. Result: filesystem is correct, but nothing is staged. Then the user runs `git status` and may not realize the workspace ticket was actually closed (the warning IS printed, but the exit code is misleading — most CI/scripts treat nonzero as "the operation failed"). Either swap the order so staging happens FIRST (in dry-run mode, then commit only after move) — complex — or change the warning to "close succeeded; manual staging needed" and exit 0 with a distinct status indicator. The current behavior conflates "filesystem moved + not staged" with "operation failed".
-
-4. **`scripts/hooks/log_tool_usage.py:189` — window-expiry check uses `>` not `>=`.** If `_ERR_WINDOW_SECS = 60` exactly and now - window_start == 60.0, the condition `60.0 > 60` is false and the count is NOT reset. Edge case, but: combined with the file-state JSON having float precision, a borderline case can extend the window by one tick. Use `>=`.
-
-5. **Carry-forward from S12: `_ws_internal_dir` unused import in `close_ticket.py:34` — STILL NOT ADDRESSED.** Now 3 sessions unaddressed (S11 #4, S12 #15, S13 carry-forward, S14). Trivial fix; pattern is to leave it forever.
-
-6. **Carry-forward from S12: `close_ticket.py` re.sub injection fix and permissive-fallback content-preservation lack tests — STILL NOT ADDRESSED.** Now 3 sessions unaddressed.
-
-7. **Carry-forward from S12: `_candidate_paths` `=`-chain and `~/`-expansion tests — `~/` expansion still not fixed.** S12 #3 noted that `Path("~/foo")` is not expanded before `is_within_workspace`; S13 noted it again; S14 didn't touch it. The bash token extractor accepts `~/...` (line 85, 87) but never calls `.expanduser()` at the workspace-match site. Trivial fix.
-
-## Architectural Concerns — Test Gaps
-
-1. **`_git_stage` workspace path (Concern #1) is entirely untested for the real configuration.** Tests live in a tmp_path that's all one git repo. A test that mocks an `internal` path outside `ROOT` would have caught this before S14 close.
-
-2. **`_log_error` cross-process race (Concern #2) is not tested.** The new test `test_rate_limit_cross_process` runs 100 subprocesses *sequentially* (line 753 of test_telemetry.py: `for _ in range(100): subprocess.run(...)`). A concurrent test (e.g. `concurrent.futures.ProcessPoolExecutor` firing N processes in parallel) would detect the overshoot.
-
-3. **`close_ticket.py --force` overwrite path is not tested for the case where the existing archive has been edited.** `test_force_bypasses_archive_exists_check` writes "stale archive content" but doesn't check that, e.g., a manually-edited archive's content is properly replaced (not appended). The `_atomic_move` should overwrite via `os.replace`, but if `--force` ever changes the write semantics this would silently regress.
-
-4. **`_log_error` boundary at count==11 marker line is still untested.** Carried over from S13. The marker string "[rate-limit engaged — further errors suppressed]" appears in code at line 205 but no test asserts it appears exactly once at count 11.
-
-## Suggested Next Session Focus
-
-1. **Open and close a ticket for `_git_stage` workspace path (Concern #1).** This is a regression S14 introduced that breaks workspace ticket closure in production (scrabble-score). ~20 LoC + 1 test. Highest priority — actual functional regression.
-
-2. **Open and close a ticket for `_log_error` cross-process race (Concern #2) OR document T071's resolution as "approximate cap, race-prone under concurrency".** T071's resolution claims the cross-process problem is solved; the sequential test doesn't prove it. Either add `fcntl.flock` or amend the closed ticket to honestly state the limitation.
-
-3. **Clear the perennial carry-forwards: `_ws_internal_dir` unused import (3 sessions), close_ticket.py re.sub injection tests (3 sessions), `~/` expansion in `_candidate_paths` (3 sessions).** Each is ≤ 10 LoC. Three sessions of deferral on trivial items is a process smell — close them as a sweep or close-by-policy with rationale.
-
-## Carry-forwards (issues unresolved ≥ 2 sessions)
-
-- S11 #4 / S12 #15 / S13 carry: `_ws_internal_dir` unused import — 3 sessions, no ticket
-- S11 #5 / S11 #6 / S12 #16 / S13 carry: close_ticket re.sub + permissive-fallback test gaps — 3 sessions, no ticket
-- S12 #3 / S13 carry: `~/` expansion in `_candidate_paths` — 2 sessions, no ticket
-
----
-
-# Opus Review S15
-
-Scope: closed T072 (workspace `_git_stage` regression from S14) and T050 (opus archive splitting — closed as already-implemented + tests). ~226 insertions / 31 deletions across 3 source/test files. S15 fixed the highest-priority finding from S14 (the actual production regression for workspace ticket close) and addressed the T050 deferral by writing tests against existing behavior rather than new code. Backlog dropped to 0 open tickets — but several S12/S14 carry-forwards are still untouched.
-
-## Invariant Violations
-
-None. `_git_root_for` strengthens Invariant 5 (workspace isolation) by routing `git add`/`rm --cached` to the correct repo per workspace, instead of leaking workspace ticket archive paths into the harness repo's index. Invariant 4 (fail-closed) is preserved: when the workspace's docs_path is in a non-git directory, the script exits 2 with a clear stderr WARNING and a manual-staging command (verified by new `test_non_git_workspace_warns_and_exits_nonzero`).
-
-## Architectural Concerns
-
-1. **`scripts/hooks/log_tool_usage.py:179-209` — `_log_error` cross-process race is STILL UNADDRESSED.** [Carry-forward S14 #2 — 1 session] The read→check→increment→write flow has no `fcntl.flock`; two concurrent hook processes can both read count=N, both write count=N+1, both append errors. S14 closed T071 claiming this was solved, but the test (`test_rate_limit_cross_process`) runs subprocesses sequentially. S14 review explicitly called this out as a #2 priority for S15; S15 ignored it. Fix: either add `fcntl.flock` on `_ERR_STATE_PATH` for the duration of the read-modify-write, or honestly amend T071's closed resolution to state the cap is "approximate under concurrency." Continuing to ship code that claims a guarantee its test cannot verify is a process smell.
-
-2. **`scripts/hooks/log_tool_usage.py:189` — window-expiry check still uses `>` not `>=`.** [Carry-forward S14 #4 — 1 session] Trivial fix (`now - window_start > _ERR_WINDOW_SECS` → `>=`). Edge case at exact 60.0s boundary; will rarely fire in practice but a one-character fix that S14 flagged.
-
-3. **`scripts/hooks/log_tool_usage.py:108` — `Path(path)` without `.expanduser()` at workspace match site.** [Carry-forward S12 #3 / S13 / S14 — 3 sessions] `_candidate_paths` accepts `~/...` tokens at lines 85/87, but the workspace-match call at line 108 passes `Path(path)` directly to `is_within_workspace`. Result: Bash `cat ~/PycharmProjects/scrabble-score/foo.md` is stamped as harness-root, not the workspace. Two-character fix: `Path(path).expanduser()`. Three sessions of deferral on a one-token change is the same process pattern S14 called out — close it.
-
-4. **`scripts/tools/close_ticket.py:210-221` — `_git_root_for` swallows non-zero git exit codes silently.** [Fail-closed concern, minor] When `git rev-parse --show-toplevel` exits non-zero (e.g. "fatal: not a git repository", or "fatal: this operation must be run in a work tree" for bare repos), the function discards both stdout and stderr (captured but never inspected) and returns None. The caller then prints the same "git staging failed — stage manually" warning for ALL failure modes: not-a-repo, bare-repo, corrupted repo, permission denied. The user cannot distinguish "this is intentionally not a git repo" from "your repo is broken." Fix: include `result.stderr.strip()` in the WARNING text so the user sees git's actual error message.
-
-5. **`scripts/tools/close_ticket.py:_git_root_for` uses `path.parent` rather than `path`.** [Minor / docstring mismatch] The docstring says "git worktree root that owns path" but the call is `git -C str(path.parent) rev-parse`. For files this is equivalent (since the parent contains the file), but if a future caller passes a directory path, the behavior shifts (resolves the parent of the directory, not the directory itself). Either pass `str(path if path.is_dir() else path.parent)`, or update the docstring to say "the git worktree root that owns path.parent".
-
-6. **`scripts/tools/close_ticket.py:34` — `_ws_internal_dir` unused import IS NOW REMOVED.** [Carry-forward resolved] Verified by grep: no remaining references. S15 cleared this implicitly (likely a side-effect of T072 work). No action.
-
-## Architectural Concerns — Test Gaps
-
-1. **`_git_root_for` is tested only at the integration level via `close_ticket.py` end-to-end.** No unit test directly invokes `_git_root_for(some_path)` with: (a) a bare git repo, (b) a path that doesn't exist, (c) a path inside a submodule, (d) a worktree (vs. main checkout). The integration tests cover the happy path (external project repo) and the non-git failure path, which is acceptable — but the docstring/behavior mismatch (Concern #5) wouldn't surface.
-
-2. **No test asserts `_git_stage` does NOT leak workspace ticket paths into the harness repo's `git rm --cached` operation.** The existing `test_external_docs_path_workspace_stages_in_project_repo` checks that "T999" doesn't appear in `harness_status`, but a leaky `git rm --cached` (e.g. one that ran against ROOT before being switched to git_root) would only mutate the harness *index*, not the working tree — `git status --porcelain` might not show it depending on git version and prior state. Stronger check: `git -C harness diff --cached --name-only` must be empty.
-
-3. **`_log_error` rate-limit concurrent test still missing.** [Carry-forward S14 Test Gap #2 — 1 session] Same as Concern #1 above; documenting it under tests too.
-
-4. **`_log_error` count==11 boundary marker test still missing.** [Carry-forward S13 / S14 Test Gap #4 — 1 session]
-
-## Suggested Next Session Focus
-
-1. **Close out the `log_tool_usage.py` triad (Concerns #1, #2, #3).** All three are file-local, each ≤ 5 LoC, all flagged in S14, and one has been carrying for 3 sessions. Bundle into a single ticket: add `fcntl.flock` on `_ERR_STATE_PATH`, change `>` to `>=`, add `.expanduser()` at line 108. Add one concurrent test (`ProcessPoolExecutor` with N=20) and one test asserting `~/foo` paths match a workspace. ~25 LoC + 2 tests. Highest priority — three sessions of deferral on flagged one-line fixes is the exact pattern S14 told us to stop.
-
-2. **Improve `_git_root_for` error transparency (Concern #4).** Include git's stderr in the failure WARNING so users can distinguish "not a git repo (expected)" from "git is broken." ~5 LoC.
-
-3. **Audit T071's closed resolution.** It claims cross-process rate limiting is solved; the test is sequential. Either fix the underlying race (Concern #1) or reopen/amend the ticket to honestly document the limitation. Closing tickets with overclaimed resolutions makes future audits fragile.
-
-## Carry-forwards (issues unresolved ≥ 2 sessions)
-
-- S12 #3 / S13 carry / S14 #7: `~/` expansion in `_candidate_paths` — 3 sessions, no ticket
-- S14 #2: `_log_error` cross-process race (T071 closed but unverified by test) — 1 session, no ticket but T071 is misleadingly closed
-- S14 #4: window-expiry `>` vs `>=` — 1 session, no ticket
-- S13 / S14 Test Gap #4: `_log_error` count==11 marker test — 2 sessions, no ticket
-
----
-
 # Opus Review — S16
 
 Scope: closed T073 (log_tool_usage triad: flock, >=, expanduser) from prior carry-forwards. Single committed diff (a5a1ab9) plus uncommitted docs/sessions/INDEX updates reflecting T074–T077 closures and T078–T082 opens from scrabble-score handoff and workflow-review. The actual code change is small (~30 LoC in `scripts/hooks/log_tool_usage.py` + 50 LoC of tests). Cleared all three S15 carry-forwards in one ticket — good discipline. New concerns are mostly minor, but one fail-closed gap deserves attention.
@@ -186,3 +30,55 @@ None. `fcntl.flock(LOCK_EX)` on `_ERR_STATE_PATH` strengthens Invariant 4 (fail-
 
 - S15 carry-forwards (`flock`, `>=`, `.expanduser()`): RESOLVED in T073. Clean close.
 - S13 / S14 / S15 Test Gap: `_log_error` count==11 marker test — STILL MISSING. New tests cover boundary reset and cross-process concurrency but the marker-line assertion at count==11 (single emission, exact text) remains untested. 3 sessions.
+
+---
+
+# Opus Review — S17
+
+Scope: closed T078–T085 (8 tickets) clearing the S16 workflow-review backlog. Net changes: new PreToolUse hook `check_fix_commit_has_code.py` (~128 LoC + 10 tests), `close_ticket.py` grew `--files`/`--path-only` flags, staged-files summary, `_git_root_for` tuple return; `log_tool_usage.py:_log_error` bootstrap guard + `state_ok` sentinel; SKILL/CLAUDE.md doc updates. ~1234 insertions / 81 deletions across 20 files. Backlog at 0 open tickets, but the new commit-hook and the `_warn_unstaged_code` helper introduce real false-positive / false-negative paths.
+
+## Invariant Violations
+
+None directly. Invariant 4 (fail-closed) is *strengthened* in `_log_error`: the new `state_ok` sentinel prevents the prior bypass where a state-file I/O failure fell through to write `_ERR_PATH` unbounded — a fail-closed gap S16 #1 explicitly flagged. The bootstrap guard at `_ERR_STATE_PATH.parent.exists()` correctly returns early with one stderr emit. Both fixes are right-shaped.
+
+Invariant 5 (workspace isolation) is *weakened* — but only at the hook layer, not at the data-read layer. See Concern #1: the new fix-commit hook does not detect a workspace's actual git repo, so its policy is enforced inconsistently between harness-root and workspace commits.
+
+## Architectural Concerns
+
+1. **`scripts/hooks/check_fix_commit_has_code.py:70-90` — `_staged_code_files` runs `git diff --cached` in the hook's cwd, which means workspace `fix(TXXX):` commits get inconsistent enforcement.** [Concrete bug, REGRESSION risk] The hook is documented to block `fix(TXXX):` commits with no code staged; it runs `git diff --cached --name-only` with no `-C` argument, so cwd determines which repo is queried. For a workspace ticket close where the user (or a future automation) runs `git -C /external/project commit -m "fix(T999): ..."`, the hook fires in Claude's cwd (harness root), queries the harness repo's index, finds nothing staged there, and BLOCKS the commit — even when the external project repo has code staged correctly. Conversely, the *archive-only* exclusion list (`docs/archive/`, `docs/tickets/`) covers harness paths but NOT workspace archive layouts (`workspaces/<slug>/internal/archive/` or external `<proj>/.harness/archive/`), so a workspace fix-commit with only the archive move staged is silently ALLOWED. Two opposite failure modes from the same root cause: the hook is not workspace-aware. Fix: derive git root from the commit command (parse `-C <path>` if present, else use cwd), pass it to `git -C <root> diff --cached`, and broaden the exclusion to any `*/archive/T*.md` and `*/tickets/T*.md` path.
+
+2. **`scripts/hooks/check_fix_commit_has_code.py:42-47` — `git -C <path> commit` is silently ignored.** [Concrete bug, low impact, related to #1] `_parse_fix_commit` requires `tokens[git_idx + 1] == "commit"`. For `git -C /path commit -m "fix(T001): x"`, the token after "git" is "-C", so the function returns None and the hook bypasses. The bash-wrapped form `bash -c 'git commit -m "fix(T001): x"'` also bypasses (no token equals "git" at top level because shlex unwraps the outer `bash -c`'s arg into one token). Neither is exotic — close_ticket.py itself uses `git -C <root>` for staging, and any agent-issued composite command could land in the bash-c form. Fix: scan all tokens for the first one equal to `git`, then walk forward past any options (`-C`, `--git-dir`, `--work-tree`) until "commit".
+
+3. **`scripts/tools/close_ticket.py:340-353` — `_warn_unstaged_code` produces false positives.** [Concrete bug, moderate noise] The helper runs `git diff HEAD --name-only`, which lists everything different from HEAD — **staged + unstaged combined**, per git semantics. After `_git_stage` has just staged the archive move and INDEX.md, those would be in the diff but get filtered by `endswith(".md")`. The hole is any pre-existing `.py` file already `git add`-ed before close_ticket runs (e.g. from earlier in the same session, or from another active branch): it appears in `git diff HEAD --name-only`, fails the `.md` filter, and triggers the WARNING "no code files staged — pass --files explicitly" — *even though the user already staged them*. The test suite covers only the truly-unstaged-modified case (`test_no_files_warns_when_unstaged_code_exists`) and the no-change case; the false-positive-on-already-staged case is uncovered. Fix: use `git diff --name-only` (working tree vs index, unstaged only) AND `git diff --cached --name-only` (index vs HEAD, staged only) separately; warn only when there are unstaged code changes that look like they belong with the ticket.
+
+4. **`scripts/tools/close_ticket.py:441-447` — staged-files summary omits the deleted source ticket.** [Display lie, low impact] `staged_paths = [dest, index_path] + (extra_files or [])` — but `_git_stage` also stages the *deletion* of `ticket_path` from `open/`. The user sees "staged: docs/archive/T999-x.md, docs/tickets/INDEX.md" but not "staged: docs/tickets/open/T999-x.md (deleted)". For someone reviewing what's about to be committed, this is misleading. Fix: add `ticket_path` to `staged_paths` with a "(deleted)" annotation, or list all three paths consistently.
+
+5. **`scripts/hooks/check_fix_commit_has_code.py:70-81` — `_staged_code_files` swallows non-zero git exit silently → wrong error message.** [Fail-closed concern, minor] When `git diff --cached` exits non-zero (not in a repo, corrupted index), the function returns `[]`. The caller then BLOCKS with "no code files staged" — but the real problem is git itself. User sees a misleading message and a `--files` suggestion that won't help. Fix: distinguish "git unavailable" from "git ran, returned no code files"; for the former, exit 0 (the regular pre-commit will surface the real error) or print a different stderr.
+
+6. **`scripts/hooks/check_fix_commit_has_code.py:31-36` — `_code_paths` silently falls back to defaults when `harness_config` import fails.** [Fail-closed concern, minor] Any exception (broken yaml, missing dependency, harness_config refactor) reverts to `("scripts/", "src/", "lib/", "tests/")` without logging. A workspace whose `code_paths` includes e.g. `app/`, `MyApp/` would be misclassified — `app/foo.swift` is NOT in defaults, so a fix-commit with only Swift code staged would be BLOCKED. Either log the fallback to stderr (one-shot) or just exit 0 when config is unreadable (the existing close_ticket.py already protects via `--files`).
+
+7. **`scripts/hooks/log_tool_usage.py:189` — bootstrap-guard `_BOOTSTRAP_STDERR_LOGGED` is per-process, not per-invocation.** [Minor / by-design] Once set in a long-lived process (which Claude Code hooks are NOT — each hook call is a fresh subprocess), further bootstrap errors are silent. This is correct for hooks (each spawn re-imports the module), but the test `test_state_io_failure_does_not_bypass_rate_limit` explicitly resets it (`ltu._BOOTSTRAP_STDERR_LOGGED = False`) — which is a tell that the in-process semantics are subtle. Not a bug; flag as something to document in the docstring so future test authors don't blame stale module state.
+
+## Architectural Concerns — Test Gaps
+
+1. **`check_fix_commit_has_code.py` is untested for `git -C <path> commit` and `bash -c '…'` forms.** Both bypass the hook today (Concern #2). The current 10 tests all use the bare `git commit` form.
+
+2. **`check_fix_commit_has_code.py` is untested for the workspace-cwd scenario.** No test runs the hook from a harness cwd while the staged changes are in an external project repo (the case that S15 T072 fixed for `_git_stage`, but the new hook re-introduces).
+
+3. **`_warn_unstaged_code` false-positive-on-already-staged case (Concern #3) is untested.** Add a test: stage `foo.py` BEFORE running close_ticket, then assert the warning is NOT emitted.
+
+4. **No e2e test verifies the new hook plays well with `close_ticket.py`'s recommended workflow.** `close_ticket.py` prints `git commit -m "fix(T999): ..."` as the suggested next command, but no test runs that exact command through the hook + verifies it succeeds when `--files` was used at close time. A 20-line integration test would catch Concerns #1 and #5 simultaneously.
+
+5. **Carry-forward S16 Test Gap #3: `count==11` marker line still untested.** Now 4 sessions unaddressed. New `test_rate_limit_caps_at_ten_plus_marker` exists and asserts `"rate-limit" in lines[-1]` — that IS the marker test. **RESOLVED implicitly** by S17 (good). Withdraw this carry-forward.
+
+## Suggested Next Session Focus
+
+1. **Fix the workspace bypass/false-block in `check_fix_commit_has_code.py` (Concerns #1, #2).** Highest priority — the hook's value proposition is enforcing the "fix(TXXX) commits must have code" rule, but workspace commits today either bypass it entirely (wrong archive prefix) or get blocked when correct (wrong git repo queried). Parse `-C <path>` from the commit command, run `git -C <root> diff --cached`, broaden the archive-exclusion to any `*/archive/*` and `*/tickets/*` path. Add 2 tests for the two failure modes. ~30 LoC + 2 tests.
+
+2. **Fix the `_warn_unstaged_code` false-positive (Concern #3).** Replace `git diff HEAD --name-only` with separate `git diff` (unstaged) and `git diff --cached` (staged) queries; warn only on unstaged code. ~10 LoC + 1 test. Without this fix, the warning becomes background noise users learn to ignore — defeating its purpose.
+
+3. **Add the missing integration test (Test Gap #4).** Drive `close_ticket.py --files foo.py` end-to-end, then run the recommended `git commit` through the hook, assert success. Catches regressions across the close-ticket + commit-hook seam. ~25 LoC.
+
+## Carry-forwards (issues unresolved ≥ 2 sessions)
+
+- None. The S16 carry-forward (count==11 marker test) is resolved by the new `test_rate_limit_caps_at_ten_plus_marker` test in S17. Clean slate going into S18.
