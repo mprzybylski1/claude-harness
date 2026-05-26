@@ -1,140 +1,193 @@
 ---
 name: workflow-review
-description: Reflect on the current session's workflow, surface friction points, and propose harness improvements as tickets.
+model: claude-opus-4-7
+description: Analyse the workflow layer — skills, hooks, scripts, CLAUDE.md — and surface friction, waste, and brittleness. Works in two modes: (1) in-session retrospective while context is warm, (2) cold-start periodic audit. Both modes produce ranked improvements and offer to open tickets.
 ---
 
 # Workflow Review
 
-Structured retrospective on the current session's workflow. No agent spawned — Claude
-reflects on its own in-session experience and produces actionable improvement proposals.
+Structured analysis of the **workflow layer** — skills, hooks, scripts, and process
+instructions — not production code or tests. Your job is to find friction, waste, and
+brittleness and propose concrete fixes ranked by value vs effort.
 
-Run at any point during or after a session. Most valuable right before `/session-close`
-while context is warm.
+Run at any point during or after a session. Most valuable either right before
+`/session-close` (warm context) or as a periodic health check (every ~10 sessions).
 
 ## When to use
 
-- After a session that felt slow, required workarounds, or surfaced gaps in the harness
-- When a script didn't behave as documented
-- When you notice the same manual step repeating across sessions
-- Proactively at the end of any session where new workspace tooling was exercised
+- After a session that felt slow, required workarounds, or surfaced harness gaps
+- When the same manual step has repeated across multiple sessions
+- When an Opus review has flagged the same process issue 3+ sessions running
+- Proactively every ~10 sessions as a periodic health check
+- When new workspace tooling was exercised for the first time
 
-## Do not use this skill when
+## Do not use when
 
 - The session was entirely docs-only with no harness tooling exercised
 - You have already run workflow-review this session
+- The question is about production code, tests, or domain strategy
 
 ---
 
-## Step 1 — Gather session context
+## Step 1 — Detect mode and gather context
 
-Read the current open ticket list and session brief to ground the reflection:
+**Determine mode:**
+- **Warm mode** (in-session): you have direct recall of what happened this session.
+  Use that recall as primary signal; files confirm or extend it.
+- **Cold mode** (periodic audit or new session): no recall available.
+  Files are the only signal — read them more thoroughly.
+
+**Read these files in order (both modes):**
 
 ```bash
-python scripts/tools/current_session.py
-python scripts/tools/extract_session_brief.py
-cat docs/tickets/INDEX.md
+python3 scripts/tools/current_session.py          # or --sessions <INTERNAL>/sessions.md
+python3 scripts/tools/extract_session_brief.py    # or --sessions flag for workspace
+python3 scripts/tools/extract_opus_key_sections.py --with-carry-forwards  # Opus complaints
 ```
 
-For workspace sessions, use the workspace-scoped paths:
-```bash
-python scripts/tools/current_session.py --sessions <INTERNAL>/sessions.md
-python scripts/tools/extract_session_brief.py --sessions <INTERNAL>/sessions.md
-cat <INTERNAL>/tickets/INDEX.md
-```
+Then read:
+1. `CLAUDE.md` — Session Start Protocol section and Working Style
+2. `.claude/skills/session-start/SKILL.md`
+3. `.claude/skills/session-close/SKILL.md`
+4. `ls scripts/tools/` and `ls scripts/hooks/` — inventory what exists
+5. `.claude/settings.json` — which hooks are wired and how
+6. `docs/sessions.md` — last 20 lines of Session Log (session frequency/length signal)
+7. `docs/tickets/INDEX.md` — open tickets (to avoid duplicating existing tracking)
+
+For workspace sessions, substitute `<INTERNAL>/sessions.md`, `<INTERNAL>/tickets/INDEX.md`,
+etc. per session-start workspace path substitution rules.
+
+Do **not** read individual ticket files, `opus_notes.md` in full, or any production source.
 
 ---
 
-## Step 1b — Telemetry data (when available)
+## Step 2 — Telemetry (when available)
 
-If `workflow_telemetry: true` is set in `harness.yaml`, run the analysis script and
-include its output in the retrospective as objective signal alongside qualitative findings:
+If `workflow_telemetry: true` is set in `harness.yaml`, run:
 
 ```bash
-python scripts/tools/analyze_tool_log.py --session S[CURRENT_SESSION]
+python3 scripts/tools/analyze_tool_log.py --session S[CURRENT_SESSION]
 ```
 
-If telemetry is disabled or the log is empty, skip this step and note it in the verdict.
+Use the output as objective signal alongside qualitative findings. If telemetry is
+disabled or the log is empty, note it in the output and move on.
 
 ---
 
-## Step 2 — Systematic reflection
+## Step 3 — Analysis across five dimensions
 
-Work through each category below. For each one, recall specific moments from this
-session. If nothing applies in a category, say so briefly and move on.
+Work through each dimension. In warm mode, recall specific moments first, then verify
+against files. In cold mode, derive everything from the files. If a dimension has no
+findings, say so briefly and move on.
 
-### 2a — Script and tool friction
+### Dimension 1 — Prose doing mechanical work
 
-Ask yourself:
-- Which scripts were called more than once for the same purpose? Why?
-- Which script flags were missing, wrong, or not documented?
+Look for instructions in skills or CLAUDE.md that describe a deterministic operation a
+script could do instead. Flag any step that:
+- Asks the model to parse a pattern from text (dates, IDs, file lists)
+- Asks the model to check membership in a fixed list (file path prefixes, section names)
+- Asks the model to count or compare numbers
+- Repeats the same logic across multiple skills without a shared script
+
+Also ask (warm mode):
+- Which scripts were called more than once for the same purpose?
 - Which bash commands failed and required a retry or workaround?
-- Which tool calls (Read, Edit, Bash) could have been avoided with better harness support?
-- Were there any permission prompts that should be pre-allowed?
+- Which tool calls could have been avoided with better harness support?
 
-### 2b — SKILL gaps and deviations
+For each finding: name the step, describe the script that would replace it, estimate lines.
 
-Ask yourself:
+### Dimension 2 — Token cost audit
+
+For each file read at session start or session close, estimate token cost and ask:
+- Is the whole file needed, or just a section?
+- Is it read more than once per session (start + close + Opus)?
+- Could a script pre-extract the relevant portion?
+- Is the file growing unboundedly (session log, archive)?
+
+Flag files where cost > benefit — where a trimmed read or script extraction would save
+meaningfully without losing safety-critical information.
+
+### Dimension 3 — Recurring Opus process complaints
+
+From the `extract_opus_key_sections.py` output, look for complaints that:
+- Appear in multiple sessions (phrases like "N-session carry-forward", "recurring",
+  "broken record", "same pattern")
+- Describe mechanical failures (wrong session ID, stale index, missing attribution)
+- Have an open ticket that hasn't moved in many sessions
+
+Also ask (warm mode):
+- Does any friction from this session match Opus carry-forward findings?
+- Is this friction new, or encountered in previous sessions?
+
+For each: is this addressable by a script or hook? If yes, that is the fix.
+
+### Dimension 4 — Hook opportunities
+
+Look at `.claude/settings.json` and skill files. Ask: what events happen in the workflow
+that currently require a manual step but could be automated?
+
+Also ask (warm mode):
+- What did I do manually that should be automated?
+- Were there permission prompts that should be pre-allowed?
+
+**Good hook candidates:**
+- Any "run script X after doing Y" instruction in a skill
+- Any "verify Z before committing" check that is currently prose
+- Any file that must stay consistent with another (e.g. INDEX.md ↔ ticket files)
+
+**Poor hook candidates:**
+- Steps requiring judgment (writing session notes, ticket content)
+- Steps only meaningful at specific points in a skill flow, not on every file write
+
+### Dimension 5 — Growing files and SKILL gaps
+
+**Growing files — check:**
+- `docs/sessions.md` Session Log — one line per session, never trimmed
+- `docs/opus_notes.md` — should be held to ~2 sessions by rotation script
+- `docs/archive/` — should grow but not be re-read
+
+For each: at what line count does it become a meaningful token cost? Is there already
+a rotation/archiving mechanism?
+
+**SKILL gaps — ask:**
 - Which SKILL.md steps didn't match what the scripts actually support?
-- Were any SKILL steps skipped because they weren't applicable or were unclear?
+- Were any SKILL steps skipped because they were inapplicable or unclear?
 - Was the session-start briefing accurate? Did it surface the right tickets?
-- Did session-close run cleanly, or were there manual workarounds?
-
-### 2c — Workspace and path issues
-
-Ask yourself:
 - Did any script use harness-root paths instead of workspace paths?
-- Was workspace context missing or incorrect at any point?
-- Were there untracked files, missing .gitignore entries, or path confusion?
-
-### 2d — Repetition and missing automation
-
-Ask yourself:
-- What did I do manually that should be automated (a hook, a script flag, a pre-check)?
-- What did I have to look up or re-derive that should be cached or pre-computed?
-- Were there any repeated patterns across multiple tickets that suggest a missing abstraction?
-
-### 2e — Cross-session signals
-
-Ask yourself:
-- Is this friction new, or have I encountered it in previous sessions?
-- Does it match any Opus carry-forward findings in the current opus_notes.md?
+- Were there workspace context gaps or path confusion?
 
 ---
 
-## Step 3 — Produce the retrospective
-
-Format your findings as follows. Be specific — file paths, flag names, script names.
-If a category has no findings, omit it.
+## Step 4 — Produce the report
 
 ```
-## Workflow Review — S[N] [YYYY-MM-DD]
+## Workflow Review — S[N] YYYY-MM-DD
 
-### Friction points
+**Summary:** One sentence on the overall state of the workflow layer.
 
-1. [Specific friction] — [what happened]
-2. ...
+### Immediate fixes (< 10 lines, no new files)
+For each: `[VALUE: H/M/L | EFFORT: low]` — what to change and where.
 
-### Root causes
+### Short-term improvements (new script or hook, < 50 lines)
+For each: `[VALUE: H/M/L | EFFORT: medium]` — what the script does, which skill/CLAUDE.md
+step it replaces, estimated token or time saving.
 
-1. [Root cause for friction #1] — [why it exists]
-2. ...
+### Longer-term structural changes
+For each: `[VALUE: H/M/L | EFFORT: high]` — what the change is and why it's deferred.
 
-### Proposed improvements
+### Recurring Opus complaints still open
+List any complaint that has appeared 3+ sessions without a fix. For each: ticket ID if
+one exists, or "not ticketed" with a one-line description of the simplest fix.
 
-1. [Concrete change] — [which file/script/skill] — [severity: low/medium/high]
-2. ...
-
-### Verdict
-
-[One sentence: was this session smooth, rough, or mixed? What's the single biggest
-workflow bottleneck right now?]
+### What is already working well
+Two or three things the workflow does well that should not be changed.
 ```
 
 ---
 
-## Step 4 — Propose tickets
+## Step 5 — Propose tickets
 
-For each proposed improvement rated **medium or high**, offer to open a ticket.
+For each finding rated **medium or high value**, offer to open a ticket.
 
 Present each as:
 
@@ -145,27 +198,33 @@ Present each as:
 >
 > Open this ticket? [y/n]
 
-Only write the ticket file after the user confirms. Use the standard ticket template
-(`docs/tickets/TEMPLATE.md`). Assign the next available T-number by checking the
-highest existing ID in `docs/tickets/open/` and `docs/tickets/closed/`.
+Only write the ticket file after the user confirms. Use `docs/tickets/TEMPLATE.md`.
+Assign the next available T-number by checking the highest existing ID in
+`docs/tickets/open/` and `docs/archive/`.
 
-Low-severity findings: list them at the end as a block and ask once whether to
-open them all, open some, or skip.
+Low-severity findings: batch them and ask once whether to open all, some, or skip.
 
 ---
 
-## Step 5 — Log to sessions.md (optional)
+## Step 6 — Log to sessions.md (optional)
 
-If the retrospective surfaced meaningful findings, add a brief note to the
-**Active Work** section of sessions.md:
+If the review surfaced meaningful findings, add a brief note to the **Active Work**
+section of sessions.md:
 
 ```
 Workflow review: [N] friction points; [N] tickets proposed; [N] opened.
 ```
 
-This makes the review visible to the next session-start briefing.
-
 ---
+
+## Standards
+
+- Every finding must reference the specific file and section where the problem lives.
+- Do not recommend changes to production code, tests, or strategy specs.
+- Do not recommend adding more process steps — only simplifying or automating existing ones.
+- If a finding is already tracked by an open ticket, note the ticket ID and do not duplicate it.
+- Prioritise by: (tokens saved × sessions per year) + (error rate reduction). A 1-line
+  fix that prevents a recurring 15-session failure beats a 50-line script saving 500 tokens.
 
 ## What good looks like
 
