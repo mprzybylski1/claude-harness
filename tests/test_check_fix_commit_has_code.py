@@ -5,6 +5,7 @@ Covers the four AC cases plus edge cases for command parsing.
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
 import sys
@@ -200,19 +201,72 @@ class TestWorkspaceAwareness:
             f"Expected block for workspace commit with only archive staged\nstderr={result.stderr}"
 
     def test_workspace_archive_at_any_depth_excluded(self, tmp_path):
-        """Paths containing 'archive' anywhere in the tree are excluded from code count."""
+        """Archive ticket file alongside a code file: commit allowed; archive doesn't block."""
         project = tmp_path / "project"
         project.mkdir()
         _make_git_repo(project)
-        # Workspace-style path: .harness/archive/T042-foo.md
+        # Stage an archive ticket file (should be excluded from code count)
         ws_archive = project / ".harness" / "archive"
         ws_archive.mkdir(parents=True)
         archive_file = ws_archive / "T042-foo.md"
         archive_file.write_text("closed")
         subprocess.run(["git", "-C", str(project), "add", str(archive_file)],
                        check=True, capture_output=True)
+        # Also stage a real code file — hook must count it and allow the commit
+        scripts_dir = project / "scripts"
+        scripts_dir.mkdir()
+        code_file = scripts_dir / "app.py"
+        code_file.write_text("# code")
+        subprocess.run(["git", "-C", str(project), "add", str(code_file)],
+                       check=True, capture_output=True)
 
         command = f'git -C {project} commit -m "fix(T042): workspace fix"'
         result = _run_hook_in_repo(tmp_path, command)
-        assert result.returncode != 0, \
-            f"Expected block for commit with only .harness/archive staged\nstderr={result.stderr}"
+        assert result.returncode == 0, \
+            f"Expected allow: code file staged, archive excluded by filename regex\nstderr={result.stderr}"
+
+
+# ── Unit tests for _parse_fix_commit flag parsing (T091) ─────────────────────
+
+def _load_hook_module():
+    spec = importlib.util.spec_from_file_location("hook", HOOK)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class TestParseFixCommitFlagForms:
+    """T091: _parse_fix_commit must correctly consume --git-dir and --work-tree in all forms."""
+
+    def setup_method(self):
+        self.parse = _load_hook_module()._parse_fix_commit
+
+    def test_dash_c_space_form_captures_cwd(self):
+        """-C <path> sets git_cwd."""
+        result = self.parse(["git", "-C", "/repo", "commit", "-m", "fix(T001): msg"])
+        assert result == ("T001", "/repo")
+
+    def test_git_dir_space_form_consumed_not_captured(self):
+        """Space-separated --git-dir consumes both tokens; git_cwd stays None."""
+        result = self.parse(["git", "--git-dir", "/repo/.git", "commit", "-m", "fix(T001): msg"])
+        assert result == ("T001", None)
+
+    def test_git_dir_equals_form_consumed(self):
+        """--git-dir=path form is consumed as a single token; git_cwd stays None."""
+        result = self.parse(["git", "--git-dir=/repo/.git", "commit", "-m", "fix(T001): msg"])
+        assert result == ("T001", None)
+
+    def test_work_tree_space_form_consumed_not_captured(self):
+        """Space-separated --work-tree consumes both tokens; git_cwd stays None."""
+        result = self.parse(["git", "--work-tree", "/repo", "commit", "-m", "fix(T001): msg"])
+        assert result == ("T001", None)
+
+    def test_work_tree_equals_form_consumed(self):
+        """--work-tree=path form is consumed as a single token; git_cwd stays None."""
+        result = self.parse(["git", "--work-tree=/repo", "commit", "-m", "fix(T001): msg"])
+        assert result == ("T001", None)
+
+    def test_non_fix_commit_returns_none(self):
+        """Non-fix commit with --git-dir returns None."""
+        result = self.parse(["git", "--git-dir=/repo/.git", "commit", "-m", "docs: notes"])
+        assert result is None
