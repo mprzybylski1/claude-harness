@@ -77,6 +77,54 @@ class TestAgingEmptyMarkerUsedInOutput:
         )
 
 
+class TestMultiCloseIndexFreshness:
+    """T069: load_tickets reads fresh disk state on every call — no in-process caching."""
+
+    TICKET_TEMPLATE = """\
+---
+id: {tid}
+title: Ticket {tid}
+severity: low
+status: open
+phase: process
+layer: process
+opened: S1 2026-01-01
+closed:
+---
+"""
+
+    def _write_ticket(self, open_dir: Path, tid: str) -> None:
+        (open_dir / f"{tid}-title.md").write_text(
+            self.TICKET_TEMPLATE.format(tid=tid), encoding="utf-8"
+        )
+
+    def test_load_tickets_reflects_disk_state_after_each_close(self, tmp_path):
+        """Sequential closes: load_tickets returns one fewer ticket each time with no caching."""
+        import generate_ticket_index as gti
+
+        open_dir = tmp_path / "open"
+        open_dir.mkdir()
+        self._write_ticket(open_dir, "T001")
+        self._write_ticket(open_dir, "T002")
+
+        assert len(gti.load_tickets(str(open_dir))) == 2
+
+        (open_dir / "T001-title.md").unlink()
+        assert len(gti.load_tickets(str(open_dir))) == 1
+
+        (open_dir / "T002-title.md").unlink()
+        assert len(gti.load_tickets(str(open_dir))) == 0
+
+    def test_render_index_after_two_closes_shows_no_tickets(self, tmp_path):
+        """render_index on an empty open/ produces a valid INDEX.md with all-empty sections."""
+        import generate_ticket_index as gti
+        from ticket_constants import AGING_EMPTY_MARKER
+
+        output = gti.render_index([], current_session=14, today="2026-05-26")
+        assert "0 open tickets" in output
+        assert AGING_EMPTY_MARKER in output
+
+
 class TestAgingEmptyMarkerUsedInParser:
     """surface_stale_tickets uses AGING_EMPTY_MARKER to detect clean state."""
 

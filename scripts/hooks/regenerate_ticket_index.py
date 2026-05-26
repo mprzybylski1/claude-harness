@@ -41,6 +41,8 @@ def get_current_session(project_root: str, sessions_file: str | None = None) -> 
 
 # Module-level cache of docs_path ticket roots → workspace dir. Populated once per
 # process on first slow-path call. Eliminates O(edits × workspaces) YAML loads (T043).
+# This cache is per-process only: the hook is spawned as a fresh subprocess on every
+# PostToolUse event, so it never carries stale state across tool calls (T069).
 _docs_path_cache: dict[str, Path] | None = None
 
 

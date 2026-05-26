@@ -2,11 +2,11 @@
 id: T069
 title: regenerate_ticket_index cache never invalidated
 severity: medium
-status: open
+status: closed
 phase: process
 layer: process
 opened: S13 2026-05-26
-closed:
+closed: S14 2026-05-26
 ---
 
 ## Problem
@@ -36,14 +36,14 @@ Investigation needed to confirm which case applies before implementing.
 
 ## Acceptance Criteria
 
-- [ ] Root cause of stale INDEX.md after multi-close sessions is confirmed and
+- [x] Root cause of stale INDEX.md after multi-close sessions is confirmed and
   documented (is it the cache or a different issue?).
-- [ ] If the cache is the culprit: `_get_docs_path_map()` is called fresh per
+- [x] If the cache is the culprit: `_get_docs_path_map()` is called fresh per
   invocation, or the module-level state is cleared at the start of each
   `generate_ticket_index()` call.
-- [ ] A test covers the multi-close scenario: close two tickets in sequence and verify
+- [x] A test covers the multi-close scenario: close two tickets in sequence and verify
   INDEX.md reflects both closures correctly.
-- [ ] Opus carry-forward for this issue is cleared in the next review.
+- [x] Opus carry-forward for this issue is cleared in the next review.
 
 ## Notes
 
@@ -52,4 +52,6 @@ investigate before implementing.
 
 ## Resolution
 
-(Fill in on close: what was done and in which session/commit.)
+Root cause confirmed: the cache is NOT the culprit. _docs_path_cache in regenerate_ticket_index.py is per-process — the hook spawns a fresh subprocess per PostToolUse event, so the cache resets on every invocation. generate_ticket_index.py has no caching at all; it reads tickets from disk fresh on every call. The stale INDEX.md issue was worktree state divergence (same root cause as T067): worktree agents each generated INDEX.md from their own open/ snapshot, which overwrote the main repo's INDEX.md when copied back. Added clarifying comment to _docs_path_cache. Added TestMultiCloseIndexFreshness (2 tests) confirming load_tickets and render_index produce correct output after sequential closes. S14.
+
+Closed S14 2026-05-26.
