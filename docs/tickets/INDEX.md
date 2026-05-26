@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S18 2026-05-26. 1 open tickets.
+Generated S18 2026-05-26. 0 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -15,11 +15,9 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Low (1)
+## Low (0)
 
-| ID | Title | Phase | Layer | Age |
-|----|-------|-------|-------|-----|
-| T088 | Add close_ticket + commit-hook end-to-end integration test | Ph2 | tooling | this session |
+*(none)*
 
 ## Unknown (0)
 
