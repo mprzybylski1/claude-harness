@@ -135,6 +135,58 @@ class TestRotateOpusNotes:
         assert count == 1, f"Expected 1 section, found {count}"
 
 
+class TestRotateOpusNotesH2Format:
+    """T076: rotate_opus_notes.py must handle ## Opus Review (h2) workspace header format."""
+
+    def _make_h2_review(self, session_n: int) -> str:
+        return (
+            f"## Opus Review — S{session_n}\n\n"
+            f"### Invariant Violations\nNone\n\n"
+            f"### Architectural Concerns\n1. finding\n\n"
+            f"### Suggested Next Session Focus\nFix it.\n\n"
+        )
+
+    def test_h2_two_sections_rotates_oldest(self, tmp_path):
+        """h2 workspace format: two sections → oldest archived, newest stays."""
+        from rotate_opus_notes import rotate
+        notes = tmp_path / "opus_notes.md"
+        notes.write_text(
+            "# Opus Notes — My Project\n\n"
+            + self._make_h2_review(1)
+            + self._make_h2_review(2),
+            encoding="utf-8",
+        )
+        archive_dir = tmp_path / "archive"
+        archive_dir.mkdir()
+
+        rotate(notes=notes, archive_dir=archive_dir)
+
+        archive_file = archive_dir / "opus_notes_S0-S9.md"
+        assert archive_file.exists(), "archive file should be created"
+        archived = archive_file.read_text()
+        assert "## Opus Review — S1" in archived
+        assert "## Opus Review — S2" not in archived
+
+        remaining = notes.read_text()
+        assert "## Opus Review — S2" in remaining
+        assert "## Opus Review — S1" not in remaining
+
+    def test_h2_single_section_reports_one_not_zero(self, tmp_path, capsys):
+        """h2 format: single section detected as 1, not 0 (no phantom 'no rotation' on zero count)."""
+        from rotate_opus_notes import rotate
+        notes = tmp_path / "opus_notes.md"
+        notes.write_text(self._make_h2_review(3), encoding="utf-8")
+        archive_dir = tmp_path / "archive"
+        archive_dir.mkdir()
+
+        rotate(notes=notes, archive_dir=archive_dir)
+
+        captured = capsys.readouterr()
+        assert "1 section" in captured.out, \
+            f"expected '1 section' in output, got: {captured.out!r}"
+        assert list(archive_dir.iterdir()) == [], "no archive created for single section"
+
+
 class TestExpandCarryForwardMultiFile:
     """expand_carry_forward.py glob covers multiple decade archive files (T046/T050)."""
 

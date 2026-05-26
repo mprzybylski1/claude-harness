@@ -25,7 +25,7 @@ ARCHIVE_DIR = ROOT / "docs" / "archive"
 
 # Matches the start of each review section at the beginning of a line.
 # Group 1 captures the session number so we can route to the right archive bucket.
-_SECTION_RE = re.compile(r"^# Opus Review — S(\d+)", re.MULTILINE)
+_SECTION_RE = re.compile(r"^#{1,2} Opus Review — S(\d+)", re.MULTILINE)
 
 
 def _archive_header(decade_start: int, decade_end: int) -> str:
