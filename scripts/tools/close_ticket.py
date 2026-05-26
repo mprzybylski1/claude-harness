@@ -15,6 +15,7 @@ Usage:
     python scripts/tools/close_ticket.py T045 --resolution "What was done."
     python scripts/tools/close_ticket.py T045 --resolution-file /tmp/res.txt
     python scripts/tools/close_ticket.py T045 --resolution "..." --force
+    python scripts/tools/close_ticket.py T045 --resolution "..." --workspace scrabble-score
 """
 from __future__ import annotations
 
@@ -29,55 +30,67 @@ from pathlib import Path
 _default_root = Path(__file__).resolve().parents[2]
 ROOT = Path(os.environ.get("HARNESS_ROOT", str(_default_root)))
 
+sys.path.insert(0, str(ROOT / "scripts" / "tools"))
+from workspace_config import load_workspace, internal_dir as _ws_internal_dir
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _find_ticket(ticket_id: str) -> tuple[Path, Path | None]:
+def _docs_paths(ws_dir: Path) -> list[Path]:
+    """Return extra docs roots configured via docs_path in workspace.yaml."""
+    cfg = load_workspace(ws_dir)
+    if not cfg or not cfg.get("docs_path"):
+        return []
+    p = Path(cfg["docs_path"]).expanduser()
+    if p.is_dir():
+        return [p]
+    return []
+
+
+def _find_ticket(ticket_id: str, workspace_slug: str | None = None) -> tuple[Path, Path | None]:
     """Return (ticket_path, workspace_internal_dir | None).
 
-    Searches harness-root tickets/open/ first, then all workspace internal paths.
-    workspace_internal_dir is returned so callers can pick the right archive/.
+    Searches harness-root tickets/open/ and all workspace internal paths, then
+    errors if more than one match is found. Supply --workspace to disambiguate.
     """
     ticket_id = ticket_id.upper()
     if not re.fullmatch(r"T\d+", ticket_id):
         print(f"ERROR: invalid ticket ID '{ticket_id}' — expected T### format", file=sys.stderr)
         sys.exit(1)
 
-    # Harness-root tickets
-    for p in sorted((ROOT / "docs" / "tickets" / "open").glob(f"{ticket_id}-*.md")):
-        return p, None
+    matches: list[tuple[Path, Path | None]] = []
 
-    # Workspace tickets
+    if workspace_slug is None or workspace_slug == "":
+        # Search harness-root tickets
+        for p in sorted((ROOT / "docs" / "tickets" / "open").glob(f"{ticket_id}-*.md")):
+            matches.append((p, None))
+
     ws_base = ROOT / "workspaces"
     if ws_base.is_dir():
         for ws_dir in sorted(ws_base.iterdir()):
             if not ws_dir.is_dir():
                 continue
-            # Support both standard internal/ and docs_path configurations
+            if workspace_slug and ws_dir.name != workspace_slug:
+                continue
             for internal in [ws_dir / "internal", *_docs_paths(ws_dir)]:
                 open_dir = internal / "tickets" / "open"
                 for p in sorted(open_dir.glob(f"{ticket_id}-*.md")):
-                    return p, internal
+                    matches.append((p, internal))
 
-    print(f"ERROR: ticket {ticket_id} not found in any tickets/open/ directory", file=sys.stderr)
-    sys.exit(1)
+    if not matches:
+        print(f"ERROR: ticket {ticket_id} not found in any tickets/open/ directory", file=sys.stderr)
+        sys.exit(1)
 
+    if len(matches) > 1:
+        locations = "\n".join(f"  {p} (workspace: {i.parent.parent.name if i else 'harness root'})"
+                              for p, i in matches)
+        print(
+            f"ERROR: ticket {ticket_id} found in multiple locations — use --workspace to disambiguate:\n"
+            + locations,
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
-def _docs_paths(ws_dir: Path) -> list[Path]:
-    """Return extra docs roots configured via docs_path in workspace.yaml."""
-    ws_yaml = ws_dir / "workspace.yaml"
-    if not ws_yaml.exists():
-        return []
-    try:
-        text = ws_yaml.read_text(encoding="utf-8")
-    except OSError as exc:
-        print(f"ERROR: cannot read {ws_yaml}: {exc}", file=sys.stderr)
-        sys.exit(2)
-    m = re.search(r"^\s*docs_path\s*:\s*(.+)$", text, re.MULTILINE)
-    if m:
-        p = Path(m.group(1).strip()).expanduser()
-        if p.is_dir():
-            return [p]
-    return []
+    return matches[0]
 
 
 def _current_session(internal: Path | None) -> str:
@@ -143,10 +156,12 @@ def main() -> None:
                            help="Path to a file containing the resolution text")
     parser.add_argument("--force", action="store_true",
                         help="Close even if some ACs are still unchecked")
+    parser.add_argument("--workspace", metavar="SLUG",
+                        help="Workspace slug to search (required when ID is ambiguous)")
     args = parser.parse_args()
 
     ticket_id = args.ticket_id.upper()
-    ticket_path, internal = _find_ticket(ticket_id)
+    ticket_path, internal = _find_ticket(ticket_id, args.workspace)
     content = ticket_path.read_text(encoding="utf-8")
 
     # Resolution text
@@ -190,8 +205,10 @@ def main() -> None:
     if dest.exists():
         print(f"ERROR: {dest} already exists in archive — ticket may already be closed", file=sys.stderr)
         sys.exit(2)
-    ticket_path.write_text(content, encoding="utf-8")
-    ticket_path.rename(dest)
+
+    # Write to dest first so a write failure leaves open/ untouched (S9 #2).
+    dest.write_text(content, encoding="utf-8")
+    ticket_path.unlink()
 
     # Regenerate index
     _regenerate_index(internal)

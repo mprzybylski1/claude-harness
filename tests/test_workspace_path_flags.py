@@ -446,6 +446,91 @@ class TestIsClosedTicket:
         assert self.fn(path) is expected
 
 
+# ── Tests: regenerate_ticket_index T016 workspace attribution (S9 #11) ───────
+
+class TestT016WorkspaceAttribution:
+    """S9 #11: check_closed_attribution must use workspace sessions.md, not harness root."""
+
+    @pytest.fixture(autouse=True)
+    def _import_hook(self):
+        sys.path.insert(0, str(ROOT / "scripts" / "hooks"))
+        import importlib
+        import regenerate_ticket_index as rti
+        # Re-import fresh copy per test to avoid state bleed
+        importlib.reload(rti)
+        self.rti = rti
+
+    def _make_workspace(self, tmp_path: Path, ws_session: str) -> tuple[Path, Path]:
+        """Create workspace internal dir with sessions.md; return (internal, closed_ticket)."""
+        ws_internal = tmp_path / "workspaces" / "ws1" / "internal"
+        (ws_internal / "tickets" / "closed").mkdir(parents=True)
+        ws_internal.joinpath("sessions.md").write_text(
+            f"## Session Log\n\nS1 2026-01-01: init\n{ws_session} 2026-06-01: ws session\n",
+            encoding="utf-8",
+        )
+        ticket = ws_internal / "tickets" / "closed" / "T999-ws-ticket.md"
+        ticket.write_text(
+            f"---\nid: T999\nstatus: closed\nclosed: {ws_session} 2026-06-01\n---\n",
+            encoding="utf-8",
+        )
+        return ws_internal, ticket
+
+    def test_uses_workspace_sessions_file(self, tmp_path):
+        """check_closed_attribution passes workspace sessions.md to get_current_session.
+
+        Patches workspaces_base in the workspace_config module (used by the hook) so that
+        _detect_workspace_from_path can find our tmp workspace layout.
+        """
+        from unittest.mock import patch
+        import workspace_config as wsc
+        ws_internal, ticket = self._make_workspace(tmp_path, ws_session="S42")
+
+        sessions_seen: list[str | None] = []
+
+        def capture_session(project_root: str, sessions_file: str | None = None) -> str:
+            sessions_seen.append(sessions_file)
+            return "S42"
+
+        # Redirect workspaces_base in the hook's namespace (imported by name, not via module).
+        ws_base = tmp_path / "workspaces"
+        with patch.object(self.rti, "workspaces_base", return_value=ws_base), \
+             patch.object(self.rti, "get_current_session", side_effect=capture_session):
+            self.rti.check_closed_attribution(str(ticket), str(ROOT))
+
+        assert sessions_seen, "get_current_session must be called"
+        assert sessions_seen[0] is not None, "sessions_file must be passed (not None)"
+        assert "ws1" in sessions_seen[0], (
+            f"Expected workspace sessions.md, got: {sessions_seen[0]}"
+        )
+
+    def test_no_warning_when_closed_matches_workspace_session(self, tmp_path, capsys):
+        """T016: no warning when closed: matches workspace's current session."""
+        from unittest.mock import patch
+        ws_internal, ticket = self._make_workspace(tmp_path, ws_session="S42")
+
+        with patch.object(self.rti, "get_current_session", return_value="S42"):
+            self.rti.check_closed_attribution(str(ticket), str(ROOT))
+
+        captured = capsys.readouterr()
+        assert "T016" not in captured.err
+
+    def test_warning_when_closed_mismatches_workspace_session(self, tmp_path, capsys):
+        """T016: warning emitted when closed: doesn't match workspace current session."""
+        from unittest.mock import patch
+        ws_internal, ticket = self._make_workspace(tmp_path, ws_session="S42")
+        # Ticket claims S5 but workspace current session is S42
+        ticket.write_text(
+            "---\nid: T999\nstatus: closed\nclosed: S5 2026-01-01\n---\n",
+            encoding="utf-8",
+        )
+
+        with patch.object(self.rti, "get_current_session", return_value="S42"):
+            self.rti.check_closed_attribution(str(ticket), str(ROOT))
+
+        captured = capsys.readouterr()
+        assert "T016" in captured.err
+
+
 # ── Tests: close_ticket.py (T045) ────────────────────────────────────────────
 
 class TestCloseTicket:
@@ -558,6 +643,66 @@ Synthetic.
         assert result.returncode == 0
         assert "git commit" in result.stdout
         assert "T999" in result.stdout
+
+    def test_duplicate_id_across_scopes_errors(self, tmp_path):
+        """S9 #3: same ticket ID in harness root and a workspace → error with hint."""
+        self._setup(tmp_path)
+        # Plant the same ticket in a workspace too
+        ws_internal = tmp_path / "workspaces" / "ws1" / "internal"
+        (ws_internal / "tickets" / "open").mkdir(parents=True)
+        (ws_internal / "tickets" / "closed").mkdir(parents=True)
+        (ws_internal / "archive").mkdir(parents=True)
+        (ws_internal / "sessions.md").write_text(
+            "## Session Log\n\nS1 2026-01-01: init\n", encoding="utf-8"
+        )
+        import shutil
+        shutil.copy(
+            tmp_path / "docs" / "tickets" / "open" / "T999-synthetic-test-ticket.md",
+            ws_internal / "tickets" / "open" / "T999-synthetic-test-ticket.md",
+        )
+        result = self._run(tmp_path, "T999", "--resolution", "should error")
+        assert result.returncode != 0
+        assert "multiple" in result.stderr.lower() or "disambiguate" in result.stderr.lower()
+
+    def test_workspace_flag_disambiguates(self, tmp_path):
+        """S9 #3: --workspace targets the right scope when ID exists in multiple places."""
+        self._setup(tmp_path)
+        ws_internal = tmp_path / "workspaces" / "ws1" / "internal"
+        (ws_internal / "tickets" / "open").mkdir(parents=True)
+        (ws_internal / "tickets" / "closed").mkdir(parents=True)
+        (ws_internal / "archive").mkdir(parents=True)
+        (ws_internal / "sessions.md").write_text(
+            "## Session Log\n\nS1 2026-01-01: init\n", encoding="utf-8"
+        )
+        import shutil
+        shutil.copy(
+            tmp_path / "docs" / "tickets" / "open" / "T999-synthetic-test-ticket.md",
+            ws_internal / "tickets" / "open" / "T999-synthetic-test-ticket.md",
+        )
+        # Closing with --workspace=ws1 should pick the workspace copy
+        result = self._run(tmp_path, "T999", "--resolution", "workspace close", "--workspace", "ws1")
+        assert result.returncode == 0, result.stderr
+        ws_archive = ws_internal / "archive" / "T999-synthetic-test-ticket.md"
+        assert ws_archive.exists(), "workspace copy must be in workspace archive"
+        harness_open = tmp_path / "docs" / "tickets" / "open" / "T999-synthetic-test-ticket.md"
+        assert harness_open.exists(), "harness copy must be untouched"
+
+    def test_write_to_dest_before_unlink(self, tmp_path):
+        """S9 #2: if archive write fails, open/ ticket must be untouched."""
+        self._setup(tmp_path)
+        ticket = tmp_path / "docs" / "tickets" / "open" / "T999-synthetic-test-ticket.md"
+        original = ticket.read_text()
+
+        # Make archive dir a file so write_text to dest fails
+        archive = tmp_path / "docs" / "archive"
+        archive.rmdir()
+        archive.write_text("not a directory")  # write_text to a sub-path will fail
+
+        result = self._run(tmp_path, "T999", "--resolution", "should fail")
+        assert result.returncode != 0
+        # open/ ticket must be untouched
+        assert ticket.exists(), "open/ ticket must survive a failed archive write"
+        assert ticket.read_text() == original, "open/ ticket content must be unmodified"
 
 
 # ── Tests: surface_stale_tickets.py (T047) ───────────────────────────────────
@@ -743,3 +888,30 @@ class TestExpandCarryForward:
         result = self._run(root, "S1#3")
         # S1 #4 content should NOT appear in any occurrence
         assert "Some other issue" not in result.stdout
+
+    def test_last_finding_in_session_does_not_bleed_into_next_session(self, tmp_path):
+        """S9 #4: last finding in a session block must not include next session's content."""
+        # Two sessions, each with exactly one finding.
+        notes = """\
+# Opus Review — S5 2026-01-05
+
+## Bugs
+
+1. **S5 #1 — first session finding.** Details about S5 finding here.
+
+# Opus Review — S6 2026-01-06
+
+## Bugs
+
+1. **S6 #1 — second session finding.** Content from S6 only.
+"""
+        (tmp_path / "docs").mkdir(parents=True)
+        (tmp_path / "docs" / "opus_notes.md").write_text(notes)
+        (tmp_path / "docs" / "archive").mkdir(parents=True)
+        result = self._run(tmp_path, "S5#1")
+        assert result.returncode == 0
+        # Must include S5 finding text
+        assert "S5 finding" in result.stdout
+        # Must NOT bleed into S6 content
+        assert "S6 only" not in result.stdout
+        assert "second session finding" not in result.stdout
