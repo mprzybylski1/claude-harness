@@ -2,11 +2,11 @@
 id: T066
 title: analyze_tool_log.py top-edited shows junk Bash tokens
 severity: low
-status: open
+status: closed
 phase: process
 layer: process
 opened: S13 2026-05-26
-closed:
+closed: S14 2026-05-26
 ---
 
 ## Problem
@@ -27,12 +27,12 @@ in `{Edit, Write, NotebookEdit}`, excluding Bash and Agent rows entirely.
 
 ## Acceptance Criteria
 
-- [ ] `analyze_tool_log.py` "Top edited files" section only counts rows where `tool` is
+- [x] `analyze_tool_log.py` "Top edited files" section only counts rows where `tool` is
   `Edit`, `Write`, or `NotebookEdit`.
-- [ ] Bash and Agent rows are excluded from this table (they may still appear in other
+- [x] Bash and Agent rows are excluded from this table (they may still appear in other
   sections like "Tool call counts").
-- [ ] Existing output format is preserved for all other sections.
-- [ ] A test or manual verification confirms `foo.py` no longer appears as a top-edited
+- [x] Existing output format is preserved for all other sections.
+- [x] A test or manual verification confirms `foo.py` no longer appears as a top-edited
   file when only present as a Bash command substring.
 
 ## Notes
@@ -42,4 +42,6 @@ tracking correctness.
 
 ## Resolution
 
-(Fill in on close: what was done and in which session/commit.)
+Investigation in S14 found the filter was already implemented from the initial commit (T026): _top_files filters by edit_tools={'Edit','Write','NotebookEdit'}. Added test_bash_paths_excluded_from_top_edited_files to confirm the behavior is correct and protected against regression.
+
+Closed S14 2026-05-26.

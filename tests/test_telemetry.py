@@ -340,6 +340,34 @@ class TestAnalyzeToolLog:
         assert result.returncode == 0
         assert "No telemetry data" in result.stdout
 
+    def test_bash_paths_excluded_from_top_edited_files(self, tmp_path):
+        """T066: Bash command snippets in path field must not appear in Top edited files."""
+        ts = time.time()
+        records = [
+            # foo.py appears only as a substring of Bash command paths — not via Edit/Write
+            {"ts": ts + 0, "tool": "Bash", "path": "python foo.py --run", "session": "S1"},
+            {"ts": ts + 1, "tool": "Bash", "path": "grep foo.py scripts/", "session": "S1"},
+            {"ts": ts + 2, "tool": "Bash", "path": "cat foo.py", "session": "S1"},
+            # A legitimate Edit of a different file
+            {"ts": ts + 3, "tool": "Edit", "path": "legit.py", "session": "S1"},
+        ]
+        log = tmp_path / "tool_log.jsonl"
+        _make_log(log, records)
+        result = subprocess.run(
+            [sys.executable, str(ANALYZE), "--log", str(log)],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0
+        output = result.stdout
+        # Isolate the Top edited files section
+        edited_start = output.find("Top-10 most-edited files")
+        retry_start = output.find("Error / retry sequences")
+        edited_section = output[edited_start:retry_start]
+        assert "foo.py" not in edited_section, \
+            f"Bash path 'foo.py' must not appear in Top edited files:\n{edited_section}"
+        assert "legit.py" in edited_section, \
+            f"Legitimately edited file must appear:\n{edited_section}"
+
 
 # ── F11: harness_config.load_for_repo fallback ───────────────────────────────
 
