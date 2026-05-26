@@ -113,6 +113,8 @@ def _regenerate_index(internal: Path | None) -> None:
         print(f"WARNING: generate_ticket_index.py failed: {exc}", file=sys.stderr)
 
 
+_LAYER_VALUES = ("backend", "frontend", "fullstack", "infra", "process", "tooling")
+
 _TEMPLATE = """\
 ---
 id: {ticket_id}
@@ -120,8 +122,8 @@ title: {title}
 severity: {severity}
 status: open
 phase: {phase}
-layer: tooling
-opened: {session} {today}
+layer: {layer}
+{repo_line}opened: {session} {today}
 closed:
 ---
 
@@ -148,25 +150,21 @@ def main() -> None:
                         help="Acceptance criterion (repeatable)")
     parser.add_argument("--workspace", metavar="SLUG",
                         help="Workspace slug to create ticket in")
+    parser.add_argument("--layer", choices=_LAYER_VALUES, default="tooling",
+                        help="Layer value for ticket frontmatter (default: tooling)")
+    parser.add_argument("--repo", metavar="SLUG",
+                        help="Repo slug for workspace ticket frontmatter")
     args = parser.parse_args()
 
     internal = _resolve_internal(args.workspace) if args.workspace else None
-
-    ticket_id = _next_id()
-    slug = _slugify(args.title)
-    filename = f"{ticket_id}-{slug}.md"
 
     if internal is not None:
         open_dir = internal / "tickets" / "open"
     else:
         open_dir = ROOT / "docs" / "tickets" / "open"
     open_dir.mkdir(parents=True, exist_ok=True)
-    dest = open_dir / filename
 
-    if dest.exists():
-        print(f"ERROR: {dest} already exists", file=sys.stderr)
-        sys.exit(1)
-
+    slug = _slugify(args.title)
     session = _current_session(internal)
     today = date.today().isoformat()
 
@@ -175,16 +173,32 @@ def main() -> None:
     else:
         ac_lines = "- [ ] (fill in)"
 
-    content = _TEMPLATE.format(
-        ticket_id=ticket_id,
-        title=args.title,
-        severity=args.severity,
-        phase=args.phase,
-        session=session,
-        today=today,
-        acs=ac_lines,
-    )
-    dest.write_text(content, encoding="utf-8")
+    repo_line = f"repo: {args.repo}\n" if args.repo else "# repo: <name from workspace.yaml repos list>\n"
+
+    _MAX_RETRIES = 10
+    for attempt in range(_MAX_RETRIES):
+        ticket_id = _next_id()
+        dest = open_dir / f"{ticket_id}-{slug}.md"
+        content = _TEMPLATE.format(
+            ticket_id=ticket_id,
+            title=args.title,
+            severity=args.severity,
+            phase=args.phase,
+            layer=args.layer,
+            repo_line=repo_line,
+            session=session,
+            today=today,
+            acs=ac_lines,
+        )
+        try:
+            with open(dest, "x", encoding="utf-8") as fh:
+                fh.write(content)
+            break
+        except FileExistsError:
+            if attempt == _MAX_RETRIES - 1:
+                print(f"ERROR: could not allocate ticket ID after {_MAX_RETRIES} attempts", file=sys.stderr)
+                sys.exit(1)
+
     _regenerate_index(internal)
     print(dest)
 

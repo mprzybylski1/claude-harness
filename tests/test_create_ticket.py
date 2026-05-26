@@ -122,3 +122,44 @@ class TestCreateTicket:
         result = _run(harness, "Bad workspace", "--workspace", "does-not-exist")
         assert result.returncode != 0
         assert "ERROR" in result.stderr
+
+    # T092: --layer flag
+    def test_layer_flag_writes_to_frontmatter(self, tmp_path):
+        """--layer overrides the default 'tooling' value."""
+        harness = _setup(tmp_path)
+        result = _run(harness, "Infra ticket", "--layer", "infra")
+        assert result.returncode == 0, result.stderr
+        content = Path(result.stdout.strip()).read_text(encoding="utf-8")
+        assert "layer: infra" in content
+
+    def test_default_layer_is_tooling(self, tmp_path):
+        """Default layer is 'tooling' when --layer is omitted."""
+        harness = _setup(tmp_path)
+        result = _run(harness, "Default layer ticket")
+        assert result.returncode == 0, result.stderr
+        content = Path(result.stdout.strip()).read_text(encoding="utf-8")
+        assert "layer: tooling" in content
+
+    def test_invalid_layer_exits_nonzero(self, tmp_path):
+        """Invalid --layer value exits non-zero."""
+        harness = _setup(tmp_path)
+        result = _run(harness, "Bad layer", "--layer", "nonexistent")
+        assert result.returncode != 0
+
+    # T093: --repo flag
+    def test_repo_flag_writes_to_frontmatter(self, tmp_path):
+        """--repo emits 'repo: <slug>' in frontmatter."""
+        harness = _setup(tmp_path)
+        result = _run(harness, "Repo ticket", "--repo", "myrepo")
+        assert result.returncode == 0, result.stderr
+        content = Path(result.stdout.strip()).read_text(encoding="utf-8")
+        assert "repo: myrepo" in content
+
+    def test_no_repo_flag_leaves_repo_commented(self, tmp_path):
+        """Omitting --repo leaves repo field commented out."""
+        harness = _setup(tmp_path)
+        result = _run(harness, "No repo ticket")
+        assert result.returncode == 0, result.stderr
+        content = Path(result.stdout.strip()).read_text(encoding="utf-8")
+        assert "repo: myrepo" not in content
+        assert "# repo:" in content
