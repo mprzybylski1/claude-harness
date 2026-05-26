@@ -2,11 +2,11 @@
 id: T072
 title: close_ticket.py _git_stage uses harness git root for workspace tickets
 severity: high
-status: open
+status: closed
 phase: process
 layer: process
 opened: S14 2026-05-26
-closed:
+closed: S15 2026-05-26
 ---
 
 ## Problem
@@ -30,13 +30,13 @@ tmp_path-internal workspace cases; no test used a workspace with an external git
 
 ## Acceptance Criteria
 
-- [ ] When `internal` is outside the harness git tree, `_git_stage` stages using the
+- [x] When `internal` is outside the harness git tree, `_git_stage` stages using the
   correct git repo root (the project repo that owns `internal`), not the harness root.
-- [ ] When `internal` is inside the harness git tree (harness-root tickets), behavior
+- [x] When `internal` is inside the harness git tree (harness-root tickets), behavior
   is unchanged.
-- [ ] A test covers the external-repo case (can use a real tmp git repo for the
+- [x] A test covers the external-repo case (can use a real tmp git repo for the
   workspace, separate from the harness tmp repo).
-- [ ] `close_ticket.py T<N>` exits 0 on successful close+staging for both harness-root
+- [x] `close_ticket.py T<N>` exits 0 on successful close+staging for both harness-root
   and workspace-external-docs_path tickets.
 
 ## Notes
@@ -50,4 +50,6 @@ The `git rev-parse --show-toplevel` approach is most robust.
 
 ## Resolution
 
-(Fill in on close.)
+Added _git_root_for(path) helper that runs git rev-parse --show-toplevel on the dest path to detect the correct git repo. _git_stage now uses the detected root instead of hardcoded ROOT. Also fixed dest.relative_to(ROOT) in the final print — falls back to absolute path when dest is outside the harness tree. Both issues found via the new test_external_docs_path_workspace_stages_in_project_repo test (S14/S15).
+
+Closed S15 2026-05-26.

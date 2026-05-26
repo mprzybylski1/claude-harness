@@ -207,6 +207,21 @@ def _regenerate_index(internal: Path | None) -> None:
         print(f"WARNING: generate_ticket_index.py failed: {exc}", file=sys.stderr)
 
 
+def _git_root_for(path: Path) -> str:
+    """Return the git worktree root that owns path, falling back to ROOT."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(path if path.is_dir() else path.parent),
+             "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except FileNotFoundError:
+        pass
+    return str(ROOT)
+
+
 def _git_stage(ticket_path: Path, dest: Path, internal: Path | None) -> None:
     """Stage the three paths changed by close_ticket via git."""
     if internal is not None:
@@ -214,14 +229,15 @@ def _git_stage(ticket_path: Path, dest: Path, internal: Path | None) -> None:
     else:
         index_path = ROOT / "docs" / "tickets" / "INDEX.md"
     paths = [str(ticket_path), str(dest), str(index_path)]
+    git_root = _git_root_for(dest)
     try:
         subprocess.check_call(
-            ["git", "-C", str(ROOT), "rm", "--cached", "--ignore-unmatch", "--", str(ticket_path)],
+            ["git", "-C", git_root, "rm", "--cached", "--ignore-unmatch", "--", str(ticket_path)],
             stdout=subprocess.DEVNULL,
         )
         to_add = [str(p) for p in [dest, index_path] if p.exists()]
         if to_add:
-            subprocess.check_call(["git", "-C", str(ROOT), "add", "--", *to_add])
+            subprocess.check_call(["git", "-C", git_root, "add", "--", *to_add])
     except (subprocess.CalledProcessError, FileNotFoundError):
         print(
             "WARNING: ticket moved to archive but git staging failed — stage manually.\n"
@@ -309,7 +325,11 @@ def main() -> None:
     title_m = re.search(r"^title:\s*(.+)$", content, re.MULTILINE)
     title = title_m.group(1).strip() if title_m else ticket_id
 
-    print(f"Closed {ticket_id} → {dest.relative_to(ROOT)}")
+    try:
+        dest_display = dest.relative_to(ROOT)
+    except ValueError:
+        dest_display = dest
+    print(f"Closed {ticket_id} → {dest_display}")
     print()
     print("Suggested commit:")
     print(f'  git commit -m "fix({ticket_id}): {title}"')

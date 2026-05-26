@@ -1,17 +1,15 @@
 # Ticket Index
 
-Generated S15 2026-05-26. 2 open tickets.
+Generated S15 2026-05-26. 1 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
 
 *(none)*
 
-## High (1)
+## High (0)
 
-| ID | Title | Phase | Layer | Age |
-|----|-------|-------|-------|-----|
-| T072 | close_ticket.py _git_stage uses harness git root for workspace tickets | process | process | 1 session |
+*(none)*
 
 ## Medium (0)
 

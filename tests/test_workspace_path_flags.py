@@ -1101,6 +1101,83 @@ Synthetic.
         assert result.returncode != 0
         assert "WARNING" in result.stderr
 
+    def test_external_docs_path_workspace_stages_in_project_repo(self, tmp_path):
+        """T072: workspace with external docs_path stages in the project repo, not harness root."""
+        # Set up harness root git repo
+        harness = tmp_path / "harness"
+        (harness / "docs" / "tickets" / "open").mkdir(parents=True)
+        (harness / "docs" / "archive").mkdir(parents=True)
+        (harness / "docs" / "tickets" / "INDEX.md").write_text("# Index\n")
+        (harness / "docs" / "sessions.md").write_text("## Session Log\n\nS1 2026-01-01: init\n")
+        tools = harness / "scripts" / "tools"
+        tools.mkdir(parents=True)
+        (tools / "current_session.py").write_text("import sys\nprint('S9')\n")
+        (tools / "generate_ticket_index.py").write_text(
+            "import os; from pathlib import Path\n"
+            "import sys\n"
+            "# write INDEX in the --output arg path if given\n"
+            "args = sys.argv\n"
+            "if '--output' in args:\n"
+            "    idx = args[args.index('--output') + 1]\n"
+            "    Path(idx).write_text('# Updated\\n')\n"
+        )
+
+        # Set up project repo (external docs_path)
+        project = tmp_path / "project"
+        harness_dir = project / ".harness"
+        (harness_dir / "tickets" / "open").mkdir(parents=True)
+        (harness_dir / "archive").mkdir(parents=True)
+        (harness_dir / "tickets" / "INDEX.md").write_text("# Index\n")
+        (harness_dir / "sessions.md").write_text("## Session Log\n\nS1 2026-01-01: init\n")
+        ticket = harness_dir / "tickets" / "open" / "T999-synthetic-test-ticket.md"
+        ticket.write_text(self.OPEN_TICKET, encoding="utf-8")
+
+        # Init project repo and commit initial state
+        for cmd in [
+            ["git", "-C", str(project), "init", "-q"],
+            ["git", "-C", str(project), "config", "user.email", "t@test.com"],
+            ["git", "-C", str(project), "config", "user.name", "Test"],
+            ["git", "-C", str(project), "config", "commit.gpgsign", "false"],
+            ["git", "-C", str(project), "add", "-A"],
+            ["git", "-C", str(project), "commit", "-q", "-m", "init"],
+        ]:
+            subprocess.run(cmd, check=True, capture_output=True)
+
+        # Init harness repo
+        for cmd in [
+            ["git", "-C", str(harness), "init", "-q"],
+            ["git", "-C", str(harness), "config", "user.email", "t@test.com"],
+            ["git", "-C", str(harness), "config", "user.name", "Test"],
+            ["git", "-C", str(harness), "config", "commit.gpgsign", "false"],
+            ["git", "-C", str(harness), "add", "-A"],
+            ["git", "-C", str(harness), "commit", "-q", "-m", "init"],
+        ]:
+            subprocess.run(cmd, check=True, capture_output=True)
+
+        # Create workspace with docs_path pointing at the external project repo
+        ws_dir = harness / "workspaces" / "test-ws"
+        (ws_dir / "internal" / "tickets" / "open").mkdir(parents=True)
+        ws_dir.joinpath("workspace.yaml").write_text(
+            f"name: test-ws\ndocs_path: {harness_dir}\n", encoding="utf-8"
+        )
+
+        result = self._run(harness, "T999", "--workspace", "test-ws", "--resolution", "done")
+        assert result.returncode == 0, f"Expected exit 0; got {result.returncode}\n{result.stderr}"
+
+        # Changes must be staged in the project repo, not the harness repo
+        proj_status = subprocess.run(
+            ["git", "-C", str(project), "status", "--porcelain"],
+            capture_output=True, text=True, check=True,
+        ).stdout
+        harness_status = subprocess.run(
+            ["git", "-C", str(harness), "status", "--porcelain"],
+            capture_output=True, text=True, check=True,
+        ).stdout
+        assert "T999" in proj_status, \
+            f"Expected T999 staged in project repo:\n{proj_status}"
+        assert "T999" not in harness_status, \
+            f"T999 must not appear in harness repo staging:\n{harness_status}"
+
 
 # ── Tests: surface_stale_tickets.py (T047) ───────────────────────────────────
 
