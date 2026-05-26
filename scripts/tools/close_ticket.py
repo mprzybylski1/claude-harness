@@ -224,8 +224,9 @@ def _git_stage(ticket_path: Path, dest: Path, internal: Path | None) -> None:
             subprocess.check_call(["git", "-C", str(ROOT), "add", "--", *to_add])
     except (subprocess.CalledProcessError, FileNotFoundError):
         print(
-            "WARNING: git staging failed — changes are NOT staged.\n"
-            f"  Run manually: git add -- {' '.join(paths)}",
+            "WARNING: ticket moved to archive but git staging failed — stage manually.\n"
+            f"  git rm --cached -- {paths[0]}\n"
+            f"  git add -- {' '.join(paths[1:])}",
             file=sys.stderr,
         )
         sys.exit(2)

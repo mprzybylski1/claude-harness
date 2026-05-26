@@ -193,7 +193,7 @@ def _log_error(msg: str) -> None:
             return
         count += 1
         try:
-            tmp = _ERR_STATE_PATH.with_suffix(".tmp")
+            tmp = _ERR_STATE_PATH.parent / f"{_ERR_STATE_PATH.name}.{os.getpid()}.tmp"
             tmp.write_text(
                 json.dumps({"count": count, "window_start": window_start}),
                 encoding="utf-8",
