@@ -710,6 +710,157 @@ Synthetic.
         assert not dest.exists(), "No archive copy must be created when dest write fails"
 
 
+# ── Tests: close_ticket.py T054 ──────────────────────────────────────────────
+
+class TestCloseTicketT054:
+    """T054: atomic move, permissive resolution fallback, stamp regex, parse-failure warning."""
+
+    OPEN_TICKET = """\
+---
+id: T999
+title: Synthetic test ticket
+severity: low
+status: open
+phase: 2
+layer: tooling
+opened: S1 2026-01-01
+closed:
+---
+
+## Problem
+
+Synthetic.
+
+## Acceptance Criteria
+
+- [x] AC one done
+
+## Resolution
+(Fill in on close.)
+"""
+
+    @pytest.fixture(autouse=True)
+    def _import(self):
+        sys.path.insert(0, str(ROOT / "scripts" / "tools"))
+        import close_ticket as ct
+        self.ct = ct
+
+    def _run(self, tmp_root: Path, *extra_args: str) -> subprocess.CompletedProcess:
+        import os as _os
+        return subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "tools" / "close_ticket.py"), *extra_args],
+            capture_output=True, text=True,
+            env={**_os.environ, "HARNESS_ROOT": str(tmp_root), "PYTHONPATH": str(ROOT)},
+        )
+
+    def _setup(self, tmp_path: Path) -> Path:
+        docs = tmp_path / "docs"
+        (docs / "tickets" / "open").mkdir(parents=True)
+        (docs / "tickets" / "closed").mkdir(parents=True)
+        (docs / "archive").mkdir(parents=True)
+        (docs / "sessions.md").write_text(
+            "## Session Log\n\nS1 2026-01-01: init\n", encoding="utf-8"
+        )
+        tools = tmp_path / "scripts" / "tools"
+        tools.mkdir(parents=True)
+        (tools / "generate_ticket_index.py").write_text("import sys; sys.exit(0)\n")
+        (tools / "current_session.py").write_text("import sys\nprint('S9')\n")
+        ticket_path = docs / "tickets" / "open" / "T999-synthetic-test-ticket.md"
+        ticket_path.write_text(self.OPEN_TICKET, encoding="utf-8")
+        return ticket_path
+
+    # ── Fix 2: _replace_resolution permissive fallback ────────────────────────
+
+    def test_replace_resolution_strict_placeholder_unchanged(self):
+        """Standard placeholder replaced without warning (regression guard)."""
+        content = "## Resolution\n(Fill in on close.)\n"
+        result = self.ct._replace_resolution(content, "Fixed.")
+        assert "Fixed." in result
+        assert "(Fill in on close." not in result
+
+    def test_replace_resolution_permissive_fallback_text_before_placeholder(self, capsys):
+        """Non-whitespace text before placeholder → permissive fallback fires + WARNING."""
+        content = "## Resolution\nNote: see T052 for background.\n(Fill in on close.)\n"
+        result = self.ct._replace_resolution(content, "Fixed via fallback.")
+        captured = capsys.readouterr()
+        assert "Fixed via fallback." in result
+        assert "(Fill in on close." not in result
+        assert "WARNING" in captured.err
+
+    def test_replace_resolution_no_placeholder_exits2(self):
+        """No placeholder anywhere in Resolution section → exit 2."""
+        content = "## Resolution\nAlready has text.\n"
+        with pytest.raises(SystemExit) as exc:
+            self.ct._replace_resolution(content, "new resolution")
+        assert exc.value.code == 2
+
+    # ── Fix 3: stamp regex ────────────────────────────────────────────────────
+
+    def test_stamp_appended_despite_historical_session_mention(self, tmp_path):
+        """Resolution mentioning a historical session date must not suppress the closure stamp."""
+        self._setup(tmp_path)
+        result = self._run(
+            tmp_path, "T999", "--resolution",
+            "Reverted the S5 2026-01-01 commit.",
+        )
+        assert result.returncode == 0, result.stderr
+        archive = tmp_path / "docs" / "archive" / "T999-synthetic-test-ticket.md"
+        content = archive.read_text()
+        assert "Closed S" in content, f"stamp missing:\n{content}"
+
+    def test_stamp_not_duplicated_when_already_present(self, tmp_path):
+        """Resolution already containing 'Closed S<N> YYYY-MM-DD' must not get a second stamp."""
+        self._setup(tmp_path)
+        result = self._run(
+            tmp_path, "T999", "--resolution",
+            "All done. Closed S9 2026-05-26.",
+        )
+        assert result.returncode == 0, result.stderr
+        archive = tmp_path / "docs" / "archive" / "T999-synthetic-test-ticket.md"
+        content = archive.read_text()
+        assert content.count("Closed S") == 1, "stamp must not be duplicated"
+
+    # ── Fix 4: _docs_paths parse-failure warning ──────────────────────────────
+
+    def test_docs_paths_warns_on_corrupt_workspace_yaml(self, tmp_path, capsys):
+        """Corrupt workspace.yaml → WARNING to stderr, returns [] rather than crashing."""
+        ws_dir = tmp_path / "ws1"
+        ws_dir.mkdir()
+        (ws_dir / "workspace.yaml").write_text("key: [unclosed_bracket\n")
+        result = self.ct._docs_paths(ws_dir)
+        captured = capsys.readouterr()
+        assert result == []
+        assert "WARNING" in captured.err
+
+    # ── Fix 1: atomic move via os.replace ─────────────────────────────────────
+
+    def test_atomic_move_archive_clean_if_unlink_fails(self, tmp_path, monkeypatch):
+        """os.replace completes before ticket_path.unlink(); archive is clean if unlink fails."""
+        archive_dir = tmp_path / "archive"
+        archive_dir.mkdir()
+        open_dir = tmp_path / "open"
+        open_dir.mkdir()
+        ticket_path = open_dir / "T999.md"
+        ticket_path.write_text("original")
+        dest = archive_dir / "T999.md"
+
+        original_unlink = Path.unlink
+
+        def fail_on_source(self_path, missing_ok=False):
+            if self_path.parent == open_dir:
+                raise OSError("simulated unlink failure")
+            return original_unlink(self_path, missing_ok=missing_ok)
+
+        monkeypatch.setattr(Path, "unlink", fail_on_source)
+
+        with pytest.raises(OSError):
+            self.ct._atomic_move(ticket_path, dest, "new content")
+
+        assert dest.exists(), "archive must exist after os.replace"
+        assert dest.read_text() == "new content", "archive must have correct content"
+        assert not list(archive_dir.glob("*.tmp")), "no temp files should remain"
+
+
 # ── Tests: surface_stale_tickets.py (T047) ───────────────────────────────────
 
 class TestSurfaceStaleTickets:

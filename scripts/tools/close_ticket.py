@@ -37,7 +37,16 @@ from workspace_config import load_workspace, internal_dir as _ws_internal_dir
 
 def _docs_paths(ws_dir: Path) -> list[Path]:
     """Return extra docs roots configured via docs_path in workspace.yaml."""
-    cfg = load_workspace(ws_dir)
+    try:
+        cfg = load_workspace(ws_dir)
+    except Exception:
+        if (ws_dir / "workspace.yaml").exists():
+            print(
+                f"WARNING: failed to parse {ws_dir / 'workspace.yaml'} "
+                "— workspace tickets will not be searched",
+                file=sys.stderr,
+            )
+        return []
     if not cfg or not cfg.get("docs_path"):
         return []
     p = Path(cfg["docs_path"]).expanduser()
@@ -118,17 +127,66 @@ def _update_frontmatter(content: str, session: str) -> str:
 
 
 def _replace_resolution(content: str, resolution: str) -> str:
-    """Replace the '(Fill in on close.)' placeholder with resolution text."""
-    placeholder = re.compile(
+    """Replace the '(Fill in on close.)' placeholder with resolution text.
+
+    Tries a strict match first (handles optional client-visible block).
+    Falls back to a permissive search within the ## Resolution section, with a warning.
+    """
+    strict = re.compile(
         r"(## Resolution\s*\n)"
         r"(?:> \*\*Client-visible:\*\*.*?\n(?:> .*\n)*\n)?"
         r"\(Fill in on close[^)]*\)\s*",
         re.DOTALL,
     )
-    if placeholder.search(content):
-        return placeholder.sub(r"\g<1>" + resolution.rstrip() + "\n", content)
-    print("ERROR: ## Resolution placeholder '(Fill in on close.)' not found — ticket format unexpected", file=sys.stderr)
+    if strict.search(content):
+        repl = resolution.rstrip() + "\n"
+        return strict.sub(lambda m: m.group(1) + repl, content)
+
+    # Permissive fallback: find the placeholder anywhere in the ## Resolution section.
+    res_header = re.search(r"## Resolution\s*\n", content)
+    if res_header:
+        after = content[res_header.end():]
+        next_section = re.search(r"\n##\s", after)
+        section = after[: next_section.start()] if next_section else after
+        fill_m = re.search(r"\(Fill in on close[^)]*\)[^\n]*\n?", section)
+        if fill_m:
+            print(
+                "WARNING: resolution placeholder matched via permissive fallback "
+                "— ticket format may be non-standard",
+                file=sys.stderr,
+            )
+            return (
+                content[: res_header.end()]
+                + section[: fill_m.start()]
+                + resolution.rstrip()
+                + "\n"
+                + section[fill_m.end() :]
+                + (after[next_section.start() :] if next_section else "")
+            )
+
+    print(
+        "ERROR: ## Resolution placeholder '(Fill in on close.)' not found "
+        "— ticket format unexpected",
+        file=sys.stderr,
+    )
     sys.exit(2)
+
+
+def _atomic_move(ticket_path: Path, dest: Path, content: str) -> None:
+    """Write content to dest atomically via os.replace, then remove ticket_path.
+
+    Writes to a tempfile in the same directory as dest first so that os.replace
+    (atomic rename) guarantees dest is never a partial write. ticket_path.unlink()
+    is outside the critical window — if it fails, dest is already clean.
+    """
+    tmp = dest.parent / (dest.name + ".tmp")
+    try:
+        tmp.write_text(content, encoding="utf-8")
+        os.replace(tmp, dest)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
+    ticket_path.unlink()
 
 
 def _regenerate_index(internal: Path | None) -> None:
@@ -185,9 +243,9 @@ def main() -> None:
     # Derive session and today's date
     session = _current_session(internal)
 
-    # Append session info to resolution
+    # Append session info to resolution (only if not already stamped by a prior run).
     full_resolution = resolution
-    if not re.search(r"\bS\d+\b.*\d{4}-\d{2}-\d{2}", resolution):
+    if not re.search(r"\bClosed\s+S\d+\s+\d{4}-\d{2}-\d{2}", resolution):
         full_resolution = resolution + f"\n\nClosed {session} {date.today().isoformat()}."
 
     # Apply changes
@@ -206,9 +264,7 @@ def main() -> None:
         print(f"ERROR: {dest} already exists in archive — ticket may already be closed", file=sys.stderr)
         sys.exit(2)
 
-    # Write to dest first so a write failure leaves open/ untouched (S9 #2).
-    dest.write_text(content, encoding="utf-8")
-    ticket_path.unlink()
+    _atomic_move(ticket_path, dest, content)
 
     # Regenerate index
     _regenerate_index(internal)

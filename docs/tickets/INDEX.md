@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S11 2026-05-26. 5 open tickets.
+Generated S11 2026-05-26. 4 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -11,11 +11,9 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Medium (1)
+## Medium (0)
 
-| ID | Title | Phase | Layer | Age |
-|----|-------|-------|-------|-----|
-| T054 | S10 — close_ticket.py remaining correctness issues (atomic move, resolution regex, stamp regex, silent parse failure) | Ph2 | infra | 1 session |
+*(none)*
 
 ## Low (4)
 

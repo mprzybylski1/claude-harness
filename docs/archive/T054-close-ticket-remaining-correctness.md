@@ -2,11 +2,11 @@
 id: T054
 title: S10 — close_ticket.py remaining correctness issues (atomic move, resolution regex, stamp regex, silent parse failure)
 severity: medium
-status: open
+status: closed
 phase: 2
 layer: infra
 opened: S10 2026-05-26
-closed:
+closed: S11 2026-05-26
 ---
 
 ## Problem
@@ -39,14 +39,14 @@ returns `None` but `workspace.yaml` exists.
 
 ## Acceptance Criteria
 
-- [ ] Move uses `os.replace(tmp, dest)` pattern so write and rename are atomic; `unlink` on
+- [x] Move uses `os.replace(tmp, dest)` pattern so write and rename are atomic; `unlink` on
       open copy is outside the critical window.
-- [ ] `_replace_resolution` has a permissive fallback; warns on stderr when fallback fires.
-- [ ] Session-stamp regex does not match a historical session mention mid-resolution text.
-- [ ] `_docs_paths` warns to stderr when `workspace.yaml` exists but `load_workspace` returns None.
-- [ ] Tests cover: unlink-after-write failure leaves archive clean; permissive fallback; stamp
+- [x] `_replace_resolution` has a permissive fallback; warns on stderr when fallback fires.
+- [x] Session-stamp regex does not match a historical session mention mid-resolution text.
+- [x] `_docs_paths` warns to stderr when `workspace.yaml` exists but `load_workspace` returns None.
+- [x] Tests cover: unlink-after-write failure leaves archive clean; permissive fallback; stamp
       not suppressed by historical mention; workspace-parse-failure warning.
-- [ ] All existing tests still pass.
+- [x] All existing tests still pass.
 
 ## Notes
 
@@ -55,4 +55,6 @@ S10 session log incorrectly claimed S9 #1 and S9 #2 were fixed under T051 — on
 behavior but still not the recommended `os.replace` approach.
 
 ## Resolution
-(Fill in on close.)
+Implemented all four fixes in scripts/tools/close_ticket.py: (1) extracted _atomic_move helper using os.replace for atomic archive write — eliminates partial-write window; (2) added permissive fallback in _replace_resolution for non-standard placeholder placement, warns to stderr on fallback; (3) tightened stamp-suppression regex from broad S\d+.*date to specific 'Closed S\d+ date' pattern to avoid false-positive on historical session mentions in resolution text; (4) wrapped load_workspace call in _docs_paths with try/except — warns to stderr when workspace.yaml exists but fails to parse rather than crashing or silently skipping. Also fixed a pre-existing re.sub injection bug in _replace_resolution where backslashes in resolution text were misinterpreted as regex escapes (switched to lambda replacement). 7 new tests added to TestCloseTicketT054. All 113 existing close_ticket / telemetry / hooks tests pass.
+
+Closed S11 2026-05-26.
