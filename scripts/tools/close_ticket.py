@@ -292,7 +292,7 @@ def main() -> None:
     archive_dir.mkdir(parents=True, exist_ok=True)
 
     dest = archive_dir / ticket_path.name
-    if dest.exists():
+    if dest.exists() and not args.force:
         print(f"ERROR: {dest} already exists in archive — ticket may already be closed", file=sys.stderr)
         sys.exit(2)
 

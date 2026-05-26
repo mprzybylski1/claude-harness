@@ -796,6 +796,23 @@ Synthetic.
         dest = tmp_path / "docs" / "archive" / ticket.name
         assert not dest.exists(), "No archive copy must be created when dest write fails"
 
+    def test_force_bypasses_archive_exists_check(self, tmp_path):
+        """--force overwrites a pre-existing archive file; without --force the error is raised."""
+        self._setup(tmp_path)
+        archive = tmp_path / "docs" / "archive" / "T999-synthetic-test-ticket.md"
+        archive.write_text("stale archive content")
+
+        # Without --force: must fail
+        result_no_force = self._run(tmp_path, "T999", "--resolution", "done")
+        assert result_no_force.returncode != 0
+        assert "already exists" in result_no_force.stderr
+
+        # With --force: must succeed and overwrite the archive
+        result_force = self._run(tmp_path, "T999", "--resolution", "done", "--force")
+        assert result_force.returncode == 0, result_force.stderr
+        assert "stale archive content" not in archive.read_text()
+        assert "done" in archive.read_text()
+
 
 # ── Tests: close_ticket.py T054 ──────────────────────────────────────────────
 
