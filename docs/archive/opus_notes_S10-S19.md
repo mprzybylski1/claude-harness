@@ -567,4 +567,39 @@ None. `_git_root_for` strengthens Invariant 5 (workspace isolation) by routing `
 
 ---
 
+# Opus Review — S16
+
+Scope: closed T073 (log_tool_usage triad: flock, >=, expanduser) from prior carry-forwards. Single committed diff (a5a1ab9) plus uncommitted docs/sessions/INDEX updates reflecting T074–T077 closures and T078–T082 opens from scrabble-score handoff and workflow-review. The actual code change is small (~30 LoC in `scripts/hooks/log_tool_usage.py` + 50 LoC of tests). Cleared all three S15 carry-forwards in one ticket — good discipline. New concerns are mostly minor, but one fail-closed gap deserves attention.
+
+## Invariant Violations
+
+None. `fcntl.flock(LOCK_EX)` on `_ERR_STATE_PATH` strengthens Invariant 4 (fail-closed) for the rate-limit accounting: concurrent processes can no longer lose-update the counter. `.expanduser()` at the workspace-match site strengthens Invariant 5 (workspace isolation) — Bash `~/...` tokens now correctly resolve to declared workspace paths instead of being silently stamped as harness-root.
+
+## Architectural Concerns
+
+1. **`scripts/hooks/log_tool_usage.py:208-209` — outer `except Exception: pass` swallows flock/IO failures and lets the function fall through to write the error without rate limiting.** [Fail-closed concern] If `open(_ERR_STATE_PATH, "a+")` raises (disk full, permission denied) or `flock` fails (lock table exhausted), the bare `except` discards the error and execution continues to lines 210-213, which open `_ERR_PATH` directly and write — bypassing the entire counter. Under a sustained bootstrap-path failure this can flood the error log. T081 ("bootstrap-path errors bypass rate-limit") appears to track exactly this; verify T081's acceptance criteria cover the `_log_error`-internal failure modes, not just bootstrap.
+
+2. **`scripts/hooks/log_tool_usage.py:189` — `open(path, "a+")` on Linux opens for append; `fd.seek(0); fd.read()` works, but `fd.seek(0); fd.truncate(); fd.write(...)` interacts with append-mode semantics.** [Concrete bug, low likelihood] In append mode (`a+`), writes are forced to EOF regardless of seek position on POSIX. The seek(0)+truncate(0) sequence will truncate to zero, then write at position 0 (because EOF is now 0). This *happens* to produce the right result, but it's fragile — if the JSON ever grows mid-write, append semantics could surprise. Use `r+` (with create-if-missing wrapper) or write to a tmp file + `os.replace` while still holding the flock.
+
+3. **`tests/test_telemetry.py:test_rate_limit_window_resets_at_exact_boundary` — `mock.patch("log_tool_usage.time")` replaces the entire module, but `time.strftime`/`time.gmtime` side_effects pass through.** [Test fragility] If a future change to `_log_error` adds a `time.monotonic()` or `time.perf_counter()` call, the mock will return a `MagicMock` object that doesn't satisfy arithmetic operators, producing a confusing test failure. Patch only `time.time` via `mock.patch.object(ltu.time, "time", return_value=boundary)`.
+
+4. **`tests/test_telemetry.py:test_rate_limit_cross_process_concurrent` — 30 processes started sequentially via `Popen` in a list comprehension is "more concurrent than `subprocess.run`" but not truly simultaneous.** [Test gap, partial] Process creation can take 10-50ms each on Linux; by the time process 30 starts, process 1 may have finished. A `ProcessPoolExecutor.map` with a `multiprocessing.Barrier` would force all 30 into the critical section at the same instant. Current test would still pass without flock if processes serialize naturally on a slow runner.
+
+5. **`scripts/tools/close_ticket.py` — workspace INDEX vs harness INDEX dual-write path (T075 fix) untouched by static analysis.** [Verification gap] The S16 diff only contains the T073 code change; T075's `_regenerate_index()` `--tickets-dir` + `--output` flag plumbing is in the uncommitted area per sessions.md but not in the committed diff Opus sees. If T075 was committed as part of a separate flow before the review snapshot, fine — but verify the commit landed on the branch under review. The static analysis cannot confirm what isn't in the diff.
+
+## Suggested Next Session Focus
+
+1. **Verify T081's acceptance criteria explicitly cover `_log_error`-internal IO/flock failures (Concern #1).** The most likely flood scenario is `_log_error` itself failing, not the bootstrap path. If T081 only addresses module-import errors, file a follow-up or expand T081 before closing.
+
+2. **Switch `_log_error` to `r+` mode (or `os.open` with O_RDWR|O_CREAT) to avoid append-mode write surprises (Concern #2).** ~5 LoC. Eliminates the latent fragility before it bites a future contributor.
+
+3. **Strengthen the concurrent test with `multiprocessing.Barrier` (Concern #4).** Ensures the test actually proves what its name claims. ~10 LoC.
+
+## Carry-forwards (issues unresolved ≥ 2 sessions)
+
+- S15 carry-forwards (`flock`, `>=`, `.expanduser()`): RESOLVED in T073. Clean close.
+- S13 / S14 / S15 Test Gap: `_log_error` count==11 marker test — STILL MISSING. New tests cover boundary reset and cross-process concurrency but the marker-line assertion at count==11 (single emission, exact text) remains untested. 3 sessions.
+
+---
+
 

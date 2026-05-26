@@ -19,23 +19,22 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Active Work
 
-**S17 — closed T078–T085 (8 tickets); 0 open tickets at close.**
+**S18 — closed T086–T090 (5 tickets); 0 open tickets at close.**
 
 Files changed:
-- `scripts/tools/close_ticket.py` — T079: `--files` flag; T082: `_git_root_for()` tuple return; T084: staged-files summary; T085: `--path-only` flag
-- `scripts/hooks/log_tool_usage.py` — T081: bootstrap guard + `state_ok` sentinel
-- `scripts/hooks/check_fix_commit_has_code.py` — T080: new PreToolUse hook (fix(TXXX) commits require staged code)
-- `.claude/settings.json` — T080: wired new hook
-- `.claude/skills/session-close/SKILL.md` — T078: foreground-only Opus for workspace sessions
-- `CLAUDE.md` — T079: `--files` usage example
-- `tests/test_close_ticket_stage_files.py` — T079 + T084: 9 tests total
-- `tests/test_telemetry.py` — T081: 3 new tests
-- `tests/test_workspace_path_flags.py` — T082: 4 new tests
-- `tests/test_check_fix_commit_has_code.py` — T080: 10 tests
-- `tests/test_close_ticket_path_only.py` — T085: 5 tests
+- `scripts/hooks/check_fix_commit_has_code.py` — T086: workspace-aware git root parsing, broadened archive exclusion to filename pattern, scoped -m scan to post-commit tokens
+- `scripts/tools/close_ticket.py` — T087: `_warn_unstaged_code` uses `git diff` (unstaged only) + `git ls-files --others`; impl-review fix
+- `tests/test_check_fix_commit_has_code.py` — T086: 3 new workspace tests (13 total)
+- `tests/test_close_ticket_stage_files.py` — T087: 1 new already-staged false-positive test (10 total)
+- `tests/test_close_ticket_hook_integration.py` — T088: new file, 2 integration tests (close+hook seam)
+- `scripts/tools/create_ticket.py` — T089: new script, auto-picks T-number, writes frontmatter+ACs, workspace-aware
+- `tests/test_create_ticket.py` — T089: 7 tests
+- `scripts/tools/analyze_tool_log.py` — T090: retry heuristic requires same tool + same path
+- `tests/test_telemetry.py` — T090: 1 new different-path negative test (46 total)
 
-Tickets closed: T078–T085 (8 tickets)
-Workflow review: surfaced 25% tool-call overhead for ticket mechanics; T083 confirmed stale (already fixed), T084+T085 implemented same session.
+Tickets closed: T086–T090 (5 tickets)
+Impl review: 4 findings fixed inline (archive exclusion, -m scan scope, untracked warning, docstring)
+Workflow review: opened T089–T090; both implemented same session.
 
 Remaining open: none
 
@@ -63,3 +62,4 @@ S14 2026-05-26: closed T064–T071 (S13 workflow-review backlog); cross-process 
 S15 2026-05-26: closed T072 (workspace git staging wrong repo) + T050 (opus archive tests); impl-review fixed 5 findings; all tickets closed
 S16 2026-05-26: closed T073-T077 (log_tool_usage triad, generate_ticket_index, close_ticket workspace index, rotate_opus_notes h2, classify_session no-yaml); workflow-review opened T079-T082
 S17 2026-05-26: closed T078-T085 (8 tickets: S16 workflow-review backlog + T083-T085 from S17 workflow-review); 0 open at close
+S18 2026-05-26: closed T086-T090 (Opus S17 concerns + workflow-review T089-T090); impl-review 4 inline fixes; 0 open at close
