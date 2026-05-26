@@ -1031,4 +1031,172 @@ to validate the workspace-aware paths against real workloads.
 
 ---
 
+# Opus Review — S7 2026-05-25
+
+Scope: closed T031 (extract_opus_key_sections header-level bug), T032 (session-start
+skill workspace flag), T033 (telemetry hook off-state overhead) + enabled
+telemetry by default. ~440 insertions / 21 deletions across one tool, one
+hook, one new helper, and two skill docs.
+
+S6 inline-fix status check: Bug #1 (session ID `S<n>` normalisation) closed inline
+(commit bf1f00d). Bug #3 (`_SESSION_CACHE` dead code) closed inline.
+Bugs #2, #4, #5, and Concerns #10, #11, #12 from S6 remain open and unaddressed
+this session — they should be noted as carry-forward.
+
+## Invariant Violations
+
+None new. Architecture invariants 1-5 are placeholders/optional and Invariant 5
+(workspace isolation) is not touched by this diff. The fail-closed-on-exceptions
+invariant (#4) is still violated by `harness_config.load_for_repo` (S6 Bug #2,
+unchanged this session) — fail-open silent fallback on malformed YAML remains.
+
+## Architectural Concerns
+
+1. **`scripts/hooks/log_tool_usage.py:128-135` — the bootstrap-from-yaml path
+   subverts the T033 design goal.** T033's acceptance criterion was "OFF-state
+   hook completes in well under 10 ms". With the bootstrap logic, the
+   first-tool-call-after-fresh-clone (or after sentinel deletion outside
+   `toggle_telemetry.py`) does a stdlib regex read of `harness.yaml` AND then
+   touches the sentinel AND then proceeds to do the full slow path (PyYAML
+   import + load via `_hc.load()`). That's the worst of both worlds — the
+   user pays the cost they were trying to avoid, exactly when the cache is
+   cold. The intended fast-OFF path only works when telemetry is genuinely off
+   in `harness.yaml`. Fix options:
+   (a) drop the bootstrap entirely — require explicit `toggle_telemetry.py on`,
+       and remove the auto-touch logic; OR
+   (b) bootstrap-touch the sentinel but `sys.exit(0)` after — skip the slow
+       path on the very first call; the next call will hit the fast path. This
+       drops one record on fresh clone but eliminates the cost spike.
+   Current code does the bootstrap touch AND proceeds, which is the worst
+   choice.
+
+2. **`scripts/hooks/regenerate_ticket_index.py:127-134` — same workspace-flag
+   omission as T032, but in a hook (not a skill).** `get_current_session()`
+   at line 28-37 invokes `current_session.py` with no `--sessions` flag.
+   `check_closed_attribution` calls it to validate the `closed:` field of a
+   newly-written ticket. When the ticket lives under
+   `<workspace>/internal/tickets/closed/`, the hook compares the workspace's
+   `closed: S<workspace_session>` value against the **harness-global** session,
+   producing spurious "T016 attribution mismatch" warnings on every workspace
+   close. T032 fixed the user-facing skill but missed this hook — same root
+   cause (T020 made the script accept `--sessions` but consumers didn't
+   migrate). Fix: in `regenerate_ticket_index.py`, detect the workspace
+   (already done at line 82 via `_detect_workspace_from_path`) and pass
+   `--sessions <ws>/internal/sessions.md` to the subprocess.
+
+3. **`scripts/tools/toggle_telemetry.py:31-36` — regex `^#?\s*(workflow_telemetry\s*:\s*).*$`
+   only strips a single leading `#`.** A `# # workflow_telemetry: true` (double-
+   commented, as some users do when temporarily disabling) becomes
+   `# workflow_telemetry: false` after toggle off — still commented, and
+   `_yaml_telemetry_enabled()` in the hook treats it as false even when the
+   user toggles on. Minor edge case but trivially fixed by `^[#\s]*` or
+   `^(#\s*)*` in the prefix. Also note: the regex matches `workflow_telemetry:
+   trueblue` because `_yaml_telemetry_enabled` in the hook (line 118) has no
+   trailing `\s*$` or word boundary — same class of bug. Add `\b` or `\s*$`
+   to both.
+
+4. **`tests/test_telemetry.py:128-132` — `test_exits_silently_when_telemetry_disabled`
+   no longer tests what its name promises.** The pre-S7 version had a
+   comment about "Log must NOT have been written" but the assert never
+   verified it. S7 removed the comment but didn't add a check. With S7's
+   default-on state, this test runs with telemetry ON — so the hook *does*
+   write a log line. The test passes because it only asserts exit code 0.
+   Either rename to `test_exits_silently_with_any_state` (descriptive of
+   actual behaviour) or rebuild the test to set telemetry off, run the hook,
+   and assert no append to `.git/session_tool_log.jsonl`. The `test_exits_
+   silently_when_both_off` test (lines 88-109) does cover this case
+   properly, so this old test is now redundant noise.
+
+5. **`tests/test_telemetry.py:88-109` — `test_exits_silently_when_both_off`
+   mutates the real `harness.yaml` and `.git/workflow_telemetry_on` of the
+   running repository.** The `try/finally` restores state on success, but if
+   the test is interrupted (SIGINT, OOM, runner timeout), the user's actual
+   harness.yaml is left in `workflow_telemetry: false` state — silently
+   disabling telemetry until the next manual fix. A safer pattern is to
+   patch `ROOT` via monkeypatch (as the sibling `test_current_session_normalises_
+   bare_integer` does at lines 143-156). The existing isolated-root helper
+   `_make_fake_root` (lines 52-72) does exactly this but is unused. The test
+   should use it.
+
+6. **`scripts/hooks/log_tool_usage.py:75-82` — `_extract_exit` is still
+   Bash-only (S6 Concern #4, unaddressed).** S6 raised this and S7 deferred
+   it. The `exit` field is uniformly 0 for Edit/Write/Read records, making
+   it a misleading column in the JSONL. Either drop it from the record dict
+   at line 153-159, or rename to `bash_exit` and only emit for Bash records.
+   Current state ships latent noise.
+
+7. **`scripts/tools/analyze_tool_log.py:71-87` — `_retry_sequences` still
+   interleaves sessions (S6 Concern #10, unaddressed).** With telemetry now
+   default-on, multi-session aggregation (e.g. running
+   `analyze_tool_log.py` with no `--session` filter) will continue to flag
+   false-positive retries at session boundaries. The fix is ~5 lines: group
+   `records` by `session` first, run `_retry_sequences` per group, then
+   concatenate. The urgency goes up because the data starts accumulating
+   silently from S7 onward.
+
+## Bugs & Implementation Issues
+
+1. **Confirmed: `scripts/hooks/log_tool_usage.py:135` — bootstrap failure is
+   logged but not surfaced; the hook continues with a missing sentinel.**
+   If `.git/` is missing or write-protected, `_log_error` writes to
+   `.git/session_tool_log.errors` (which will also fail), and the hook
+   proceeds to the slow path. On every subsequent tool call the bootstrap
+   re-attempts and re-fails. There's no rate-limit on the error log either.
+   In an environment where `.git` is genuinely inaccessible, this could
+   inflate `session_tool_log.errors` to thousands of lines per session.
+   Either fail-fast (`sys.exit(0)` after first bootstrap failure within a
+   process — though hooks are per-tool-call subprocesses so this is moot)
+   or rate-limit via `mtime` check on the error file.
+
+2. **Confirmed: `harness.yaml:31-34` — `workflow_telemetry: true` default
+   means the harness ships hot-by-default for all consumers cloning it.**
+   This is a deliberate session decision (per the S7 active-work entry),
+   but it deserves a note: T026 was originally framed as "opt-in"; flipping
+   the default reverses that without a ticket explicitly authorizing the
+   change. The flip is logged in commit b6a82d9 but not tied to a ticket.
+   Either retroactively note the policy change in a ticket (T026 follow-up
+   or new ticket) or annotate the comment in `harness.yaml` itself
+   ("default-on as of S7; opt out via toggle_telemetry.py off"). Without
+   that, future readers will see the S6 ticket description ("Off by default
+   — opt in via harness.yaml") in `git log` and be confused.
+
+3. **Suspected: `scripts/tools/extract_opus_key_sections.py:118-121` —
+   `argparse.ArgumentParser()` (default `add_help=True`) combined with the
+   `--with-carry-forwards` flag means `--help` exits with code 0 BEFORE the
+   `if _args.with_carry_forwards:` branch at line 124 ever runs.** The test
+   `test_help_flag_exits_zero` asserts exit 0 and `"usage" in stdout` —
+   which passes — but the help text doesn't document `--with-carry-forwards`
+   behavior (just that the flag exists). Minor docstring gap, not a bug.
+   More importantly: `--with-carry-forwards` is undocumented in the SKILL
+   and only mentioned in the source. If session-start skill ever wants
+   carry-forwards in the briefing, the option is invisible.
+
+## Suggested Next Session Focus
+
+1. **Fix Concern #2 (`regenerate_ticket_index.py` workspace flag omission).**
+   This is the exact same bug class as T032 just closed, in a noisier
+   location: the PostToolUse hook fires on every workspace ticket Edit.
+   With telemetry default-on, the false-positive T016 warnings will start
+   spamming stderr on every workspace session. One-line fix + one test in
+   `tests/test_workspace_path_flags.py`. Prioritise before next workspace
+   session because it produces user-visible noise.
+
+2. **Address Concern #1 (telemetry bootstrap kills the off-state perf goal)
+   OR document the change.** The current implementation defeats T033's
+   stated acceptance criterion on first-call-after-fresh-clone. Either
+   (a) change the bootstrap to early-exit after touch (one extra `sys.exit(0)`),
+   or (b) drop the bootstrap entirely and require explicit toggle. Either
+   way, update the docstring to reflect actual behaviour. ~10 LoC; bundle
+   with a fast-exit timing test in `test_telemetry.py`.
+
+3. **Begin the carry-forward backlog session.** The backlog is now ~21 items
+   (S5's ~18 plus four S6 concerns deferred). Two consecutive sessions
+   (S6, S7) have closed only newly-opened tickets without touching the
+   backlog. With Phase 1 gate complete and the first real workspace live,
+   the workspace-scoped-paths cleanup (S1 #3 + S1 #7 / S3 #6 + S1 #11 +
+   S3 #3) is now blocking confident expansion to a second workspace. One
+   focused session, no new feature work.
+
+---
+
 

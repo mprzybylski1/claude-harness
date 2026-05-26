@@ -1,6 +1,6 @@
 # System State
 
-_Last updated: S8 2026-05-25_
+_Last updated: S9 2026-05-26_
 
 ---
 
@@ -23,11 +23,14 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Open Tickets
 
-**1 open ticket**
+**4 open tickets**
 
 | ID | Title | Phase | Age |
 |----|-------|-------|-----|
-| T000 | Short description (keep under 60 chars) | 2 | 3 | 4 | process | backend | frontend | fullstack | infra | process | 8 sessions |
+| T043 | S3 #3 — reduce N YAML loads per hook call in regenerate_ticket_index.py | Ph2 | perf | this session |
+| T044 | S1 #3 — run_static_analysis boundary check inside check functions | Ph2 | infra | this session |
+| T049 | Replace hardcoded absolute paths in settings.json hook commands | Ph2 | infra | this session |
+| T050 | Split opus_notes archive by session range when over line threshold | Ph2 | tooling | this session |
 
 ---
 

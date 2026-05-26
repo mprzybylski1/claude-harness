@@ -1,171 +1,3 @@
-# Opus Review — S7 2026-05-25
-
-Scope: closed T031 (extract_opus_key_sections header-level bug), T032 (session-start
-skill workspace flag), T033 (telemetry hook off-state overhead) + enabled
-telemetry by default. ~440 insertions / 21 deletions across one tool, one
-hook, one new helper, and two skill docs.
-
-S6 inline-fix status check: Bug #1 (session ID `S<n>` normalisation) closed inline
-(commit bf1f00d). Bug #3 (`_SESSION_CACHE` dead code) closed inline.
-Bugs #2, #4, #5, and Concerns #10, #11, #12 from S6 remain open and unaddressed
-this session — they should be noted as carry-forward.
-
-## Invariant Violations
-
-None new. Architecture invariants 1-5 are placeholders/optional and Invariant 5
-(workspace isolation) is not touched by this diff. The fail-closed-on-exceptions
-invariant (#4) is still violated by `harness_config.load_for_repo` (S6 Bug #2,
-unchanged this session) — fail-open silent fallback on malformed YAML remains.
-
-## Architectural Concerns
-
-1. **`scripts/hooks/log_tool_usage.py:128-135` — the bootstrap-from-yaml path
-   subverts the T033 design goal.** T033's acceptance criterion was "OFF-state
-   hook completes in well under 10 ms". With the bootstrap logic, the
-   first-tool-call-after-fresh-clone (or after sentinel deletion outside
-   `toggle_telemetry.py`) does a stdlib regex read of `harness.yaml` AND then
-   touches the sentinel AND then proceeds to do the full slow path (PyYAML
-   import + load via `_hc.load()`). That's the worst of both worlds — the
-   user pays the cost they were trying to avoid, exactly when the cache is
-   cold. The intended fast-OFF path only works when telemetry is genuinely off
-   in `harness.yaml`. Fix options:
-   (a) drop the bootstrap entirely — require explicit `toggle_telemetry.py on`,
-       and remove the auto-touch logic; OR
-   (b) bootstrap-touch the sentinel but `sys.exit(0)` after — skip the slow
-       path on the very first call; the next call will hit the fast path. This
-       drops one record on fresh clone but eliminates the cost spike.
-   Current code does the bootstrap touch AND proceeds, which is the worst
-   choice.
-
-2. **`scripts/hooks/regenerate_ticket_index.py:127-134` — same workspace-flag
-   omission as T032, but in a hook (not a skill).** `get_current_session()`
-   at line 28-37 invokes `current_session.py` with no `--sessions` flag.
-   `check_closed_attribution` calls it to validate the `closed:` field of a
-   newly-written ticket. When the ticket lives under
-   `<workspace>/internal/tickets/closed/`, the hook compares the workspace's
-   `closed: S<workspace_session>` value against the **harness-global** session,
-   producing spurious "T016 attribution mismatch" warnings on every workspace
-   close. T032 fixed the user-facing skill but missed this hook — same root
-   cause (T020 made the script accept `--sessions` but consumers didn't
-   migrate). Fix: in `regenerate_ticket_index.py`, detect the workspace
-   (already done at line 82 via `_detect_workspace_from_path`) and pass
-   `--sessions <ws>/internal/sessions.md` to the subprocess.
-
-3. **`scripts/tools/toggle_telemetry.py:31-36` — regex `^#?\s*(workflow_telemetry\s*:\s*).*$`
-   only strips a single leading `#`.** A `# # workflow_telemetry: true` (double-
-   commented, as some users do when temporarily disabling) becomes
-   `# workflow_telemetry: false` after toggle off — still commented, and
-   `_yaml_telemetry_enabled()` in the hook treats it as false even when the
-   user toggles on. Minor edge case but trivially fixed by `^[#\s]*` or
-   `^(#\s*)*` in the prefix. Also note: the regex matches `workflow_telemetry:
-   trueblue` because `_yaml_telemetry_enabled` in the hook (line 118) has no
-   trailing `\s*$` or word boundary — same class of bug. Add `\b` or `\s*$`
-   to both.
-
-4. **`tests/test_telemetry.py:128-132` — `test_exits_silently_when_telemetry_disabled`
-   no longer tests what its name promises.** The pre-S7 version had a
-   comment about "Log must NOT have been written" but the assert never
-   verified it. S7 removed the comment but didn't add a check. With S7's
-   default-on state, this test runs with telemetry ON — so the hook *does*
-   write a log line. The test passes because it only asserts exit code 0.
-   Either rename to `test_exits_silently_with_any_state` (descriptive of
-   actual behaviour) or rebuild the test to set telemetry off, run the hook,
-   and assert no append to `.git/session_tool_log.jsonl`. The `test_exits_
-   silently_when_both_off` test (lines 88-109) does cover this case
-   properly, so this old test is now redundant noise.
-
-5. **`tests/test_telemetry.py:88-109` — `test_exits_silently_when_both_off`
-   mutates the real `harness.yaml` and `.git/workflow_telemetry_on` of the
-   running repository.** The `try/finally` restores state on success, but if
-   the test is interrupted (SIGINT, OOM, runner timeout), the user's actual
-   harness.yaml is left in `workflow_telemetry: false` state — silently
-   disabling telemetry until the next manual fix. A safer pattern is to
-   patch `ROOT` via monkeypatch (as the sibling `test_current_session_normalises_
-   bare_integer` does at lines 143-156). The existing isolated-root helper
-   `_make_fake_root` (lines 52-72) does exactly this but is unused. The test
-   should use it.
-
-6. **`scripts/hooks/log_tool_usage.py:75-82` — `_extract_exit` is still
-   Bash-only (S6 Concern #4, unaddressed).** S6 raised this and S7 deferred
-   it. The `exit` field is uniformly 0 for Edit/Write/Read records, making
-   it a misleading column in the JSONL. Either drop it from the record dict
-   at line 153-159, or rename to `bash_exit` and only emit for Bash records.
-   Current state ships latent noise.
-
-7. **`scripts/tools/analyze_tool_log.py:71-87` — `_retry_sequences` still
-   interleaves sessions (S6 Concern #10, unaddressed).** With telemetry now
-   default-on, multi-session aggregation (e.g. running
-   `analyze_tool_log.py` with no `--session` filter) will continue to flag
-   false-positive retries at session boundaries. The fix is ~5 lines: group
-   `records` by `session` first, run `_retry_sequences` per group, then
-   concatenate. The urgency goes up because the data starts accumulating
-   silently from S7 onward.
-
-## Bugs & Implementation Issues
-
-1. **Confirmed: `scripts/hooks/log_tool_usage.py:135` — bootstrap failure is
-   logged but not surfaced; the hook continues with a missing sentinel.**
-   If `.git/` is missing or write-protected, `_log_error` writes to
-   `.git/session_tool_log.errors` (which will also fail), and the hook
-   proceeds to the slow path. On every subsequent tool call the bootstrap
-   re-attempts and re-fails. There's no rate-limit on the error log either.
-   In an environment where `.git` is genuinely inaccessible, this could
-   inflate `session_tool_log.errors` to thousands of lines per session.
-   Either fail-fast (`sys.exit(0)` after first bootstrap failure within a
-   process — though hooks are per-tool-call subprocesses so this is moot)
-   or rate-limit via `mtime` check on the error file.
-
-2. **Confirmed: `harness.yaml:31-34` — `workflow_telemetry: true` default
-   means the harness ships hot-by-default for all consumers cloning it.**
-   This is a deliberate session decision (per the S7 active-work entry),
-   but it deserves a note: T026 was originally framed as "opt-in"; flipping
-   the default reverses that without a ticket explicitly authorizing the
-   change. The flip is logged in commit b6a82d9 but not tied to a ticket.
-   Either retroactively note the policy change in a ticket (T026 follow-up
-   or new ticket) or annotate the comment in `harness.yaml` itself
-   ("default-on as of S7; opt out via toggle_telemetry.py off"). Without
-   that, future readers will see the S6 ticket description ("Off by default
-   — opt in via harness.yaml") in `git log` and be confused.
-
-3. **Suspected: `scripts/tools/extract_opus_key_sections.py:118-121` —
-   `argparse.ArgumentParser()` (default `add_help=True`) combined with the
-   `--with-carry-forwards` flag means `--help` exits with code 0 BEFORE the
-   `if _args.with_carry_forwards:` branch at line 124 ever runs.** The test
-   `test_help_flag_exits_zero` asserts exit 0 and `"usage" in stdout` —
-   which passes — but the help text doesn't document `--with-carry-forwards`
-   behavior (just that the flag exists). Minor docstring gap, not a bug.
-   More importantly: `--with-carry-forwards` is undocumented in the SKILL
-   and only mentioned in the source. If session-start skill ever wants
-   carry-forwards in the briefing, the option is invisible.
-
-## Suggested Next Session Focus
-
-1. **Fix Concern #2 (`regenerate_ticket_index.py` workspace flag omission).**
-   This is the exact same bug class as T032 just closed, in a noisier
-   location: the PostToolUse hook fires on every workspace ticket Edit.
-   With telemetry default-on, the false-positive T016 warnings will start
-   spamming stderr on every workspace session. One-line fix + one test in
-   `tests/test_workspace_path_flags.py`. Prioritise before next workspace
-   session because it produces user-visible noise.
-
-2. **Address Concern #1 (telemetry bootstrap kills the off-state perf goal)
-   OR document the change.** The current implementation defeats T033's
-   stated acceptance criterion on first-call-after-fresh-clone. Either
-   (a) change the bootstrap to early-exit after touch (one extra `sys.exit(0)`),
-   or (b) drop the bootstrap entirely and require explicit toggle. Either
-   way, update the docstring to reflect actual behaviour. ~10 LoC; bundle
-   with a fast-exit timing test in `test_telemetry.py`.
-
-3. **Begin the carry-forward backlog session.** The backlog is now ~21 items
-   (S5's ~18 plus four S6 concerns deferred). Two consecutive sessions
-   (S6, S7) have closed only newly-opened tickets without touching the
-   backlog. With Phase 1 gate complete and the first real workspace live,
-   the workspace-scoped-paths cleanup (S1 #3 + S1 #7 / S3 #6 + S1 #11 +
-   S3 #3) is now blocking confident expansion to a second workspace. One
-   focused session, no new feature work.
-
----
-
 # Opus Review — S8 2026-05-25
 
 Scope: closed T034 (regenerate_ticket_index workspace --sessions flag + path-component
@@ -382,3 +214,267 @@ behind are noted in the Findings section.
     placeholder. Currently this generates one false-positive WARN in
     every session's static analysis section — not blocking, but it's
     visible noise that future Opus reviews will keep flagging.
+
+---
+
+# Opus Review — S9 2026-05-26
+
+Scope: closed T039–T042 (hook absolute paths, test isolation, drop `_extract_exit`,
+`_is_closed_ticket` tests) and T045–T048 (carry-forward script, close_ticket
+script, surface_stale_tickets clean-state, carry-forward session-ref pattern).
+Merged project-agnostic workflow-review skill. ~1686 insertions / 169 deletions
+across 27 files. Net carry-forward shrinkage again: S8 findings #2, #3, #8 are
+addressed; findings #4, #5, #6, #9, #10, #11, #12, #13 carry forward.
+
+S8 inline-fix status check: Finding #2 (`test_exits_silently_when_both_off`
+mutating real harness.yaml) closed by T040. Finding #3 (`_extract_exit` field
+still in records) closed by T041. Finding #8 (no test for `_is_closed_ticket`)
+closed by T042.
+
+## Invariant Violations
+
+None new. Invariants 1–4 are placeholders. Invariant 5 (workspace isolation) is
+not regressed; `close_ticket.py` correctly searches both harness root and
+workspace internal dirs and picks the right archive/.
+
+## Architectural Concerns
+
+1. **`scripts/tools/close_ticket.py:172-189` — workspace YAML parsing uses a
+   stdlib regex, not the YAML loader.** `_docs_paths()` does
+   `re.search(r"^\s*docs_path\s*:\s*(.+)$", text, re.MULTILINE)` to extract
+   `docs_path` from `workspace.yaml`. Same anti-pattern S6/S7 worked hard to
+   remove from the telemetry hook. A `docs_path: "/quoted/path"` value will
+   include the quotes; a multi-line YAML value will fail; a commented-out
+   `# docs_path:` is correctly skipped only because `^\s*` doesn't match `#`.
+   The harness already has a parsed-YAML loader (`harness_config.load`). Use
+   it. Otherwise this divergence becomes another bug surface as workspace.yaml
+   schemas evolve.
+
+2. **`scripts/tools/close_ticket.py:286-301` — non-atomic write+rename.**
+   `ticket_path.write_text(content); ticket_path.rename(dest)` writes the
+   modified content to the original `tickets/open/` path THEN renames to
+   `archive/`. If the rename fails (cross-filesystem, permission error, dest
+   suddenly created by another process), the ticket is left in `open/` with
+   the closure changes already applied — frontmatter says `status: closed`,
+   resolution placeholder is gone, but the file still lives in open/. The
+   next `close_ticket.py` invocation will exit because the `Resolution`
+   placeholder is gone, leaving the user stuck. Safer: write to `dest` first,
+   then `unlink` the original (or use `os.replace` with full path swap).
+
+3. **`scripts/tools/close_ticket.py:141-169` — harness root wins on duplicate
+   ticket IDs.** `_find_ticket` returns on the first match — searches harness
+   root, then iterates workspaces. If two workspaces independently allocate
+   T100, or a workspace and harness both have T045 (entirely possible since
+   numbering is per-scope), the caller silently gets the harness one. No
+   warning, no `--workspace` flag to disambiguate. The early-return loop on
+   line 153 actually only fires once (it returns inside the for-loop), so
+   even multiple harness matches aren't surfaced. Fix: collect all matches,
+   error if >1 unless `--workspace=<name>` is supplied.
+
+4. **`scripts/tools/expand_carry_forward.py:_extract_findings` end-of-finding
+   detection only checks finding heads, not session heads.** Lines 388-405:
+   `end = next((hp for hp in head_positions if hp > start), len(content))`
+   where `head_positions` comes from `_ANY_FINDING_HEAD` only. If the matched
+   finding is the LAST numbered finding in its session block, the extracted
+   text will bleed into whatever follows — potentially the next session's
+   header line, intro paragraph, and any prose until the next finding head
+   (which could be 50+ lines away in the next review). The displayed `[From:
+   <file> — S<N>]` label will be correct for the start position, but the
+   trailing content can include unrelated material from the next session.
+   Fix: include `_SESSION_HEAD` positions in the end-boundary computation
+   (`min` of next finding head and next session head).
+
+5. **`scripts/tools/extract_carry_forwards.py:54-60` —
+   `_current_session_number()` derives "current" from the LAST `Opus Review
+   — S<N>` header in `opus_notes.md`.** That works on a fresh session when
+   the prior session's review is the newest header. But during the active
+   session (between session-start and session-close), no header for the
+   current session exists yet — so "carry-forward from S8" computed against
+   `current_sn=8` yields age 0 and is silently filtered out. The threshold
+   = 2 default makes this matter less, but the semantics are: ages are
+   relative to the LAST WRITTEN REVIEW, not to the LIVE SESSION. If the
+   intent of the script is to surface stale items at session-start, that's
+   actually fine. If it's ever called mid-session (e.g. workflow-review)
+   the result is off by one. Document the chosen semantic.
+
+6. **`scripts/tools/surface_stale_tickets.py:54-56` — silent absence of
+   aging section is now indistinguishable from format drift.** T047 changed
+   the behavior from "warn that section parse drifted" to "return clean
+   state". This is correct when the aging section is genuinely absent (no
+   stale tickets), but it now masks the case where `generate_ticket_index.py`
+   stops emitting the section because of a regression in the generator. The
+   only signal of a generator regression would be: "no aging warnings ever".
+   Mitigation: add a structural check at a higher level — e.g.
+   `generate_ticket_index.py` should ALWAYS emit the section header, with
+   "(none)" body if empty. Then `surface_stale_tickets.py` truly absent
+   header = clean state with no ambiguity.
+
+7. **`.claude/settings.json` hardcoded absolute paths.** Already tracked
+   as T049, just noting it surfaced this session as the fastest fix for the
+   workspace-cwd silencing problem (T039). The fix is correct but creates
+   a portability landmine — anyone cloning this harness to a different path
+   will silently get no hooks. T049 is open and the right next step.
+
+8. **`scripts/hooks/log_tool_usage.py` bootstrap-failure rate-limit.**
+   [Carry-forward from S8 Finding #4 — 1 session unaddressed] T035 fixed the
+   bootstrap-cost concern by exiting after touch, but the failure-mode
+   concern remains: a read-only `.git/` causes every tool call's bootstrap
+   attempt to fail, and `_log_error` appends to `.git/session_tool_log.errors`
+   without rate-limiting. Not actionable yet (no reported case), but should
+   be a known limit.
+
+9. **`scripts/hooks/regenerate_ticket_index.py:107-112` — `Path.resolve()`
+   on tool-provided paths.** [Carry-forward from S8 Finding #5 — 1 session
+   unaddressed] Symlink canonicalisation behavior is strictness-sensitive
+   across Python versions; a portability landmine for tickets being moved
+   atomically. Easy switch to lexical `Path(file_path).parts`.
+
+10. **`scripts/tools/prepare_opus_context.py:402-411` — invariants source
+    labeled "repo-local" even when `--repo` was not supplied.** [Carry-forward
+    from S8 Finding #6 — 1 session unaddressed] Misleading label for the
+    Opus reviewer. Trivial fix in the label-emitting code.
+
+11. **No test for `regenerate_ticket_index.py` workspace-aware T016
+    attribution.** [Carry-forward from S8 Finding #9 — 1 session unaddressed]
+    A regression that drops the `--sessions` flag again would not be caught.
+
+12. **`tests/test_telemetry.py:337-352` f-string-interpolated subprocess
+    source.** [Carry-forward from S8 Finding #10 — 1 session unaddressed]
+    Quote/backslash brittleness in tmp_path interpolation. Low urgency.
+
+13. **`harness.yaml:30` "Default: ON" vs. T026 ticket framing.**
+    [Carry-forward from S8 Finding #11 — 1 session unaddressed] Closed T026
+    ticket still says "opt-in" without forward-pointer to the policy flip.
+    One-line edit to closed ticket Resolution.
+
+14. **`scripts/tools/analyze_tool_log.py:76-78` defaultdict empty-string
+    grouping.** [Carry-forward from S8 Finding #12 — 1 session unaddressed]
+    Minor robustness comment.
+
+15. **Static analysis false positive: `harness_config.py:99` `utcnow` in
+    docstring.** [Carry-forward from S8 Finding #13 — 1 session unaddressed]
+    Still showing in this session's static analysis output ("WARN deprecated
+    datetime.utcnow() usage" at line 99 — that line is a docstring listing
+    example check names). Trivially fixed by renaming the docstring example;
+    pragma-strip the docstring in the static analyser would be more robust.
+
+## Bugs & Implementation Issues
+
+**S9 #1 — `scripts/tools/close_ticket.py` `_replace_resolution` is too
+strict.**
+- File: `scripts/tools/close_ticket.py:214-225`
+- The placeholder regex requires a specific shape:
+  `## Resolution\s*\n` then optional `(?:> \*\*Client-visible:\*\*.*?\n(?:> .*\n)*\n)?`
+  then `\(Fill in on close[^)]*\)\s*`. If a ticket's resolution section has
+  extra blank lines, lacks the trailing `\n` after the blockquote, or has
+  the `Client-visible` block written without leading `> ` on continuation
+  lines, the regex fails and the script exits 2 — the user sees "ticket
+  format unexpected" but the ticket has already been validated as having
+  acceptable ACs. The user is now stuck without an obvious next step.
+- Fix: split into two passes — first try the strict match, then fall back
+  to a permissive match that replaces everything from `## Resolution` up to
+  the next `^## ` heading. Print a warning instead of exiting on the
+  fallback path.
+
+**S9 #2 — `scripts/tools/close_ticket.py` session-stamp regex over-matches.**
+- File: `scripts/tools/close_ticket.py:280-283`
+- `re.search(r"\bS\d+\b.*\d{4}-\d{2}-\d{2}", resolution)` is used to decide
+  whether to auto-append the closure session/date. If the user's resolution
+  text mentions any historical session ("Reverted the S5 2026-01-01 commit")
+  the check passes and the actual closure session is NOT recorded. The
+  resolution is then archived without a verifiable closure timestamp.
+- Fix: always append the closure stamp on a new line; if the user wants to
+  reference history in prose that's separate from the stamp. Or require an
+  explicit `--skip-stamp` flag.
+
+**S9 #3 — `scripts/tools/close_ticket.py` non-atomic write + rename.**
+- File: `scripts/tools/close_ticket.py:296-301`
+- Already covered in Concerns #2 above. Re-listed here because it's a real
+  failure mode in practice (cross-mount renames, permission flips on
+  archive/), and the recovery path leaves the user with a half-closed
+  ticket that the script can no longer process.
+- Fix: write the modified content to a tempfile in the same directory as
+  `dest`, then `os.replace(tempfile, dest)`. Only after the replace
+  succeeds, `ticket_path.unlink()`.
+
+**S9 #4 — `scripts/tools/expand_carry_forward.py` end-of-finding bleeds
+across session boundaries.**
+- File: `scripts/tools/expand_carry_forward.py:388-405` (`_extract_findings`)
+- See Concern #4 above. When the matched finding is the last numbered item
+  in its session block, the extracted text includes everything up to the
+  next finding head — which can be in a later session, after a session
+  header, intro paragraph, scope section, and invariant violations section.
+  The `[From: <file> — S<N>]` header at line 437-440 correctly identifies
+  the source session of the START, but the displayed body misleadingly
+  includes content from S<N+1> or later.
+- Fix: in `_extract_findings`, change `end = next((hp for hp in
+  head_positions if hp > start), len(content))` to also consider
+  `_SESSION_HEAD` positions: build `boundary_positions = sorted(set(
+  head_positions + [m.start() for m in _SESSION_HEAD.finditer(content)]))`
+  and use that for the boundary search.
+
+**S9 #5 — `scripts/tools/extract_carry_forwards.py` `current_sn` derived
+from notes, not the live session.**
+- File: `scripts/tools/extract_carry_forwards.py:54-65`
+- See Concern #5 above. If this script is called mid-session by any
+  workflow other than session-start (e.g. workflow-review), age computations
+  are off by one because the "current" review header hasn't been written
+  yet. The session-start path happens to work because the previous
+  session's review IS the most recent. But the comment says "current"
+  session which is misleading.
+- Fix: either accept `--current-session` as an arg and let the caller
+  pass the live session ID (from `current_session.py`), or rename to
+  `_latest_review_session_number()` and document the semantics.
+
+**S9 #6 — `scripts/tools/extract_carry_forwards.py` warning prints once
+per call but doesn't surface in `extract_opus_key_sections.py` output.**
+- File: `scripts/tools/extract_carry_forwards.py:58-63`
+- The new warning ("session-reference pattern disabled") prints to stderr.
+  When called from `extract_opus_key_sections.py` via `_cf_main` as a
+  Python import (line 127 of that file), the warning still goes to stderr
+  — but `extract_opus_key_sections.py` is typically captured for the
+  session brief, and stderr is often dropped on the way to the user. The
+  user will see the carry-forward list look empty without knowing why.
+- Fix: print the warning to stdout when invoked via the brief path, or
+  surface it as a note in the brief output itself.
+
+## Test Gaps
+
+Most S9 changes have tests in `tests/test_workspace_path_flags.py` (22 new
+tests across 6 classes per the session log). The diff truncation prevents
+verifying every test, but the named classes suggest reasonable coverage of
+T042/T045/T046/T047/T048. Outstanding gaps from prior sessions are listed
+as carry-forwards above (notably the T034 regression test from S8 #9 and
+S8 #8 which T042 partially addressed).
+
+One specific gap in S9 itself:
+
+- **`close_ticket.py` `_replace_resolution` fallback path** — if the bug
+  in S9 #1 is fixed by adding a permissive fallback, that fallback needs
+  its own test (template with no Client-visible block, template with
+  trailing blank-line variance).
+
+- **`expand_carry_forward.py` session-boundary bleed** — the end-of-
+  finding bug (S9 #4) needs a regression test with two consecutive
+  reviews where the queried finding is the last item in the older review.
+
+## Suggested Next Session Focus
+
+1. **Fix `close_ticket.py` correctness bugs (S9 #1, #2, #3).** Non-atomic
+   write+rename and over-strict regex will bite real workspace closures.
+   Bundle all three into one small ticket — close_ticket.py is brand new,
+   easier to harden now than after it's entrenched in muscle-memory.
+   ~30 LoC + 3 tests.
+
+2. **Fix `expand_carry_forward.py` session-boundary bleed (S9 #4).** This
+   is the primary tool for surfacing carry-forward context — if the
+   output mixes adjacent sessions, the carry-forward backlog tracking
+   degrades. One-line fix + one parametrised test.
+
+3. **Carry-forward backlog cleanup session.** The list is now 8 items
+   (S8 findings #4, #5, #6, #9, #10, #11, #12, #13) — manageable in a
+   single session. T044 (S1 #3 boundary check) and T043 (S3 #3 YAML loads)
+   are already on the open list. Bundle the remaining S8 carry-forwards
+   into one or two more tickets and clear them. Three sessions of carry-
+   forward shrinkage in a row would be the first sustained backlog
+   contraction in the project's history.

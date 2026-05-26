@@ -19,9 +19,23 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Active Work
 
-**S9 (active) — closed T039–T042 (hook path fix, test isolation, drop _extract_exit, _is_closed_ticket test); opened T043–T050 (carry-forward backlog + workflow-review findings); merged workflow-review skill.**
+**S9 — closed T039–T042, T045–T048 (hook abs paths, test isolation, telemetry cleanup, carry-forward tooling, ticket closure script); impl-review hardening (6 findings); merged workflow-review skill; opened T043–T044, T049–T050.**
 
-Workflow review: 5 friction points; 6 tickets proposed; 6 opened (T045–T050).
+Files changed:
+- `.claude/settings.json` — T039: hooks use absolute paths (fix silent no-op from workspace cwd); trailing newline added
+- `scripts/hooks/log_tool_usage.py` — T041: removed _extract_exit field from telemetry records
+- `scripts/tools/surface_stale_tickets.py` — T047: absent aging section is clean state, not parse error
+- `scripts/tools/extract_carry_forwards.py` — T048: added session-ref pattern (_PAT_SESSION); threshold lowered to 2; warns when pattern disabled
+- `scripts/tools/close_ticket.py` — T045: new script — full closure dance (AC check, frontmatter, resolution, archive, INDEX, commit suggestion); HARNESS_ROOT env var for test isolation; fail-closed on session/YAML errors; dest-exists guard
+- `scripts/tools/expand_carry_forward.py` — T046: new script — finds numbered Opus finding by ID (S1#3) across all opus_notes files; [From:] headers; --latest flag
+- `scripts/tools/extract_opus_key_sections.py` — T046: --with-carry-forwards now prints expand_carry_forward hint
+- `.claude/skills/session-close/SKILL.md` — T045: Step 2 updated to reference close_ticket.py
+- `.claude/skills/workflow-review/SKILL.md` — merged project-agnostic skill; workspace-scope-aware
+- `tests/test_telemetry.py` — T039/T040: workspace-cwd smoke test; test isolation via mock.patch.object
+- `tests/test_workspace_path_flags.py` — T042/T045/T046/T047/T048: 6 new test classes (22 new tests)
+
+Tickets opened: T043–T050
+Tickets closed: T039, T040, T041, T042, T045, T046, T047, T048
 
 **S8 — closed T034–T038 (Opus carry-forward fixes: ticket attribution, telemetry hardening, fail-closed YAML, retry session isolation, invariants source labeling)**
 
@@ -56,3 +70,4 @@ S5 2026-05-25: workspace-awareness flags (T020–T025) + dead trading-app code r
 S6 2026-05-25: closed T026–T030 (telemetry hook, classify_session fix, invariants path fix, code_paths fix, batch consistency) + impl-review hardening (14 findings fixed, 18 new tests)
 S7 2026-05-25: closed T031–T033 (workspace session-start gaps, telemetry overhead) + enabled telemetry by default + impl-review hardening (8 findings fixed)
 S8 2026-05-25: closed T034–T038 (carry-forward fixes: ticket attribution, telemetry hardening, fail-closed YAML, retry session isolation, invariants labeling)
+S9 2026-05-26: closed T039–T042, T045–T048 (hook abs paths, carry-forward tooling, close_ticket.py, expand_carry_forward.py); impl-review hardening; merged workflow-review skill
