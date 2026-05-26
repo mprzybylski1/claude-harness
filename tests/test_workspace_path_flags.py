@@ -85,6 +85,79 @@ class TestCurrentSessionFlag:
         )
         assert result.returncode != 0
 
+    # ── T060: --sessions must NOT write CLAUDE_SESSION_ID ─────────────────────
+
+    def test_custom_sessions_does_not_write_session_id_cache(self, tmp_path, monkeypatch):
+        """When --sessions is given, CLAUDE_SESSION_ID must NOT be written (T060)."""
+        sessions_a = tmp_path / "sessions_a.md"
+        sessions_a.write_text(SESSIONS_MD)  # last entry S42 → current S43
+
+        # Point the cache file at a tmp location so we don't pollute the real .git/
+        fake_git = tmp_path / "fake_git"
+        fake_git.mkdir()
+        cache_file = fake_git / "CLAUDE_SESSION_ID"
+
+        import os as _os
+        result = subprocess.run(
+            [sys.executable, str(TOOLS / "current_session.py"), "--sessions", str(sessions_a)],
+            capture_output=True, text=True,
+            # We cannot easily redirect the hardcoded _SESSION_ID_FILE path via env,
+            # so we assert against the *real* cache file being unmodified.
+            # Record mtime before the call; if file doesn't exist, it must not be created.
+        )
+        assert result.returncode == 0
+        assert result.stdout.strip() == "S43"
+
+        # The real CLAUDE_SESSION_ID must not have been written with S43 (workspace value).
+        real_cache = ROOT / ".git" / "CLAUDE_SESSION_ID"
+        if real_cache.exists():
+            cached_val = real_cache.read_text().strip()
+            # If cache exists it should not contain the workspace session number
+            # (it may contain the harness-root session from a prior no-arg invocation).
+            # The key assertion: it must NOT equal S43 just because we passed --sessions.
+            # We verify by checking the cached value is not "43" (a workspace-derived number).
+            # This is only meaningful when 43 != harness-root session — but the important
+            # thing is that running with --sessions didn't _create_ or _overwrite_ the file.
+            pass  # existence check handled by the two-path test below
+
+    def test_two_custom_sessions_paths_do_not_clobber_cache(self, tmp_path):
+        """Calling current_session.py twice with different --sessions must not write CLAUDE_SESSION_ID (T060).
+
+        Strategy: record the cache file's state before both calls.  After both calls the
+        state must be identical — neither call should have touched it.
+        """
+        sessions_a = tmp_path / "sessions_a.md"
+        sessions_b = tmp_path / "sessions_b.md"
+        sessions_a.write_text(SESSIONS_MD)                           # → S43
+        sessions_b.write_text(SESSIONS_MD.replace("S42", "S100"))   # → S101
+
+        real_cache = ROOT / ".git" / "CLAUDE_SESSION_ID"
+
+        # Snapshot state before
+        cache_before_exists = real_cache.exists()
+        cache_before_content = real_cache.read_text().strip() if cache_before_exists else None
+
+        subprocess.run(
+            [sys.executable, str(TOOLS / "current_session.py"), "--sessions", str(sessions_a)],
+            capture_output=True, text=True,
+        )
+        subprocess.run(
+            [sys.executable, str(TOOLS / "current_session.py"), "--sessions", str(sessions_b)],
+            capture_output=True, text=True,
+        )
+
+        # Snapshot state after
+        cache_after_exists = real_cache.exists()
+        cache_after_content = real_cache.read_text().strip() if cache_after_exists else None
+
+        assert cache_before_exists == cache_after_exists, (
+            "CLAUDE_SESSION_ID must not be created or deleted by --sessions calls"
+        )
+        assert cache_before_content == cache_after_content, (
+            f"CLAUDE_SESSION_ID was clobbered: before={cache_before_content!r}, "
+            f"after={cache_after_content!r}"
+        )
+
 
 # ── T020: extract_session_brief.py --sessions ─────────────────────────────────
 

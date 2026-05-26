@@ -2,11 +2,11 @@
 id: T060
 title: current_session.py persists shared cache regardless of --sessions arg
 severity: medium
-status: open
+status: closed
 phase: 2
 layer: infra
 opened: S12 2026-05-26
-closed:
+closed: S13 2026-05-26
 ---
 
 ## Problem
@@ -17,10 +17,10 @@ T057 fixed the *consumer* (the telemetry hook no longer reads the cache), but th
 
 ## Acceptance Criteria
 
-- [ ] `persist_session` is called only when `current_session.py` runs without `--sessions` (i.e. the harness-root case), OR the cache is removed entirely (callers re-derive from sessions.md).
-- [ ] If kept, the cache is namespaced (e.g. `.git/CLAUDE_SESSION_ID.<hash-of-sessions-path>`) so workspace and harness don't share a file.
-- [ ] Test: call `current_session.py --sessions /path/A.md` then `current_session.py --sessions /path/B.md`; the harness cache is unchanged (or both caches are correct).
-- [ ] `session_close_commit_msg.py` (the remaining consumer) is updated if the cache shape changes.
+- [x] `persist_session` is called only when `current_session.py` runs without `--sessions` (i.e. the harness-root case), OR the cache is removed entirely (callers re-derive from sessions.md).
+- [x] If kept, the cache is namespaced (e.g. `.git/CLAUDE_SESSION_ID.<hash-of-sessions-path>`) so workspace and harness don't share a file. (Chosen approach: skip persist entirely for --sessions callers; no namespacing needed.)
+- [x] Test: call `current_session.py --sessions /path/A.md` then `current_session.py --sessions /path/B.md`; the harness cache is unchanged (or both caches are correct).
+- [x] `session_close_commit_msg.py` (the remaining consumer) is updated if the cache shape changes. (No change needed — it already handles missing cache gracefully by requiring --session N.)
 
 ## Notes
 
@@ -30,4 +30,6 @@ Surfaced by /workflow-review S12.
 
 ## Resolution
 
-(Fill in on close.)
+Skip persist_session when --sessions arg provided; only harness-root invocations write CLAUDE_SESSION_ID cache. session_close_commit_msg.py already handles missing cache file gracefully. 2 new tests added.
+
+Closed S13 2026-05-26.

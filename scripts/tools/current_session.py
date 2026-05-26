@@ -55,7 +55,8 @@ def main() -> None:
     args, _ = p.parse_known_args()
     path = Path(args.sessions) if args.sessions else SESSIONS_MD
     n = get_current_session(path)
-    persist_session(n)
+    if args.sessions is None:
+        persist_session(n)
     print(f"S{n}")
 
 
