@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S19 2026-05-26. 2 open tickets.
+Generated S19 2026-05-26. 1 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -15,11 +15,10 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Low (2)
+## Low (1)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
-| T095 | Fix _warn_unstaged_code docstring to match implementation | Ph2 | tooling | this session |
 | T096 | Document that _retry_sequences reports only path-bearing retries | Ph2 | tooling | this session |
 
 ## Unknown (0)

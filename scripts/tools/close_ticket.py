@@ -298,7 +298,7 @@ def _git_stage(
 
 
 def _warn_unstaged_code(git_root: str | None) -> None:
-    """Warn if there are unstaged or untracked code files not passed via --files."""
+    """Warn if there are any unstaged or untracked code files in the repo (unrelated files included)."""
     if git_root is None:
         return
     try:
