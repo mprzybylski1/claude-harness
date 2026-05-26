@@ -2,11 +2,11 @@
 id: T071
 title: _log_error rate-limit is per-process, resets every hook call
 severity: medium
-status: open
+status: closed
 phase: process
 layer: process
 opened: S13 2026-05-26
-closed:
+closed: S14 2026-05-26
 ---
 
 ## Problem
@@ -35,12 +35,11 @@ means (rotation).
 
 ## Acceptance Criteria
 
-- [ ] If "fix" path is chosen: `_log_error` reads/writes `.git/session_tool_log.errors.state`;
+- [x] If "fix" path is chosen: `_log_error` reads/writes `.git/session_tool_log.errors.state`;
   calling the hook 100 times in a loop (via subprocess) produces ≤ 11 error lines
   in `.git/session_tool_log.errors` regardless of process restarts between calls.
-- [ ] If "document" path is chosen: `_ERR_RATE_LIMIT` comment clarifies the per-process
-  scope; a test confirms the current behavior is intentional.
-- [ ] Existing rate-limit tests (`TestLogErrorRateLimit`) continue to pass.
+- [x] If "document" path is chosen: N/A — fix path chosen.
+- [x] Existing rate-limit tests (`TestLogErrorRateLimit`) continue to pass.
 
 ## Notes
 
@@ -50,4 +49,6 @@ that the ticket description implied.
 
 ## Resolution
 
-(Fill in on close: what was done and in which session/commit.)
+Implemented file-based cross-process rate-limit state. _log_error now reads/writes .git/session_tool_log.errors.state (JSON) via atomic temp-file rename. Removed module-level _ERR_COUNT/_ERR_WINDOW_START globals. Updated 4 existing rate-limit tests to mock _ERR_STATE_PATH; added test_rate_limit_cross_process (100 subprocess calls → ≤ 11 lines). S14.
+
+Closed S14 2026-05-26.

@@ -644,17 +644,14 @@ class TestLogErrorRateLimit:
     def setup_class(cls):
         sys.path.insert(0, str(ROOT / "scripts" / "hooks"))
 
-    def _reset_state(self, ltu):
-        ltu._ERR_COUNT = 0
-        ltu._ERR_WINDOW_START = 0.0
-
     def test_rate_limit_caps_at_ten_plus_marker(self, tmp_path):
         """100 rapid _log_error calls produce ≤ 10 real lines + 1 marker line."""
         import log_tool_usage as ltu
         import unittest.mock as mock
         err_path = tmp_path / "errors"
-        self._reset_state(ltu)
-        with mock.patch.object(ltu, "_ERR_PATH", err_path):
+        state_path = tmp_path / "errors.state"
+        with mock.patch.object(ltu, "_ERR_PATH", err_path), \
+             mock.patch.object(ltu, "_ERR_STATE_PATH", state_path):
             for i in range(100):
                 ltu._log_error(f"boom {i}")
         lines = err_path.read_text().splitlines()
@@ -666,8 +663,9 @@ class TestLogErrorRateLimit:
         import log_tool_usage as ltu
         import unittest.mock as mock
         err_path = tmp_path / "errors"
-        self._reset_state(ltu)
-        with mock.patch.object(ltu, "_ERR_PATH", err_path):
+        state_path = tmp_path / "errors.state"
+        with mock.patch.object(ltu, "_ERR_PATH", err_path), \
+             mock.patch.object(ltu, "_ERR_STATE_PATH", state_path):
             for i in range(100):
                 ltu._log_error(f"msg {i}")
             count_after_100 = len(err_path.read_text().splitlines())
@@ -681,9 +679,10 @@ class TestLogErrorRateLimit:
         import log_tool_usage as ltu
         import unittest.mock as mock
         err_path = tmp_path / "errors"
-        self._reset_state(ltu)
+        state_path = tmp_path / "errors.state"
         fake_now = [0.0]
         with mock.patch.object(ltu, "_ERR_PATH", err_path), \
+             mock.patch.object(ltu, "_ERR_STATE_PATH", state_path), \
              mock.patch("log_tool_usage.time") as mock_time:
             mock_time.time.side_effect = lambda: fake_now[0]
             mock_time.strftime.side_effect = time.strftime
@@ -702,9 +701,28 @@ class TestLogErrorRateLimit:
         import log_tool_usage as ltu
         import unittest.mock as mock
         err_path = tmp_path / "errors"
-        self._reset_state(ltu)
-        ltu._ERR_COUNT = 11  # already past limit
-        ltu._ERR_WINDOW_START = time.time()  # keep window current so it doesn't reset
-        with mock.patch.object(ltu, "_ERR_PATH", err_path):
+        state_path = tmp_path / "errors.state"
+        state_path.write_text(json.dumps({"count": 11, "window_start": time.time()}))
+        with mock.patch.object(ltu, "_ERR_PATH", err_path), \
+             mock.patch.object(ltu, "_ERR_STATE_PATH", state_path):
             ltu._log_error("should be silently dropped")
         assert not err_path.exists() or err_path.read_text() == ""
+
+    def test_rate_limit_cross_process(self, tmp_path):
+        """100 subprocess calls each emitting one error produce ≤ 11 total lines."""
+        err_path = tmp_path / "errors"
+        state_path = tmp_path / "errors.state"
+        hooks_dir = str(ROOT / "scripts" / "hooks")
+        script = (
+            "import sys; "
+            f"sys.path.insert(0, {repr(hooks_dir)}); "
+            "import log_tool_usage as ltu; "
+            "from pathlib import Path; "
+            f"ltu._ERR_PATH = Path({repr(str(err_path))}); "
+            f"ltu._ERR_STATE_PATH = Path({repr(str(state_path))}); "
+            "ltu._log_error('boom')"
+        )
+        for _ in range(100):
+            subprocess.run([sys.executable, "-c", script], check=True)
+        lines = err_path.read_text().splitlines() if err_path.exists() else []
+        assert len(lines) <= 11, f"Expected ≤ 11 lines across 100 processes, got {len(lines)}"

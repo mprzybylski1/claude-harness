@@ -41,10 +41,9 @@ _SENTINEL = ROOT / ".git" / "workflow_telemetry_on"
 
 _LOG_PATH = ROOT / ".git" / "session_tool_log.jsonl"
 _ERR_PATH = ROOT / ".git" / "session_tool_log.errors"
+_ERR_STATE_PATH = ROOT / ".git" / "session_tool_log.errors.state"
 _DEFAULT_MAX_LINES = 5000
 
-_ERR_COUNT: int = 0
-_ERR_WINDOW_START: float = 0.0
 _ERR_RATE_LIMIT = 10
 _ERR_WINDOW_SECS = 60
 
@@ -178,16 +177,31 @@ def _rotate_if_needed(path: Path, max_lines: int) -> None:
 
 
 def _log_error(msg: str) -> None:
-    global _ERR_COUNT, _ERR_WINDOW_START
     try:
         now = time.time()
-        if now - _ERR_WINDOW_START > _ERR_WINDOW_SECS:
-            _ERR_COUNT = 0
-            _ERR_WINDOW_START = now
-        if _ERR_COUNT > _ERR_RATE_LIMIT:
+        count, window_start = 0, 0.0
+        try:
+            state = json.loads(_ERR_STATE_PATH.read_text(encoding="utf-8"))
+            count = int(state["count"])
+            window_start = float(state["window_start"])
+        except Exception:
+            pass
+        if now - window_start > _ERR_WINDOW_SECS:
+            count = 0
+            window_start = now
+        if count > _ERR_RATE_LIMIT:
             return
-        _ERR_COUNT += 1
-        if _ERR_COUNT > _ERR_RATE_LIMIT:
+        count += 1
+        try:
+            tmp = _ERR_STATE_PATH.with_suffix(".tmp")
+            tmp.write_text(
+                json.dumps({"count": count, "window_start": window_start}),
+                encoding="utf-8",
+            )
+            os.replace(str(tmp), str(_ERR_STATE_PATH))
+        except Exception:
+            pass
+        if count > _ERR_RATE_LIMIT:
             msg = "[rate-limit engaged — further errors suppressed]"
         with _ERR_PATH.open("a", encoding="utf-8") as f:
             f.write(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} {msg}\n")
