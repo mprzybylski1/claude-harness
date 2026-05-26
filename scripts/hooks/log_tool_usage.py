@@ -7,7 +7,17 @@ Toggle via: python scripts/tools/toggle_telemetry.py on|off|status
 (manages .git/workflow_telemetry_on sentinel and harness.yaml in sync)
 
 Log format (one JSON object per line):
-    {"ts": 1700000000.0, "tool": "Edit", "path": "scripts/...", "session": "S6"}
+    {"ts": 1700000000.0, "tool": "Edit", "path": "scripts/...",
+     "session": "S6", "workspace": "scrabble-score"}
+
+Session/workspace stamping (T057):
+  - The tool call's target path(s) are matched against every active workspace's
+    declared repos. If the path lies inside a workspace, that workspace's
+    sessions.md is read directly to derive S<N>. If no workspace matches,
+    harness-root docs/sessions.md is used and "workspace" is "".
+  - The hook does NOT read .git/CLAUDE_SESSION_ID. That cache is written by
+    current_session.py and gets clobbered by mixed harness/workspace callers,
+    so it cannot be trusted for per-call stamping.
 
 Log location: <harness-root>/.git/session_tool_log.jsonl
   - Inside .git/ so it is never committed or pushed.
@@ -38,27 +48,83 @@ def _max_lines(harness: dict) -> int:
     return int(harness.get("workflow_telemetry_max_lines", _DEFAULT_MAX_LINES))
 
 
-def _current_session() -> str:
-    """Read session ID from .git cache, then fall back to deriving from sessions.md."""
-    # Fast path: .git/CLAUDE_SESSION_ID (written by session_close_commit_msg.py).
-    # The file stores a bare integer (e.g. "6"); normalise to "S6".
-    claude_id = ROOT / ".git" / "CLAUDE_SESSION_ID"
-    if claude_id.exists():
-        val = claude_id.read_text().strip()
-        if val:
-            return val if val.startswith("S") else f"S{val}"
-    # Slow path: re-derive from sessions.md — no subprocess; use the same regex
-    # current_session.py uses.
+def _list_workspaces() -> list[tuple[str, dict]]:
+    """Return [(slug, cfg), ...] for active workspaces. Wrapped so tests can mock.
+
+    Fails open: returns [] if workspace_config cannot be imported or raises.
+    Telemetry must never break tool calls.
+    """
     try:
-        import re
+        sys.path.insert(0, str(ROOT / "scripts" / "tools"))
+        import workspace_config as _wc
+        return _wc.list_active_workspaces()
+    except Exception as exc:
+        _log_error(f"list_active_workspaces failed: {exc}")
+        return []
+
+
+def _candidate_paths(tool_name: str, tool_input: dict) -> list[str]:
+    """Extract path-like tokens from the tool input for workspace matching."""
+    if tool_name in ("Edit", "Write", "Read", "NotebookEdit"):
+        fp = tool_input.get("file_path", "")
+        return [fp] if fp else []
+    if tool_name == "Bash":
+        cmd = tool_input.get("command", "")
+        tokens: list[str] = []
+        for raw in cmd.split():
+            t = raw.strip("'\"`")
+            if "=" in t and not (t.startswith("/") or t.startswith("~/")):
+                t = t.split("=", 1)[1].strip("'\"`")
+            if t.startswith("/") or t.startswith("~/"):
+                tokens.append(t)
+        return tokens
+    return []
+
+
+def _detect_workspace(tool_name: str, tool_input: dict) -> tuple[str, dict | None]:
+    """Return (slug, cfg) for the workspace this tool call targets, or ("", None)."""
+    paths = _candidate_paths(tool_name, tool_input)
+    if not paths:
+        return ("", None)
+    try:
+        sys.path.insert(0, str(ROOT / "scripts" / "tools"))
+        import workspace_config as _wc
+    except Exception as exc:
+        _log_error(f"workspace_config import failed: {exc}")
+        return ("", None)
+    workspaces = _list_workspaces()
+    for path in paths:
+        for slug, cfg in workspaces:
+            try:
+                if _wc.is_within_workspace(Path(path), cfg):
+                    return (slug, cfg)
+            except Exception:
+                continue
+    return ("", None)
+
+
+def _session_for_workspace(ws_dir: Path | None, ws_cfg: dict | None) -> str:
+    """Read sessions.md from the workspace (if any) or harness root, return next S<N>."""
+    import re
+    if ws_cfg is not None:
+        try:
+            sys.path.insert(0, str(ROOT / "scripts" / "tools"))
+            import workspace_config as _wc
+            sessions_md = _wc.internal_dir(ws_dir, ws_cfg) / "sessions.md"
+        except Exception as exc:
+            _log_error(f"internal_dir resolution failed: {exc}")
+            return ""
+    else:
         sessions_md = ROOT / "docs" / "sessions.md"
-        if sessions_md.exists():
-            text = sessions_md.read_text(encoding="utf-8")
-            entries = re.findall(r"^S(\d+)\s+\d{4}-\d{2}-\d{2}:", text, re.MULTILINE)
-            if entries:
-                return f"S{int(entries[-1]) + 1}"
-    except Exception:
-        pass
+    try:
+        if not sessions_md.exists():
+            return ""
+        text = sessions_md.read_text(encoding="utf-8")
+        entries = re.findall(r"^S(\d+)\s+\d{4}-\d{2}-\d{2}:", text, re.MULTILINE)
+        if entries:
+            return f"S{int(entries[-1]) + 1}"
+    except Exception as exc:
+        _log_error(f"sessions.md read failed: {exc}")
     return ""
 
 
@@ -144,11 +210,21 @@ def main() -> None:
     tool_name = payload.get("tool_name", "")
     tool_input = payload.get("tool_input", {})
 
+    slug, ws_cfg = _detect_workspace(tool_name, tool_input)
+    ws_dir = None
+    if ws_cfg is not None:
+        try:
+            import workspace_config as _wc
+            ws_dir = _wc.workspace_dir(slug)
+        except Exception:
+            ws_dir = None
+
     record = {
         "ts": time.time(),
         "tool": tool_name,
         "path": _extract_path(tool_name, tool_input),
-        "session": _current_session(),
+        "session": _session_for_workspace(ws_dir, ws_cfg),
+        "workspace": slug,
     }
 
     try:
