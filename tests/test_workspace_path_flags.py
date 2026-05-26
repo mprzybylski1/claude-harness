@@ -779,13 +779,23 @@ Synthetic.
         assert "(Fill in on close." not in result
 
     def test_replace_resolution_permissive_fallback_text_before_placeholder(self, capsys):
-        """Non-whitespace text before placeholder → permissive fallback fires + WARNING."""
+        """Non-whitespace text before placeholder → permissive fallback fires + WARNING + pre-text preserved."""
         content = "## Resolution\nNote: see T052 for background.\n(Fill in on close.)\n"
         result = self.ct._replace_resolution(content, "Fixed via fallback.")
         captured = capsys.readouterr()
         assert "Fixed via fallback." in result
         assert "(Fill in on close." not in result
+        assert "Note: see T052 for background." in result, "pre-placeholder text must be preserved"
         assert "WARNING" in captured.err
+
+    def test_replace_resolution_regex_metacharacters_survive(self):
+        """Resolution text containing regex metacharacters must not cause re.sub to crash or mangle."""
+        content = "## Resolution\n(Fill in on close.)\n"
+        resolution = r"Patched \g<1> placeholder and fixed \d+ issues."
+        result = self.ct._replace_resolution(content, resolution)
+        assert r"\g<1>" in result
+        assert r"\d+" in result
+        assert "(Fill in on close." not in result
 
     def test_replace_resolution_no_placeholder_exits2(self):
         """No placeholder anywhere in Resolution section → exit 2."""
@@ -853,12 +863,13 @@ Synthetic.
 
         monkeypatch.setattr(Path, "unlink", fail_on_source)
 
-        with pytest.raises(OSError):
+        with pytest.raises((OSError, SystemExit)):
             self.ct._atomic_move(ticket_path, dest, "new content")
 
         assert dest.exists(), "archive must exist after os.replace"
         assert dest.read_text() == "new content", "archive must have correct content"
         assert not list(archive_dir.glob("*.tmp")), "no temp files should remain"
+        assert ticket_path.exists(), "source ticket must still exist when unlink failed"
 
 
 # ── Tests: surface_stale_tickets.py (T047) ───────────────────────────────────

@@ -31,7 +31,7 @@ _default_root = Path(__file__).resolve().parents[2]
 ROOT = Path(os.environ.get("HARNESS_ROOT", str(_default_root)))
 
 sys.path.insert(0, str(ROOT / "scripts" / "tools"))
-from workspace_config import load_workspace, internal_dir as _ws_internal_dir
+from workspace_config import load_workspace
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -186,7 +186,15 @@ def _atomic_move(ticket_path: Path, dest: Path, content: str) -> None:
     except Exception:
         tmp.unlink(missing_ok=True)
         raise
-    ticket_path.unlink()
+    try:
+        ticket_path.unlink()
+    except OSError as exc:
+        print(
+            f"WARNING: archive written to {dest} but could not remove {ticket_path}: {exc}\n"
+            f"  Manual cleanup: rm {ticket_path}",
+            file=sys.stderr,
+        )
+        sys.exit(2)
 
 
 def _regenerate_index(internal: Path | None) -> None:
