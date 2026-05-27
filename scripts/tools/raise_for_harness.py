@@ -74,6 +74,7 @@ title: {title}
 severity: {severity}
 status: raised
 harness_ticket:
+resolved_in:
 ---
 
 ## Context

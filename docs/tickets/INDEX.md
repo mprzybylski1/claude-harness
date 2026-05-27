@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S20 2026-05-27. 6 open tickets.
+Generated S20 2026-05-27. 5 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -14,11 +14,10 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 | T108 | close_ticket.py close-the-loop: update source SR to resolved on ticket close | Ph2 | tooling | this session |
 | T111 | PostToolUse hooks: block cross-layer writes between workspace and harness state | Ph2 | infra | this session |
 
-## Medium (3)
+## Medium (2)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
-| T107 | reject_raised_concern.py — reject SR with reason, write terminal status | Ph2 | tooling | this session |
 | T109 | Harness-root session-start: surface pending raised concerns from all workspaces | Ph2 | process | this session |
 | T110 | Workspace session-start: surface own raised concerns and auto-archive terminal items | Ph2 | process | this session |
 
