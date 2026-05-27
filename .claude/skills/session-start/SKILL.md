@@ -87,6 +87,12 @@ Read these files **sequentially** (use workspace-scoped paths if in a workspace)
    section from the briefing entirely in that case. If output is non-empty, include it
    under **Pending raised concerns** in the Step 3 briefing.
 
+8. **Workspace session only:** Run
+   `python scripts/tools/surface_workspace_concerns.py --workspace <WORKSPACE_SLUG>` —
+   surfaces the workspace's own raised concerns and auto-archives terminal items after
+   showing them once. Empty output means no concerns; omit the section from the briefing.
+   Include non-empty output under **Your raised concerns** in the Step 3 briefing.
+
 **If extract_session_brief.py or extract_opus_key_sections.py do not yet support --sessions
 or --opus flags:** read the files directly as a fallback and note the gap.
 
@@ -141,6 +147,11 @@ Run the appropriate command to get the session ID:
 [Full output of python scripts/tools/list_raised_concerns.py]
 ```
 
+**Your raised concerns:** *(workspace session only — omit section entirely if surface_workspace_concerns.py produces no output)*
+```
+[Full output of python scripts/tools/surface_workspace_concerns.py --workspace <WORKSPACE_SLUG>]
+```
+
 **Suggested focus:**
 - [1-3 specific tickets most relevant to current gate or critical/high severity]
 ---
@@ -159,8 +170,9 @@ Do not begin implementation until the user responds.
 - The user knows phase gate status without asking
 - Aging tickets are visible
 - Hook errors from `.git/session_tool_log.errors` are surfaced if present
-- Harness-root sessions show pending raised concerns; workspace sessions do not
-- Pending raised concerns section is omitted entirely when there are none (no noise)
+- Harness-root sessions show pending raised concerns from all workspaces
+- Workspace sessions show only their own raised concerns; terminal items auto-archived after surfacing
+- Both concerns sections omitted entirely when empty (no noise)
 - The user is asked before work begins
 
 ## Do not use this skill when
