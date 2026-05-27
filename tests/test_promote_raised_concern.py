@@ -1,0 +1,172 @@
+"""Tests for T106: promote_raised_concern.py."""
+from __future__ import annotations
+
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = ROOT / "scripts" / "tools" / "promote_raised_concern.py"
+
+_SR_BODY = """\
+---
+id: SR-001
+from: myws
+raised: S5 2026-05-27
+title: Fix the broken thing
+severity: high
+status: raised
+harness_ticket:
+---
+
+## Context
+
+Something broke because of X.
+
+## Proposed change
+
+Do Y to fix it.
+
+## Harness disposition
+
+(Filled by harness on promotion or rejection.)
+"""
+
+
+def _setup(tmp_path: Path, slug: str = "myws") -> tuple[Path, Path]:
+    """Minimal harness + workspace skeleton. Returns (harness, sr_path)."""
+    (tmp_path / "docs" / "tickets" / "open").mkdir(parents=True)
+    (tmp_path / "docs" / "archive").mkdir(parents=True)
+    (tmp_path / "docs" / "tickets" / "INDEX.md").write_text("# Index\n", encoding="utf-8")
+    (tmp_path / "docs" / "sessions.md").write_text(
+        "## Session Log\n\nS9 2026-01-01: init\n", encoding="utf-8"
+    )
+    tools = tmp_path / "scripts" / "tools"
+    tools.mkdir(parents=True)
+    (tools / "current_session.py").write_text("print('S9')\n", encoding="utf-8")
+    (tools / "generate_ticket_index.py").write_text(
+        "import os; from pathlib import Path\n"
+        "root = Path(os.environ.get('HARNESS_ROOT', '.'))\n"
+        "(root / 'docs' / 'tickets' / 'INDEX.md').write_text('# Updated\\n')\n",
+        encoding="utf-8",
+    )
+    ws_dir = tmp_path / "workspaces" / slug
+    raised_dir = ws_dir / "raised"
+    (raised_dir / "archive").mkdir(parents=True)
+    (ws_dir / "workspace.yaml").write_text(f"name: {slug}\n", encoding="utf-8")
+    sr_path = raised_dir / "SR-001-fix-the-broken-thing.md"
+    sr_path.write_text(_SR_BODY, encoding="utf-8")
+    return tmp_path, sr_path
+
+
+def _run(harness: Path, *args: str) -> subprocess.CompletedProcess:
+    import os as _os
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), *args],
+        capture_output=True, text=True,
+        env={**_os.environ, "HARNESS_ROOT": str(harness), "PYTHONPATH": str(ROOT)},
+    )
+
+
+def _open_ticket(harness: Path) -> Path:
+    tickets = list((harness / "docs" / "tickets" / "open").glob("T*.md"))
+    assert len(tickets) == 1, f"Expected 1 ticket, found: {tickets}"
+    return tickets[0]
+
+
+class TestPromoteRaisedConcern:
+
+    def test_happy_path_exits_zero(self, tmp_path):
+        harness, _ = _setup(tmp_path)
+        result = _run(harness, "myws/SR-001")
+        assert result.returncode == 0, result.stderr
+
+    def test_harness_ticket_created_with_correct_title_and_severity(self, tmp_path):
+        """Ticket file created in docs/tickets/open/ with SR title and severity."""
+        harness, _ = _setup(tmp_path)
+        result = _run(harness, "myws/SR-001")
+        assert result.returncode == 0, result.stderr
+        content = _open_ticket(harness).read_text(encoding="utf-8")
+        assert "Fix the broken thing" in content
+        assert "severity: high" in content
+
+    def test_ticket_has_source_field(self, tmp_path):
+        """Ticket frontmatter contains source: myws/SR-001."""
+        harness, _ = _setup(tmp_path)
+        result = _run(harness, "myws/SR-001")
+        assert result.returncode == 0, result.stderr
+        content = _open_ticket(harness).read_text(encoding="utf-8")
+        assert "source: myws/SR-001" in content
+
+    def test_sr_status_updated_to_promoted(self, tmp_path):
+        """SR file status field changes from raised to promoted."""
+        harness, sr_path = _setup(tmp_path)
+        result = _run(harness, "myws/SR-001")
+        assert result.returncode == 0, result.stderr
+        content = sr_path.read_text(encoding="utf-8")
+        assert "status: promoted" in content
+        assert "status: raised" not in content
+
+    def test_sr_harness_ticket_field_updated(self, tmp_path):
+        """SR file harness_ticket field is set to the new ticket ID."""
+        harness, sr_path = _setup(tmp_path)
+        result = _run(harness, "myws/SR-001")
+        assert result.returncode == 0, result.stderr
+        content = sr_path.read_text(encoding="utf-8")
+        assert re.search(r"harness_ticket:\s*T\d+", content), \
+            f"harness_ticket not updated:\n{content}"
+
+    def test_body_copied_to_problem_section(self, tmp_path):
+        """SR Context content is placed in the ticket Problem section."""
+        harness, _ = _setup(tmp_path)
+        result = _run(harness, "myws/SR-001")
+        assert result.returncode == 0, result.stderr
+        content = _open_ticket(harness).read_text(encoding="utf-8")
+        assert "Something broke because of X" in content
+
+    def test_proposed_change_copied(self, tmp_path):
+        """SR Proposed change section is also copied into the ticket body."""
+        harness, _ = _setup(tmp_path)
+        result = _run(harness, "myws/SR-001")
+        assert result.returncode == 0, result.stderr
+        content = _open_ticket(harness).read_text(encoding="utf-8")
+        assert "Do Y to fix it" in content
+
+    def test_harness_disposition_not_copied(self, tmp_path):
+        """Harness disposition section is NOT copied into the ticket body."""
+        harness, _ = _setup(tmp_path)
+        result = _run(harness, "myws/SR-001")
+        assert result.returncode == 0, result.stderr
+        content = _open_ticket(harness).read_text(encoding="utf-8")
+        assert "Harness disposition" not in content
+
+    def test_refuses_if_already_promoted(self, tmp_path):
+        """Exits non-zero when SR status is already promoted."""
+        harness, sr_path = _setup(tmp_path)
+        text = sr_path.read_text(encoding="utf-8")
+        sr_path.write_text(text.replace("status: raised", "status: promoted"), encoding="utf-8")
+        result = _run(harness, "myws/SR-001")
+        assert result.returncode != 0
+        assert "raised" in result.stderr or "promoted" in result.stderr
+
+    def test_refuses_if_resolved(self, tmp_path):
+        """Exits non-zero when SR status is resolved (terminal)."""
+        harness, sr_path = _setup(tmp_path)
+        text = sr_path.read_text(encoding="utf-8")
+        sr_path.write_text(text.replace("status: raised", "status: resolved"), encoding="utf-8")
+        result = _run(harness, "myws/SR-001")
+        assert result.returncode != 0
+
+    def test_sr_not_found_exits_nonzero(self, tmp_path):
+        """Non-existent SR ID causes exit non-zero with ERROR."""
+        harness, _ = _setup(tmp_path)
+        result = _run(harness, "myws/SR-999")
+        assert result.returncode != 0
+        assert "ERROR" in result.stderr
+
+    def test_bad_usage_exits_nonzero(self, tmp_path):
+        """Missing slug/SR-NNN format exits non-zero."""
+        harness, _ = _setup(tmp_path)
+        result = _run(harness, "SR-001")
+        assert result.returncode != 0
