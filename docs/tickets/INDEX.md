@@ -1,17 +1,16 @@
 # Ticket Index
 
-Generated S20 2026-05-27. 8 open tickets.
+Generated S20 2026-05-27. 7 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
 
 *(none)*
 
-## High (4)
+## High (3)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
-| T105 | list_raised_concerns.py — harness aggregator of pending workspace concerns | Ph2 | tooling | this session |
 | T106 | promote_raised_concern.py — accept SR, open harness ticket, stamp raised file | Ph2 | tooling | this session |
 | T108 | close_ticket.py close-the-loop: update source SR to resolved on ticket close | Ph2 | tooling | this session |
 | T111 | PostToolUse hooks: block cross-layer writes between workspace and harness state | Ph2 | infra | this session |
