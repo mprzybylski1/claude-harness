@@ -36,6 +36,7 @@ def _parse_frontmatter(path: Path) -> dict:
     try:
         data = yaml.safe_load(parts[1]) or {}
     except yaml.YAMLError:
+        print(f"WARNING: could not parse frontmatter in {path} — skipping", file=sys.stderr)
         return {}
     return data if isinstance(data, dict) else {}
 
@@ -61,8 +62,6 @@ def main() -> None:
         slug = ws_dir.name
         items: list[dict] = []
         for md in raised_dir.glob("*.md"):
-            if md.parent.name == "archive":
-                continue
             data = _parse_frontmatter(md)
             if not data:
                 continue

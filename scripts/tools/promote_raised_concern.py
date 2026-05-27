@@ -84,8 +84,12 @@ def _stamp_source(ticket_path: Path, sr_ref: str) -> None:
         count=1,
     )
     if updated == text:
-        print(f"WARNING: could not insert source: field into {ticket_path}", file=sys.stderr)
-        return
+        print(
+            f"ERROR: could not insert source: field into {ticket_path} — "
+            f"missing closed: line in frontmatter. Add 'closed:' to the ticket before promoting.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
     ticket_path.write_text(updated, encoding="utf-8")
 
 
@@ -112,14 +116,20 @@ def _update_sr(sr_path: Path, ticket_id: str) -> None:
         flags=re.MULTILINE,
         count=1,
     )
-    text = re.sub(
+    new_text = re.sub(
         r"(^harness_ticket:).*$",
         rf"\1 {ticket_id}",
         text,
         flags=re.MULTILINE,
         count=1,
     )
-    sr_path.write_text(text, encoding="utf-8")
+    if new_text == text:
+        print(
+            f"WARNING: could not set harness_ticket: in SR {sr_path.name} — "
+            f"missing harness_ticket: field. Add it manually: harness_ticket: {ticket_id}",
+            file=sys.stderr,
+        )
+    sr_path.write_text(new_text, encoding="utf-8")
 
 
 def main() -> None:

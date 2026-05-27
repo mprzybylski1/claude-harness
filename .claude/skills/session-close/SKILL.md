@@ -297,7 +297,7 @@ Use this path when the workspace session cannot close cleanly. Do **not** run St
 ### Steps
 
 1. **Commit in-progress work to a WIP branch** in the workspace repo:
-   ```bash
+   ```text
    git checkout -b wip/S[CURRENT_SESSION]-blocked
    git add <in-progress files>
    git commit -m "WIP: blocked by <description> — S[CURRENT_SESSION]"

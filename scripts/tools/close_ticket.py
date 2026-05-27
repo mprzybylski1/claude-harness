@@ -402,28 +402,53 @@ def _parse_source(content: str) -> tuple[str, str] | None:
     m = re.search(r"^source:\s*(\S+)/(SR-\d+)\s*$", content, re.MULTILINE)
     if not m:
         return None
-    return m.group(1), m.group(2).upper()
+    slug = m.group(1)
+    if not re.fullmatch(r"[a-z0-9-]+", slug):
+        print(
+            f"WARNING: source: field has invalid slug '{slug}' — skipping SR resolution",
+            file=sys.stderr,
+        )
+        return None
+    return slug, m.group(2).upper()
 
 
 def _resolve_source_sr(sr_path: Path, session: str) -> None:
-    """Update SR file: status → resolved, resolved_in → S<N>."""
+    """Update SR file: status raised/promoted → resolved, resolved_in → S<N>."""
     text = sr_path.read_text(encoding="utf-8")
+    if not re.search(r"^status:\s*(raised|promoted)\s*$", text, flags=re.MULTILINE):
+        print(
+            f"WARNING: SR {sr_path.name} has non-pending status — not overwriting.",
+            file=sys.stderr,
+        )
+        return
     text = re.sub(
-        r"(^status:\s*)\S+\s*$",
+        r"(^status:\s*)(raised|promoted)\s*$",
         r"\1resolved",
         text, flags=re.MULTILINE, count=1,
     )
+    resolved_in_set = False
     if re.search(r"^resolved_in:", text, flags=re.MULTILINE):
-        text = re.sub(
+        new_text = re.sub(
             r"(^resolved_in:).*$",
             rf"\1 {session}",
             text, flags=re.MULTILINE, count=1,
         )
+        resolved_in_set = new_text != text
+        text = new_text
     else:
-        text = re.sub(
+        new_text = re.sub(
             r"(^harness_ticket:.*$)",
             rf"\1\nresolved_in: {session}",
             text, flags=re.MULTILINE, count=1,
+        )
+        resolved_in_set = new_text != text
+        text = new_text
+    if not resolved_in_set:
+        print(
+            f"WARNING: could not set resolved_in in SR {sr_path.name} — "
+            f"missing both resolved_in: and harness_ticket: fields. "
+            f"Update resolved_in manually.",
+            file=sys.stderr,
         )
     sr_path.write_text(text, encoding="utf-8")
 

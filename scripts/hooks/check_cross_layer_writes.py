@@ -28,13 +28,13 @@ _default_root = Path(__file__).resolve().parents[2]
 ROOT = Path(os.environ.get("HARNESS_ROOT", str(_default_root)))
 
 _STATE_FILE = ROOT / ".claude" / ".active_workspace"
-_WS_BASE = ROOT / "workspaces"
+_WS_BASE = (ROOT / "workspaces").resolve()
 
 _HARNESS_PROTECTED = [
-    ROOT / "docs" / "tickets",
-    ROOT / "docs" / "sessions.md",
-    ROOT / "docs" / "opus_notes.md",
-    ROOT / "docs" / "architecture_invariants.md",
+    (ROOT / "docs" / "tickets").resolve(),
+    (ROOT / "docs" / "sessions.md").resolve(),
+    (ROOT / "docs" / "opus_notes.md").resolve(),
+    (ROOT / "docs" / "architecture_invariants.md").resolve(),
 ]
 
 
@@ -82,7 +82,8 @@ def _block(message: str) -> None:
 def main() -> None:
     try:
         payload = json.loads(sys.stdin.read())
-    except Exception:
+    except Exception as e:
+        print(f"check_cross_layer_writes: could not parse hook payload: {e}", file=sys.stderr)
         sys.exit(0)
 
     tool_name = payload.get("tool_name", "")
