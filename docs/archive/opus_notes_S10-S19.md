@@ -654,4 +654,48 @@ Invariant 5 (workspace isolation) is *weakened* — but only at the hook layer, 
 
 ---
 
+# Opus Review — S18
+
+Scope: closed T086–T090 (5 tickets) addressing the entire S17 review-concern set + workflow-review opens T089–T090. Net: ~280 LoC across 4 production files + 4 new/expanded test files (1 new integration test file, 1 new tool `create_ticket.py`). All three S17 priority concerns (#1 workspace bypass, #2 `git -C` parsing, #3 warn-unstaged false-positive) addressed; integration test added (S17 Test Gap #4). Clean follow-through. Three new concerns surface, none invariant-violating.
+
+## Invariant Violations
+
+None. T086 *restores* Invariant 5 alignment at the hook layer that S17 flagged as weakened: `_staged_code_files` now accepts `git_cwd` and routes `git -C <root> diff --cached` to the workspace's actual repo. Invariant 4 unchanged.
+
+## Architectural Concerns
+
+1. **`scripts/hooks/check_fix_commit_has_code.py:74-79` — `--work-tree` and `--git-dir` are recognised as two-token flags but their values are discarded; `--flag=value` form is not handled at all.** [Concrete bug, low impact] The walk loop captures `git_cwd` only for `-C`; for `--work-tree` and `--git-dir` it advances `i += 2` (consuming the value) but never assigns. Worse, `git --git-dir=/path commit` arrives as a single token starting with `-`, which falls into the generic `if tok.startswith("-"): i += 1` branch and is silently skipped — so `git_cwd` stays `None`, the hook queries the harness repo, and the workspace bypass S17 Concern #1 partially re-emerges for `--git-dir=` and `--work-tree=` invocations. close_ticket.py uses space-separated `-C` today so this is latent, but any future automation using `=` form (or `--git-dir`) defeats the fix. Fix: either drop `--git-dir`/`--work-tree` from the recognized list (they're not used) or actually capture them and handle the `=` form via `tok.startswith("--git-dir=")`/`tok.startswith("-C=")` checks.
+
+2. **`scripts/tools/create_ticket.py:38, 175 — `_TEMPLATE` hardcodes `layer: tooling`, but the documented enum is `backend | frontend | fullstack | infra | process`.** [Schema violation] `architecture_invariants.md` (ticket template in opus context line 968) lists `layer:` values explicitly; `tooling` is not among them. The new script emits malformed frontmatter that other tooling (`generate_ticket_index.py`, classifier) may or may not parse. Inspection of recent in-flight tickets in the diff shows the value `layer: tooling` is in fact what other scripts emit (T086–T090 archive files all show `tooling`), so the doc is stale relative to actual usage rather than the script being wrong — but the divergence is real, and Opus's own review template comes from the doc. Pick one: update the invariants-doc enum to include `tooling`, or change the template to a valid value. Either way, `--layer` should probably be a CLI arg with validation.
+
+3. **`scripts/tools/create_ticket.py:144-193` — no `repo:` frontmatter emitted for workspace tickets.** [Schema gap, low impact] The template explicitly calls for `repo: <name from workspace.yaml repos list>` when a workspace ticket spans a specific repo. `create_ticket.py --workspace <slug>` writes a workspace-located ticket but omits `repo:` entirely (commented-out line in `_TEMPLATE`). Workspace tickets that legitimately span multiple repos are fine to omit, but the script gives no `--repo` flag to set it when relevant. Add `--repo SLUG` and emit `repo: <slug>` in the frontmatter when provided; otherwise leave commented as today.
+
+4. **`scripts/tools/create_ticket.py:104-128` — concurrent `create_ticket.py` invocations race on `_next_id`.** [Concrete bug, low likelihood] Two parallel calls scan the same directories, both compute `T091`, both attempt `dest.write_text`. The second wins (clobber, since `dest.exists()` check happens before write but Python's `open(... "w")` will overwrite without `x` mode). Diff suggests `_TEMPLATE` write at line 184 uses `write_text` not `open("x")` — verify by reading the file if it matters. The CLAUDE.md ban on `Agent` worktrees with shared paths makes this mostly theoretical, but the script is documented as workspace-aware and a `/loop` or background-agent could trigger it. Fix: open with `O_CREAT|O_EXCL` (Python: `open(dest, "x")`); on collision, increment and retry up to N times.
+
+5. **`scripts/tools/close_ticket.py:303-321` — `_warn_unstaged_code` no longer compares against `--files`; warning fires even when the user passed `--files` *and* a separate file was modified.** [False positive, moderate noise] The fix solves S17 Concern #3 (already-staged false positive: `git diff --name-only` skips staged paths). But the docstring still says "if there are unstaged or untracked code files **not passed via --files**" while the implementation never receives the `--files` list. If `--files myfix.py` is passed and the user has also edited `unrelated.py` (unstaged), the warning fires and recommends re-running with `--files`. That's not strictly wrong, but it conflates "you forgot to stage code" with "you have unrelated dirty code". Either (a) accept the `extra_files` list and subtract those paths from the warn set, or (b) update the docstring/message to "WARNING: unstaged code in repo (not necessarily related)".
+
+6. **`scripts/tools/analyze_tool_log.py:88-93` — `_retry_sequences` now skips any record where `cur_path` is empty, which silently drops a class of retries.** [Telemetry gap, low impact] The new `if not prev_tool or not cur_tool or not cur_path: continue` filter requires the *current* record to have a non-empty `path`. For tools where the log writer may emit an empty `path` (e.g., a Bash call whose payload didn't include the command, a TaskCreate, a hook-internal record), retries become invisible. The S17 retry-noise problem this addresses came from Bash-vs-Bash false positives — fine — but the cure is broader than the disease. Safer filter: also require `prev_path` to be non-empty for the same comparison (already implicit through equality), and document that the section now reports only path-bearing retries. Test coverage in the diff is one negative test; positive cases for Bash same-command retries aren't shown in the visible diff.
+
+7. **`tests/test_check_fix_commit_has_code.py:test_workspace_archive_at_any_depth_excluded` — does not actually test "any depth"; it stages only the archive file, so the test passes for *both* "filename regex" and "directory prefix" implementations.** [Test gap, low confidence] The test name implies coverage of the directory-name change (from `docs/archive/` prefix to filename regex). To prove the regex behavior, the test should also stage a code file (e.g. `scripts/foo.py`) alongside the archive ticket and assert the commit is allowed — verifying that the archive file is excluded *and* the code file is counted. As written, the test only proves "archive-only commit blocks", which the old implementation also did for `docs/archive/`.
+
+## Architectural Concerns — Test Gaps
+
+1. **`_parse_fix_commit` is untested for `--git-dir=<path>` and `--work-tree=<path>` (`=` form).** Concern #1 above is uncovered.
+
+2. **`create_ticket.py` is untested for concurrent invocations.** Concern #4. A pytest with two `subprocess.Popen` + barrier would catch the clobber.
+
+3. **`_warn_unstaged_code` is untested for the `--files passed AND unrelated dirty file` case.** Concern #5. Add: stage via `--files foo.py`, modify `unrelated.py` unstaged, run close_ticket, assert warning fires (current behavior) or does NOT fire (desired behavior, depending on the fix chosen).
+
+## Suggested Next Session Focus
+
+1. **Tighten `_parse_fix_commit` flag handling (Concern #1) + add the `--git-dir=` test (Test Gap #1).** ~10 LoC + 2 tests. The S17 fix is good but incomplete; `=` form is the realistic future bypass.
+
+2. **Resolve the `layer:` enum mismatch (Concern #2).** Either update `docs/architecture_invariants.md` to include `tooling` or change emitted layer values across `create_ticket.py` and any other emitters. ~2 LoC + doc edit.
+
+3. **Race-protect `create_ticket.py:_next_id` via `O_CREAT|O_EXCL` (Concern #4).** ~5 LoC. Cheap, eliminates a footgun before `/loop` or background agents grow.
+
+## Carry-forwards (issues unresolved ≥ 2 sessions)
+
+None. All S17 priority concerns addressed in T086–T088. The remaining items are S18-original.
+
 

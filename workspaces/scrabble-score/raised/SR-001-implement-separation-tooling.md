@@ -4,8 +4,8 @@ from: scrabble-score
 raised: S5 2026-05-27
 title: Implement workspace↔harness separation tooling and guardrails
 severity: high
-status: raised
-harness_ticket:
+status: promoted
+harness_ticket: T104–T112
 ---
 
 ## Context
@@ -213,6 +213,23 @@ The "since last session" set auto-archives after this surfacing.
 - [ ] No `--cross-layer` or equivalent override flag is added to any tool
 - [ ] Regression tests cover: workspace→harness write refused; harness→workspace
       write refused; promote+close round-trip correctly mutates both files
+
+## Harness disposition
+
+Promoted S20 2026-05-27. Accepted in full. Broken into 9 implementation tickets:
+
+- T104 — `raise_for_harness.py` (workspace-side SR creation)
+- T105 — `list_raised_concerns.py` (harness aggregator)
+- T106 — `promote_raised_concern.py` (accept SR → harness ticket)
+- T107 — `reject_raised_concern.py` (reject SR, terminal status)
+- T108 — `close_ticket.py` close-the-loop (resolve SR on ticket close)
+- T109 — Harness-root session-start raised concerns section
+- T110 — Workspace session-start surfacing + auto-archive
+- T111 — PostToolUse cross-layer write guards (hooks)
+- T112 — Abandoned-session pattern docs
+
+T111 (hooks) is the riskiest; implement last after the round-trip scripts are
+proven. SR-001 resolves when all 9 tickets are closed.
 
 ## Related
 

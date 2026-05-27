@@ -1,47 +1,3 @@
-# Opus Review — S18
-
-Scope: closed T086–T090 (5 tickets) addressing the entire S17 review-concern set + workflow-review opens T089–T090. Net: ~280 LoC across 4 production files + 4 new/expanded test files (1 new integration test file, 1 new tool `create_ticket.py`). All three S17 priority concerns (#1 workspace bypass, #2 `git -C` parsing, #3 warn-unstaged false-positive) addressed; integration test added (S17 Test Gap #4). Clean follow-through. Three new concerns surface, none invariant-violating.
-
-## Invariant Violations
-
-None. T086 *restores* Invariant 5 alignment at the hook layer that S17 flagged as weakened: `_staged_code_files` now accepts `git_cwd` and routes `git -C <root> diff --cached` to the workspace's actual repo. Invariant 4 unchanged.
-
-## Architectural Concerns
-
-1. **`scripts/hooks/check_fix_commit_has_code.py:74-79` — `--work-tree` and `--git-dir` are recognised as two-token flags but their values are discarded; `--flag=value` form is not handled at all.** [Concrete bug, low impact] The walk loop captures `git_cwd` only for `-C`; for `--work-tree` and `--git-dir` it advances `i += 2` (consuming the value) but never assigns. Worse, `git --git-dir=/path commit` arrives as a single token starting with `-`, which falls into the generic `if tok.startswith("-"): i += 1` branch and is silently skipped — so `git_cwd` stays `None`, the hook queries the harness repo, and the workspace bypass S17 Concern #1 partially re-emerges for `--git-dir=` and `--work-tree=` invocations. close_ticket.py uses space-separated `-C` today so this is latent, but any future automation using `=` form (or `--git-dir`) defeats the fix. Fix: either drop `--git-dir`/`--work-tree` from the recognized list (they're not used) or actually capture them and handle the `=` form via `tok.startswith("--git-dir=")`/`tok.startswith("-C=")` checks.
-
-2. **`scripts/tools/create_ticket.py:38, 175 — `_TEMPLATE` hardcodes `layer: tooling`, but the documented enum is `backend | frontend | fullstack | infra | process`.** [Schema violation] `architecture_invariants.md` (ticket template in opus context line 968) lists `layer:` values explicitly; `tooling` is not among them. The new script emits malformed frontmatter that other tooling (`generate_ticket_index.py`, classifier) may or may not parse. Inspection of recent in-flight tickets in the diff shows the value `layer: tooling` is in fact what other scripts emit (T086–T090 archive files all show `tooling`), so the doc is stale relative to actual usage rather than the script being wrong — but the divergence is real, and Opus's own review template comes from the doc. Pick one: update the invariants-doc enum to include `tooling`, or change the template to a valid value. Either way, `--layer` should probably be a CLI arg with validation.
-
-3. **`scripts/tools/create_ticket.py:144-193` — no `repo:` frontmatter emitted for workspace tickets.** [Schema gap, low impact] The template explicitly calls for `repo: <name from workspace.yaml repos list>` when a workspace ticket spans a specific repo. `create_ticket.py --workspace <slug>` writes a workspace-located ticket but omits `repo:` entirely (commented-out line in `_TEMPLATE`). Workspace tickets that legitimately span multiple repos are fine to omit, but the script gives no `--repo` flag to set it when relevant. Add `--repo SLUG` and emit `repo: <slug>` in the frontmatter when provided; otherwise leave commented as today.
-
-4. **`scripts/tools/create_ticket.py:104-128` — concurrent `create_ticket.py` invocations race on `_next_id`.** [Concrete bug, low likelihood] Two parallel calls scan the same directories, both compute `T091`, both attempt `dest.write_text`. The second wins (clobber, since `dest.exists()` check happens before write but Python's `open(... "w")` will overwrite without `x` mode). Diff suggests `_TEMPLATE` write at line 184 uses `write_text` not `open("x")` — verify by reading the file if it matters. The CLAUDE.md ban on `Agent` worktrees with shared paths makes this mostly theoretical, but the script is documented as workspace-aware and a `/loop` or background-agent could trigger it. Fix: open with `O_CREAT|O_EXCL` (Python: `open(dest, "x")`); on collision, increment and retry up to N times.
-
-5. **`scripts/tools/close_ticket.py:303-321` — `_warn_unstaged_code` no longer compares against `--files`; warning fires even when the user passed `--files` *and* a separate file was modified.** [False positive, moderate noise] The fix solves S17 Concern #3 (already-staged false positive: `git diff --name-only` skips staged paths). But the docstring still says "if there are unstaged or untracked code files **not passed via --files**" while the implementation never receives the `--files` list. If `--files myfix.py` is passed and the user has also edited `unrelated.py` (unstaged), the warning fires and recommends re-running with `--files`. That's not strictly wrong, but it conflates "you forgot to stage code" with "you have unrelated dirty code". Either (a) accept the `extra_files` list and subtract those paths from the warn set, or (b) update the docstring/message to "WARNING: unstaged code in repo (not necessarily related)".
-
-6. **`scripts/tools/analyze_tool_log.py:88-93` — `_retry_sequences` now skips any record where `cur_path` is empty, which silently drops a class of retries.** [Telemetry gap, low impact] The new `if not prev_tool or not cur_tool or not cur_path: continue` filter requires the *current* record to have a non-empty `path`. For tools where the log writer may emit an empty `path` (e.g., a Bash call whose payload didn't include the command, a TaskCreate, a hook-internal record), retries become invisible. The S17 retry-noise problem this addresses came from Bash-vs-Bash false positives — fine — but the cure is broader than the disease. Safer filter: also require `prev_path` to be non-empty for the same comparison (already implicit through equality), and document that the section now reports only path-bearing retries. Test coverage in the diff is one negative test; positive cases for Bash same-command retries aren't shown in the visible diff.
-
-7. **`tests/test_check_fix_commit_has_code.py:test_workspace_archive_at_any_depth_excluded` — does not actually test "any depth"; it stages only the archive file, so the test passes for *both* "filename regex" and "directory prefix" implementations.** [Test gap, low confidence] The test name implies coverage of the directory-name change (from `docs/archive/` prefix to filename regex). To prove the regex behavior, the test should also stage a code file (e.g. `scripts/foo.py`) alongside the archive ticket and assert the commit is allowed — verifying that the archive file is excluded *and* the code file is counted. As written, the test only proves "archive-only commit blocks", which the old implementation also did for `docs/archive/`.
-
-## Architectural Concerns — Test Gaps
-
-1. **`_parse_fix_commit` is untested for `--git-dir=<path>` and `--work-tree=<path>` (`=` form).** Concern #1 above is uncovered.
-
-2. **`create_ticket.py` is untested for concurrent invocations.** Concern #4. A pytest with two `subprocess.Popen` + barrier would catch the clobber.
-
-3. **`_warn_unstaged_code` is untested for the `--files passed AND unrelated dirty file` case.** Concern #5. Add: stage via `--files foo.py`, modify `unrelated.py` unstaged, run close_ticket, assert warning fires (current behavior) or does NOT fire (desired behavior, depending on the fix chosen).
-
-## Suggested Next Session Focus
-
-1. **Tighten `_parse_fix_commit` flag handling (Concern #1) + add the `--git-dir=` test (Test Gap #1).** ~10 LoC + 2 tests. The S17 fix is good but incomplete; `=` form is the realistic future bypass.
-
-2. **Resolve the `layer:` enum mismatch (Concern #2).** Either update `docs/architecture_invariants.md` to include `tooling` or change emitted layer values across `create_ticket.py` and any other emitters. ~2 LoC + doc edit.
-
-3. **Race-protect `create_ticket.py:_next_id` via `O_CREAT|O_EXCL` (Concern #4).** ~5 LoC. Cheap, eliminates a footgun before `/loop` or background agents grow.
-
-## Carry-forwards (issues unresolved ≥ 2 sessions)
-
-None. All S17 priority concerns addressed in T086–T088. The remaining items are S18-original.
-
 # Opus Review — S19
 
 Scope: closed T091–T102 (12 tickets) addressing all 6 S18 architectural concerns + 5 S19 workflow-review opens. Net: substantial work in `close_ticket.py` (`_check_gitignored`, `_stage_extra_files` extracted, scoped `_check_acs`/`_tick_acs`, `--tick-acs` flag mutually exclusive with `--force`), new `check_test_imports` in `repo_hygiene.py`, `create_ticket.py` gained `--layer`/`--repo`/`O_EXCL` retry. 16 close-ticket tests + 3 repo_hygiene tests + 5 create_ticket tests. Strong follow-through on every S18 priority. Three small concerns surface; none invariant-violating.
@@ -89,3 +45,69 @@ The S18 carry-forward "`layer: tooling` schema mismatch" is addressed at the cre
 ## Carry-forwards (issues unresolved ≥ 2 sessions)
 
 - **`architecture_invariants.md` is a placeholder file.** Now 2+ sessions of acknowledgment without action. The S18 review noted the `layer: tooling` enum mismatch (Concern #2); S19 implemented `--layer` in create_ticket.py but explicitly deferred updating the invariants doc. Until the doc has real invariants, every Opus review's "Invariant Violations" section is structurally weak — there's nothing concrete to check against.
+
+# Opus Review — S20 2026-05-27
+
+Scope: closed T104–T112 (9 tickets) implementing the full SR-001 workspace↔harness separation tooling. Net: 5 new tools, 1 new PreToolUse hook, 1 new SKILL.md pattern, ~860 LoC production + ~1240 LoC tests. Round-trip pipeline works in the happy path; tests cover the obvious shapes. Several safety-critical gaps in the hook + an Invariant 5 hole; one concrete bug in body extraction; and a session-id conflation that taints the audit trail this SR system was supposed to provide.
+
+## Invariant Violations
+
+**Invariant 5 (workspace isolation) — VIOLATED at the hook layer for cross-workspace writes.** `check_cross_layer_writes.py` blocks workspace→harness and harness→workspace-internal, but does **not** block workspace-A→workspace-B writes. In a workspace session with `.active_workspace=A`, writing to `workspaces/B/internal/sessions.md`:
+
+- Is not in `_HARNESS_PROTECTED` → not blocked by the workspace branch
+- Is not in `_is_boundary_slot` (parts[1] is "internal", not "raised") → not exempt
+- Falls through to `sys.exit(0)` because the `else: if _is_workspace_internal` branch only triggers for harness-root sessions
+
+The hook is named "cross-layer" but it implements layer separation, not workspace isolation. The architecture_invariants.md invariant 5 says scripts may only read paths in the active workspace's repos list; the hook should symmetrically block writes to other workspaces' internal/. Concrete attack: a Scrabble workspace agent could legitimately want to copy a template from another workspace and overwrite by accident, or maliciously exfiltrate client A's notes by reading them (reads are out of scope here, but writes should be blocked since `workspaces/*/internal/` is gitignored and per-workspace private).
+
+Fix: in the workspace branch, also block any write to `workspaces/<other_slug>/internal/` where `other_slug != workspace_slug`.
+
+## Architectural Concerns
+
+1. **`scripts/hooks/check_cross_layer_writes.py:43-47, 102-121` — the hook fails open when `.claude/.active_workspace` is missing or empty.** [Concrete safety bug, high impact] The state file is the *sole* mechanism the hook uses to determine session type. The session-start SKILL.md instructs Claude to `echo -n "<WORKSPACE_SLUG>" > .claude/.active_workspace` at Step 0 — but this is documentation, not enforcement. If the agent skips Step 0 (no /session-start invoked, manual session start, a forgotten `echo`), the hook reads an empty file, infers "harness-root session", and **silently permits the workspace session to write `docs/tickets/`, `docs/sessions.md`, `docs/opus_notes.md`**. That is precisely the failure mode T103 documented and SR-001 was raised to prevent. The state file is also `.gitignored` so a fresh clone or new branch has no state file at all. The hook should fail closed: if the state file is absent or empty, block writes to both `docs/` *and* `workspaces/*/internal/` and emit a message instructing the operator to run `/session-start`. Or better, derive session type from CWD (matching `workspace_config.active_workspace_dir()`) so detection works without an out-of-band file.
+
+2. **`scripts/hooks/check_cross_layer_writes.py` — two competing definitions of "active workspace" now exist in the codebase.** [Architectural fragility, moderate] The new hook reads `.claude/.active_workspace` (state-file); `scripts/tools/workspace_config.active_workspace_dir()` and `raise_for_harness._active_workspace_slug()` use CWD detection. These can disagree silently: `cd workspaces/A/` then forget to update the state file → CWD-tools say "workspace A", hook says "harness-root". The two systems should agree, ideally by having the hook delegate to `workspace_config.active_workspace_dir()` (which already exists, is tested, and is what the rest of the codebase uses). The state file adds a second source of truth that has to be kept in sync manually.
+
+3. **`scripts/tools/raise_for_harness.py:60, scripts/tools/reject_raised_concern.py:62` — `_current_session()` invokes `current_session.py` without `--sessions <INTERNAL>/sessions.md`, so SRs created/rejected in a workspace are stamped with the HARNESS session number, not the workspace session number.** [Concrete bug, high impact on audit trail] `current_session.py` defaults to `<harness_root>/docs/sessions.md`. A workspace session running `raise_for_harness.py "..."`  gets a `raised: S<harness_N>` stamp; meanwhile the workspace's own sessions.md is on a completely independent counter. The actual SR-001 file shows `raised: S5 2026-05-27` (workspace S5) — the user clearly intended workspace numbering. Future SRs created by the new tool will silently use harness numbering, breaking the `[session_status: abandoned]` resumption pattern in session-close SKILL.md ("WIP branch wip/S[N]-blocked" → which N?). Fix: when the script detects a workspace slug, resolve `<INTERNAL>/sessions.md` and pass `--sessions` to `current_session.py`. Same fix for `reject_raised_concern.py` — but rejection runs in harness-root, so that one is correct to use harness session. So really the asymmetry is: `raise_for_harness.py` (workspace-side) needs workspace session; `reject` and `promote` (harness-side) need harness session.
+
+4. **`scripts/tools/promote_raised_concern.py:59-73` — `_extract_body` does not stop at unknown H2 headers, so any SR with intermediate H2 sections (e.g. `## Principle`, `## Boundary slot`) copies *everything* from `## Context` through whatever the next recognised stop header is.** [Concrete bug] The function uses an allowlist for `copy_on` and a 3-item allowlist for `stop_on` (`harness disposition`, `acceptance criteria`, `related`). Any other `## ...` header in the middle does not toggle `in_section` off. SR-001 itself has `## Principle`, `## Boundary slot`, `## File format`, `## Status lifecycle`, `## One-cycle visibility / auto-archive`, `## CLIs to build`, `## Guardrails`, `## Abandoned-session pattern`, `## Session-start integration` — all 9 would be copied into the ticket Problem section. The test `test_body_copied_to_problem_section` uses a synthetic SR with only Context + Proposed change + Harness disposition, so it passes regardless. Fix: toggle `in_section` off on *any* `## ` line that's not in `copy_on`. Add a regression test using a multi-section SR fixture.
+
+5. **`.claude/skills/session-close/SKILL.md:308-310` — the bash block has a backslash continuation that the static analysis runner can't parse standalone (bash block 10 syntax error in opus_review_context.md).** [Doc bug, low impact] The block:
+   ```
+   python scripts/tools/raise_for_harness.py "Description of blocker" \
+     --severity high --workspace <WORKSPACE_SLUG>
+   ```
+   parses as two separate statements when the static analyser extracts and runs each line — line 2 begins with `--severity` and breaks. Either change the fence to `text` (which is what bash block 9 already does in the file) or collapse to a single line. The static-analysis FAIL surfacing this is now visible in every Opus review until fixed.
+
+6. **`scripts/tools/promote_raised_concern.py:163-176` — promote always defaults to `--layer tooling` and never propagates the SR-suggested layer.** [Schema gap, low impact] The SR template has no `layer:` field, so there's no source. But the actual SR-001 promotion broke into 9 tickets — some are tooling (raise_for_harness scripts), some are process (session-close docs), some are infra (hooks). Hardcoding `tooling` is mostly right today but is fragile: future SRs about backend features should not be tagged `tooling`. Either accept `--layer` on promote_raised_concern.py to override, or add `layer:` to the SR template.
+
+7. **`scripts/tools/close_ticket.py:497-511` — close-the-loop silently no-ops when SR file is missing.** [Defense-in-depth] The current behavior is "WARNING, ticket still closes" (test_missing_sr_file_warns_but_closes covers this). That is the right *default* for many cases (SR was manually archived, workspace was renamed), but it also means a typo'd `source: scrubble/SR-001` field stamped at promotion time will silently fail to resolve when the ticket closes, leaving the real SR stuck in `promoted` forever. Consider: emit a clearer error message including a `--ignore-missing-sr` flag for the manual case, and exit 2 (block close) by default. Or: validate `source:` field references a real file at promotion time so the typo case can't happen.
+
+8. **`scripts/tools/surface_workspace_concerns.py:159-160` — terminal items are archived via `shutil.move` immediately after printing, with no git staging.** [Audit-trail gap, low impact] The SR-001 design explicitly says "Lives in the harness repo, tracked in git (audit trail)". When session-start moves an SR from `raised/` to `raised/archive/`, git sees a delete + add at the next commit, but nothing in the new tooling stages or commits this move. The session-start protocol does not include a "commit archived SRs" step. Effect: the archived SRs accumulate as uncommitted changes until the next time someone runs `git add -A`, possibly conflated with other unrelated work. Fix: either stage the move inside `surface_workspace_concerns.py` and let the session-close commit pick it up, or add an explicit "commit archived raised/ files" step in session-start SKILL.md.
+
+9. **`scripts/tools/raise_for_harness.py:40-50` — `_next_sr_number` scans `raised/` and `raised/archive/` but not other workspaces' raised/.** [By design, but worth noting] SR IDs are workspace-scoped. Two workspaces can both have `SR-001`. The promote/reject tools take `<slug>/SR-NNN` so the namespace is fine — but cross-workspace ambiguity could cause confusion in `list_raised_concerns.py` output (which prints just `SR-001` per workspace group). The current format is unambiguous because of the workspace group header, but verbal references like "go promote SR-001" become ambiguous. Cosmetic; document or rename.
+
+## Architectural Concerns — Test Gaps
+
+1. **No test for the cross-workspace write case (Invariant 5 violation).** Add `test_workspace_A_blocks_workspace_B_internal_write` — sets `.active_workspace=A`, attempts write to `workspaces/B/internal/sessions.md`, asserts rc=2. Currently this passes (exit 0) because the hook doesn't block it.
+
+2. **No test for the empty-state-file fail-open (Concern #1).** Add `test_missing_state_file_blocks_harness_writes_in_workspace_context` — does NOT write the state file, attempts write to `docs/sessions.md` while CWD is inside `workspaces/A/`, asserts rc=2 (currently fails: hook permits the write).
+
+3. **No test for `_extract_body` with multi-section SR (Concern #4).** Synthetic SR with `## Context`, `## Principle`, `## Proposed change`, `## Harness disposition` — assert that `## Principle` content is NOT in the resulting ticket body. Currently passes because it IS in the body.
+
+4. **No test that `raise_for_harness.py` stamps workspace session number, not harness session (Concern #3).** The current test mocks `current_session.py` with `print('S9')` — both layers' sessions return the same value, so the bug is invisible.
+
+5. **No round-trip integration test.** Each script is unit-tested in isolation. A test that: (a) raises SR, (b) promotes via promote_raised_concern, (c) closes the ticket via close_ticket, and (d) asserts the SR ends up `resolved` with correct `resolved_in:` — would catch the session-id conflation, the body-extraction bug, and the staging coordination all at once.
+
+## Suggested Next Session Focus
+
+1. **Fix the Invariant 5 hole + the state-file fail-open (Concerns #1, #2, Invariant Violation).** This is the single highest-priority item: the entire SR system was supposed to *enforce* the boundary that T103 surfaced, but the hook fails open in the most realistic miss-mode (session-start not run, state file not written). ~15 LoC + 3 tests. Either delegate to `workspace_config.active_workspace_dir()` or fail closed when the state file is missing. Also extend the workspace branch to block cross-workspace internal writes.
+
+2. **Fix `raise_for_harness.py` session-id source (Concern #3, Test Gap #4).** ~10 LoC. When workspace slug is detected, call `current_session.py --sessions <INTERNAL>/sessions.md` and use that. The audit-trail value of the SR system collapses without this — every SR-NNN file lies about when it was raised in the workspace timeline.
+
+3. **Fix `_extract_body` H2 boundary detection (Concern #4, Test Gap #3).** ~5 LoC + 1 test. Treat any `## ` header not in `copy_on` as a section terminator. The actual SR-001 promotion produced a ticket body that copied 9 unrelated sections; the bug was invisible because no one read the resulting ticket bodies (they were replaced by manual `--resolution`).
+
+## Carry-forwards (issues unresolved ≥ 2 sessions)
+
+- **`architecture_invariants.md` is a placeholder file.** Now 3 sessions of acknowledgment without action. The S20 work added a concrete, testable invariant (workspace isolation via the new hook) but `docs/architecture_invariants.md` still has `[Name]` placeholders for invariants 1–2 and conditional language for 3–4. Invariant 5 (workspace isolation) is now demonstrably wrong as written — the new hook protects layer separation but not workspace separation; the doc should reflect what the code actually enforces.
+
