@@ -95,6 +95,12 @@ def load_tickets(open_dir: str) -> list[dict]:
     for filename in sorted(os.listdir(open_dir)):
         if not filename.endswith(".md"):
             continue
+        # Skip TEMPLATE.md — its frontmatter uses id: T000 as a sentinel and contains
+        # pipe-delimited enumeration literals (e.g. "low | medium | high | critical")
+        # that produce a corrupt row if parsed. Defensive: also skip any file whose
+        # parsed id is T000, in case the template is renamed.
+        if filename == "TEMPLATE.md":
+            continue
         path = os.path.join(open_dir, filename)
         with open(path) as f:
             content = f.read()
@@ -102,6 +108,8 @@ def load_tickets(open_dir: str) -> list[dict]:
         if not fm.get("id"):
             continue
         tid = fm.get("id", "")
+        if tid == "T000":
+            continue
         # Use explicit phase: field when present, fall back to ID-range derivation
         phase = fm.get("phase", "") or derive_phase(tid)
         tickets.append({

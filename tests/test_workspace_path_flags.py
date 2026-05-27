@@ -6,6 +6,7 @@ from that path, not from the harness-root default.
 """
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -1580,6 +1581,77 @@ class TestGenerateTicketIndexTicketsDir:
         )
         assert result.returncode == 0, result.stderr
         assert "T001" in output.read_text()
+
+    # ── T103: TEMPLATE.md / T000 sentinel must never appear in INDEX ─────────
+
+    def test_template_md_excluded_when_no_open_subdir(self, tmp_path):
+        """T103: TEMPLATE.md must not produce a T000 row even when scanned directly."""
+        tickets_dir = tmp_path / "tickets"
+        tickets_dir.mkdir()
+        (tickets_dir / "TEMPLATE.md").write_text(
+            "---\nid: T000\ntitle: Short description (keep under 60 chars)\n"
+            "severity: low | medium | high | critical\nstatus: open\n"
+            "phase: 2 | 3 | 4 | process\n"
+            "layer: backend | frontend | fullstack | infra | process\n"
+            "opened: S00 YYYY-MM-DD\nclosed:\n---\n"
+        )
+        (tickets_dir / "T001-real-ticket.md").write_text(MINIMAL_TICKET)
+        sessions = tmp_path / "sessions.md"
+        sessions.write_text(SESSIONS_STUB)
+        output = tmp_path / "INDEX.md"
+
+        result = self._run(
+            "--tickets-dir", str(tickets_dir),
+            "--output", str(output),
+            "--sessions-file", str(sessions),
+        )
+        assert result.returncode == 0, result.stderr
+        content = output.read_text()
+        assert "T001" in content, "real ticket must appear in index"
+        assert "T000" not in content, "TEMPLATE.md sentinel must never appear"
+        assert "Short description" not in content, "template title must never appear"
+
+    def test_template_md_only_yields_zero_tickets(self, tmp_path):
+        """T103: a dir containing only TEMPLATE.md must produce an empty index."""
+        tickets_dir = tmp_path / "tickets"
+        tickets_dir.mkdir()
+        (tickets_dir / "TEMPLATE.md").write_text(
+            "---\nid: T000\ntitle: Short description (keep under 60 chars)\n"
+            "severity: low\nstatus: open\nphase: 2\nlayer: process\n"
+            "opened: S00 2026-01-01\nclosed:\n---\n"
+        )
+        sessions = tmp_path / "sessions.md"
+        sessions.write_text(SESSIONS_STUB)
+        output = tmp_path / "INDEX.md"
+
+        result = self._run(
+            "--tickets-dir", str(tickets_dir),
+            "--output", str(output),
+            "--sessions-file", str(sessions),
+        )
+        assert result.returncode == 0, result.stderr
+        content = output.read_text()
+        assert "0 open tickets" in content
+        assert "T000" not in content
+
+
+class TestSessionCloseSkillStep0Command:
+    """T103: session-close SKILL.md Step 0 must include --output to avoid clobbering harness INDEX."""
+
+    def test_step0_command_passes_output_flag(self):
+        skill_md = ROOT / ".claude" / "skills" / "session-close" / "SKILL.md"
+        text = skill_md.read_text()
+        # Find the Step 0 command block referencing generate_ticket_index.py
+        m = re.search(
+            r"python\s+scripts/tools/generate_ticket_index\.py[^\n]*",
+            text,
+        )
+        assert m, "could not find generate_ticket_index.py invocation in SKILL.md"
+        cmd = m.group(0)
+        assert "--output" in cmd, (
+            f"Step 0 command must pass --output to avoid clobbering harness INDEX.md "
+            f"when run from harness root; found: {cmd!r}"
+        )
 
 
 # ── Tests: close_ticket.py T075 — workspace INDEX not clobbered ──────────────
