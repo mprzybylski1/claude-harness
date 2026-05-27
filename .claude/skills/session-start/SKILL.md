@@ -40,6 +40,16 @@ python scripts/tools/workspace.py list
   Run `python scripts/tools/workspace_internal_path.py <WORKSPACE_SLUG>` and record as `INTERNAL`.
   Skip the selection prompt.
 
+**Write the session state file** after workspace detection (required by `check_cross_layer_writes.py` hook):
+- **Workspace session:** write the slug to `.claude/.active_workspace`:
+  ```bash
+  echo -n "<WORKSPACE_SLUG>" > .claude/.active_workspace
+  ```
+- **Harness-root session:** clear the state file:
+  ```bash
+  echo -n "" > .claude/.active_workspace
+  ```
+
 **Path substitution for workspace sessions:**
 
 | Context file | Non-workspace path | Workspace path |

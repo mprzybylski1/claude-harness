@@ -27,6 +27,15 @@
         ]
       },
       {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'python3 \"$(git rev-parse --show-toplevel)/scripts/hooks/check_cross_layer_writes.py\"'"
+          }
+        ]
+      },
+      {
         "matcher": "Bash",
         "hooks": [
           {

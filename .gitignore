@@ -13,3 +13,6 @@ docs/opus_review_context.md
 workspaces/*/internal/
 workspaces/*/client/
 workspaces/archive/
+
+# Session state — runtime file written at session start, not committed
+.claude/.active_workspace
