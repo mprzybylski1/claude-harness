@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S20 2026-05-27. 2 open tickets.
+Generated S20 2026-05-27. 1 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -17,11 +17,9 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Low (1)
+## Low (0)
 
-| ID | Title | Phase | Layer | Age |
-|----|-------|-------|-------|-----|
-| T112 | Document abandoned-session pattern in session-close SKILL.md | Ph2 | process | this session |
+*(none)*
 
 ## Unknown (0)
 

@@ -53,6 +53,17 @@ The pattern for every ticket closed during a session:
 3. **Immediately commit in the workspace repo:** the commit targets the workspace's primary repo
 4. Only then move to the next ticket
 
+## When to use the abandoned-session pattern instead
+
+If a mid-session blocker means the session **cannot close cleanly** — a missing harness
+tool, a bug that requires a separate harness session to fix, or any dependency that
+cannot be resolved right now — **skip Steps 0–6** and follow the
+[**Abandoned session**](#abandoned-session--when-a-mid-session-blocker-prevents-normal-close)
+pattern at the bottom of this skill. Do not attempt a normal session-close on a
+partially-broken workspace session.
+
+---
+
 ## Pre-check — Did `/implementation-review` run?
 
 If this was a code session and `/implementation-review` was not run, ask the user:
@@ -276,6 +287,50 @@ git commit -m "docs: S[CURRENT_SESSION] session close — <one-line summary>"
 
 **Never include `workspaces/*/internal/` in the harness docs commit.** That data is
 gitignored and stays local.
+
+---
+
+## Abandoned session — when a mid-session blocker prevents normal close
+
+Use this path when the workspace session cannot close cleanly. Do **not** run Steps 0–6.
+
+### Steps
+
+1. **Commit in-progress work to a WIP branch** in the workspace repo:
+   ```bash
+   git checkout -b wip/S[CURRENT_SESSION]-blocked
+   git add <in-progress files>
+   git commit -m "WIP: blocked by <description> — S[CURRENT_SESSION]"
+   ```
+
+2. **Raise a harness concern** so the blocker gets scheduled for a harness-root session:
+   ```bash
+   python scripts/tools/raise_for_harness.py "Description of blocker" \
+     --severity high --workspace <WORKSPACE_SLUG>
+   ```
+   Fill in the `## Context` and `## Proposed change` sections in the created SR file.
+
+3. **Append an abandoned-session entry** to `<INTERNAL>/sessions.md` Session Log:
+   ```
+   S[N] YYYY-MM-DD: [session_status: abandoned] WIP branch wip/S[N]-blocked — <reason>; SR-NNN raised
+   ```
+
+4. **End the session here.** No Opus review, no harness docs commit.
+
+### Resuming
+
+When the harness resolves the SR (closes the linked ticket), open a new workspace session,
+check out the WIP branch, and continue from where the abandoned session stopped.
+
+### `session_status: abandoned` convention
+
+The `[session_status: abandoned]` marker in the Session Log entry signals to future
+`/session-start` reads that this session did not close normally. The next normal close
+covers both sessions' changes in the Opus review. Example entry:
+
+```
+S14 2026-05-25: [session_status: abandoned] WIP branch wip/S14-blocked — missing raise_for_harness.py; SR-001 raised
+```
 
 ---
 
