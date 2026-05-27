@@ -395,6 +395,39 @@ def _warn_unstaged_code(git_root: str | None) -> None:
         pass
 
 
+# ── Close-the-loop: source SR resolution ─────────────────────────────────────
+
+def _parse_source(content: str) -> tuple[str, str] | None:
+    """Return (slug, sr_id) from source: frontmatter field, or None if absent/invalid."""
+    m = re.search(r"^source:\s*(\S+)/(SR-\d+)\s*$", content, re.MULTILINE)
+    if not m:
+        return None
+    return m.group(1), m.group(2).upper()
+
+
+def _resolve_source_sr(sr_path: Path, session: str) -> None:
+    """Update SR file: status → resolved, resolved_in → S<N>."""
+    text = sr_path.read_text(encoding="utf-8")
+    text = re.sub(
+        r"(^status:\s*)\S+\s*$",
+        r"\1resolved",
+        text, flags=re.MULTILINE, count=1,
+    )
+    if re.search(r"^resolved_in:", text, flags=re.MULTILINE):
+        text = re.sub(
+            r"(^resolved_in:).*$",
+            rf"\1 {session}",
+            text, flags=re.MULTILINE, count=1,
+        )
+    else:
+        text = re.sub(
+            r"(^harness_ticket:.*$)",
+            rf"\1\nresolved_in: {session}",
+            text, flags=re.MULTILINE, count=1,
+        )
+    sr_path.write_text(text, encoding="utf-8")
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -435,6 +468,22 @@ def main() -> None:
 
     ticket_path, internal = _find_ticket(ticket_id, args.workspace)
     content = ticket_path.read_text(encoding="utf-8")
+
+    # Locate source SR now so we can warn early if it's missing
+    sr_source_path: Path | None = None
+    source_info = _parse_source(content)
+    if source_info:
+        slug, sr_id = source_info
+        raised_dir = ROOT / "workspaces" / slug / "raised"
+        matches = list(raised_dir.glob(f"{sr_id}-*.md")) if raised_dir.is_dir() else []
+        if len(matches) == 1:
+            sr_source_path = matches[0]
+        else:
+            print(
+                f"WARNING: ticket has source: {slug}/{sr_id} but SR file not found — "
+                f"update {raised_dir / f'{sr_id}-*.md'} manually.",
+                file=sys.stderr,
+            )
 
     # Resolution text
     if args.resolution_file:
@@ -503,12 +552,17 @@ def main() -> None:
 
     _atomic_move(ticket_path, dest, content)
 
+    # Resolve source SR (write + stage together with ticket archive)
+    if sr_source_path is not None:
+        _resolve_source_sr(sr_source_path, session)
+        _stage_extra_files([sr_source_path])
+
     # Regenerate index
     _regenerate_index(internal)
 
     # Stage ticket deletion, archive, and INDEX (extra_files already staged above)
     _git_stage(ticket_path, dest, internal)
-    if not extra_files:
+    if not extra_files and sr_source_path is None:
         root, _ = _git_root_for(dest)
         _warn_unstaged_code(root)
 
@@ -526,6 +580,8 @@ def main() -> None:
     else:
         index_path = ROOT / "docs" / "tickets" / "INDEX.md"
     staged_paths = [dest, index_path] + (extra_files or [])
+    if sr_source_path is not None:
+        staged_paths.append(sr_source_path)
 
     print(f"Closed {ticket_id} → {dest_display}")
     for p in staged_paths:

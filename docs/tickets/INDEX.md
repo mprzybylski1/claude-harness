@@ -1,17 +1,16 @@
 # Ticket Index
 
-Generated S20 2026-05-27. 5 open tickets.
+Generated S20 2026-05-27. 4 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
 
 *(none)*
 
-## High (2)
+## High (1)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
-| T108 | close_ticket.py close-the-loop: update source SR to resolved on ticket close | Ph2 | tooling | this session |
 | T111 | PostToolUse hooks: block cross-layer writes between workspace and harness state | Ph2 | infra | this session |
 
 ## Medium (2)
