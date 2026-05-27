@@ -81,6 +81,11 @@ Read these files **sequentially** (use workspace-scoped paths if in a workspace)
    Empty if none qualify.
 6. Run `python scripts/tools/repo_hygiene.py --warn-only` — WARN-level hygiene findings.
    Not a blocker; address when convenient.
+7. **Harness root only (no workspace selected):** Run
+   `python scripts/tools/list_raised_concerns.py` — aggregates pending workspace→harness
+   concerns across all workspaces. Empty output means no pending concerns; omit the
+   section from the briefing entirely in that case. If output is non-empty, include it
+   under **Pending raised concerns** in the Step 3 briefing.
 
 **If extract_session_brief.py or extract_opus_key_sections.py do not yet support --sessions
 or --opus flags:** read the files directly as a fallback and note the gap.
@@ -131,6 +136,11 @@ Run the appropriate command to get the session ID:
 **Hook errors detected:**
 - [Last 5 lines from Hook errors section, or "None"]
 
+**Pending raised concerns:** *(harness root only — omit section entirely if list_raised_concerns.py produces no output)*
+```
+[Full output of python scripts/tools/list_raised_concerns.py]
+```
+
 **Suggested focus:**
 - [1-3 specific tickets most relevant to current gate or critical/high severity]
 ---
@@ -149,6 +159,8 @@ Do not begin implementation until the user responds.
 - The user knows phase gate status without asking
 - Aging tickets are visible
 - Hook errors from `.git/session_tool_log.errors` are surfaced if present
+- Harness-root sessions show pending raised concerns; workspace sessions do not
+- Pending raised concerns section is omitted entirely when there are none (no noise)
 - The user is asked before work begins
 
 ## Do not use this skill when
