@@ -40,21 +40,6 @@ Tickets closed: T123–T126 (4 tickets; SR-004→T124, SR-005→T125, SR-006→T
 Tickets opened: T127–T131 (workflow-review findings)
 Impl review: 5 findings fixed inline (broad Exception catch, _current_session harness-fallback, subprocess error detail, commit-failure stderr-only, all-large-assets misleading message)
 Workflow review: 5 tickets opened (T127–T131); SR-007 rejected; SR-001 fixed manually
-- `scripts/tools/promote_raised_concern.py` — T117: _extract_body stops at any H2 not in copy_on; T119: argparse + --layer flag forwarded to create_ticket.py; 4 + 3 new tests
-- `tests/test_promote_raised_concern.py` — T117: TestExtractBodyH2Boundary (4 tests); T119: TestLayerFlag (3 tests)
-- `scripts/tools/close_ticket.py` — T120: fail-closed on missing source SR (exit 2 default, --ignore-missing-sr override); 3 tests replacing 1
-- `tests/test_close_ticket_source_sr.py` — T120: 3 new tests
-- `scripts/tools/surface_workspace_concerns.py` — T121: git add after shutil.move for archive moves; impl-review: warning on staging failure; 2 new tests
-- `tests/test_surface_workspace_concerns.py` — T121: TestGitStaging (2 tests)
-- `scripts/tools/repo_hygiene.py` — T122: STALE_FILES entries for 5 trading-app artifact dirs; drop dead data/, research/ ALWAYS_SKIP entries; 4 new tests
-- `tests/test_repo_hygiene.py` — T122: TestTradingAppArtifactGuards (4 tests)
-- `.claude/skills/session-start/SKILL.md` — T115: __harness__ sentinel documented; fail-closed semantics explained
-- `workspaces/scrabble-score/raised/SR-002-*.md` — resolved (T113)
-- `workspaces/scrabble-score/raised/SR-003-*.md` — resolved (T114)
-
-Tickets closed: T113–T122 (10 tickets; SR-002→T113, SR-003→T114, Opus S20 backlog T115–T121, hygiene T122)
-Tickets opened: T115–T122 (opened and closed same session)
-Impl review: 2 findings fixed inline (yaml parse bare-except → named exceptions; staging failure silent → warning)
 
 ---
 

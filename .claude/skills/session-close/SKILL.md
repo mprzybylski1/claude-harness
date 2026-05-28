@@ -102,9 +102,20 @@ run them without flags and adjust paths manually — note the gap for a follow-u
 Update **two sections** of `<INTERNAL>/sessions.md`:
 
 ### Active Work section
+
+**Replace everything between the `## Active Work` header and the next `---`
+horizontal rule (or `## Session Log` header) with new content for this session.
+Do not prepend. Do not append.** Prior sessions' file lists and ticket counts
+do not belong here — that history lives in archived tickets and `git log`.
+
+Then write the new content:
+- Active Work header line: `**S[CURRENT_SESSION] — <one-line summary>**`
 - List files changed and what changed. Derive from `git diff` across workspace repos.
 - Note tickets opened or closed this session (by ID)
-- Active Work header: `**S[CURRENT_SESSION] — <one-line summary>**`
+
+After saving, verify the section contains exactly one `**S<N> — ...**` header. If
+extract_session_brief.py warns about "'Tickets closed:' N times — orphan content",
+the replacement was incomplete — fix before continuing.
 
 ### Session Log section
 Append one line:

@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S23 2026-05-28. 0 open tickets.
+Generated S23 2026-05-28. 1 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -11,9 +11,11 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Medium (0)
+## Medium (1)
 
-*(none)*
+| ID | Title | Phase | Layer | Age |
+|----|-------|-------|-------|-----|
+| T134 | Extend check_session_log.py Stop hook to validate single S<N> header in Active Work | Ph2 | tooling | this session |
 
 ## Low (0)
 
