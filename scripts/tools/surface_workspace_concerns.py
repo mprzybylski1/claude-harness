@@ -29,36 +29,7 @@ _ACTIVE = {"raised", "promoted"}
 _TERMINAL = {"resolved", "rejected"}
 
 
-def _workspace_sessions_md(slug: str) -> Path | None:
-    """Resolve <INTERNAL>/sessions.md for a workspace, or None if not found.
-    Honors docs_path override in workspace.yaml; falls back to
-    workspaces/<slug>/internal/."""
-    ws_dir = ROOT / "workspaces" / slug
-    yaml_path = ws_dir / "workspace.yaml"
-    docs_path = None
-    if yaml_path.is_file():
-        try:
-            import yaml
-            cfg = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
-            docs_path = cfg.get("docs_path")
-        except ImportError as exc:
-            print(
-                f"WARNING: PyYAML not available — cannot read docs_path from {yaml_path}: {exc}",
-                file=sys.stderr,
-            )
-        except OSError as exc:
-            print(
-                f"WARNING: could not read {yaml_path}: {exc} — using default internal/",
-                file=sys.stderr,
-            )
-        except Exception as exc:  # yaml.YAMLError and unexpected parse errors
-            print(
-                f"WARNING: could not parse {yaml_path}: {exc} — using default internal/",
-                file=sys.stderr,
-            )
-    internal = Path(docs_path).expanduser().resolve() if docs_path else ws_dir / "internal"
-    sessions_md = internal / "sessions.md"
-    return sessions_md if sessions_md.is_file() else None
+import session_lookup
 
 
 def _current_session(sessions_md: Path | None) -> str | None:
@@ -67,16 +38,15 @@ def _current_session(sessions_md: Path | None) -> str | None:
     Requires sessions_md to be a resolved Path — intentionally does NOT fall
     back to harness-global current_session.py when sessions_md is None, because
     a harness session ID in a workspace archive-commit message would violate
-    workspace↔harness session-number separation.
+    workspace↔harness session-number separation. On subprocess error this
+    warn-and-omits because the session ID only appears in the archive commit
+    message (degradation is acceptable). raise_for_harness writes the value
+    into tracked frontmatter and fail-closes instead.
     """
     if sessions_md is None:
         return None
     try:
-        return subprocess.check_output(
-            [sys.executable, str(ROOT / "scripts" / "tools" / "current_session.py"),
-             "--sessions", str(sessions_md)],
-            text=True, stderr=subprocess.PIPE,
-        ).strip()
+        return session_lookup.call_current_session(sessions_md, root=ROOT)
     except subprocess.CalledProcessError as exc:
         print(
             f"WARNING: current_session.py failed: {exc.stderr.strip()} "
@@ -249,7 +219,7 @@ def main() -> None:
             staged_paths.extend([str(path), str(dest)])
 
     if staged_paths:
-        session = _current_session(_workspace_sessions_md(slug))
+        session = _current_session(session_lookup.resolve_workspace_sessions_md(slug, ROOT))
         msg = (
             f"chore: auto-archive resolved SRs {session}" if session
             else "chore: auto-archive resolved SRs"

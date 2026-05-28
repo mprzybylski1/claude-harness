@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S23 2026-05-28. 1 open tickets.
+Generated S23 2026-05-28. 0 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -11,11 +11,9 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Medium (1)
+## Medium (0)
 
-| ID | Title | Phase | Layer | Age |
-|----|-------|-------|-------|-----|
-| T128 | Consolidate _current_session + _workspace_sessions_md into shared session_lookup module | Ph2 | tooling | 1 session |
+*(none)*
 
 ## Low (0)
 

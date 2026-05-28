@@ -58,10 +58,12 @@ def _find_sr_file(slug: str, sr_id: str) -> Path:
     return matches[0]
 
 
+import session_lookup
+
+
 def _current_session() -> str:
-    cmd = [sys.executable, str(ROOT / "scripts" / "tools" / "current_session.py")]
     try:
-        return subprocess.check_output(cmd, text=True, stderr=subprocess.PIPE).strip()
+        return session_lookup.call_current_session(None, root=ROOT)
     except subprocess.CalledProcessError as exc:
         print(f"ERROR: current_session.py failed: {exc.stderr.strip()}", file=sys.stderr)
         sys.exit(2)

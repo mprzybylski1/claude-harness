@@ -88,12 +88,13 @@ def _resolve_internal(workspace_slug: str) -> Path:
     return internal
 
 
+import session_lookup
+
+
 def _current_session(internal: Path | None) -> str:
-    cmd = [sys.executable, str(ROOT / "scripts" / "tools" / "current_session.py")]
-    if internal is not None:
-        cmd += ["--sessions", str(internal / "sessions.md")]
+    sessions_md = (internal / "sessions.md") if internal is not None else None
     try:
-        return subprocess.check_output(cmd, text=True, stderr=subprocess.PIPE).strip()
+        return session_lookup.call_current_session(sessions_md, root=ROOT)
     except subprocess.CalledProcessError as exc:
         print(f"ERROR: current_session.py failed: {exc.stderr.strip()}", file=sys.stderr)
         sys.exit(2)
