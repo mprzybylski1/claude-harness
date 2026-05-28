@@ -9,10 +9,14 @@ venv/
 docs/opus_review_context.md
 .git/CLAUDE_SESSION_ID
 
+# IDE / editor
+.idea/
+
 # Workspace runtime data — local only, never committed to harness repo
 workspaces/*/internal/
 workspaces/*/client/
 workspaces/archive/
 
-# Session state — runtime file written at session start, not committed
+# Session state — runtime files written during sessions, not committed
 .claude/.active_workspace
+.claude/scheduled_tasks.lock
