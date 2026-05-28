@@ -1,17 +1,15 @@
 # Ticket Index
 
-Generated S21 2026-05-28. 5 open tickets.
+Generated S21 2026-05-28. 4 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
 
 *(none)*
 
-## High (1)
+## High (0)
 
-| ID | Title | Phase | Layer | Age |
-|----|-------|-------|-------|-----|
-| T117 | fix promote_raised_concern.py _extract_body: stop at any unknown H2 header | Ph2 | tooling | this session |
+*(none)*
 
 ## Medium (0)
 

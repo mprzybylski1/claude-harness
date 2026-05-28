@@ -170,3 +170,122 @@ class TestPromoteRaisedConcern:
         harness, _ = _setup(tmp_path)
         result = _run(harness, "SR-001")
         assert result.returncode != 0
+
+
+_MULTI_SECTION_SR = """\
+---
+id: SR-001
+from: myws
+raised: S5 2026-05-27
+title: Multi-section SR
+severity: high
+status: raised
+harness_ticket:
+---
+
+## Context
+
+Context body that should be copied.
+
+## Principle
+
+PRINCIPLE_BODY_DO_NOT_COPY
+
+## Boundary slot
+
+BOUNDARY_BODY_DO_NOT_COPY
+
+## File format
+
+FILE_FORMAT_BODY_DO_NOT_COPY
+
+## Proposed change
+
+Proposed body that should be copied.
+
+## CLIs to build
+
+CLIS_BODY_DO_NOT_COPY
+
+## Guardrails
+
+GUARDRAILS_BODY_DO_NOT_COPY
+
+## Harness disposition
+
+(Filled by harness.)
+"""
+
+
+class TestExtractBodyH2Boundary:
+    """T117: _extract_body must stop at any unknown H2, not just the stop_on allowlist."""
+
+    def test_unknown_h2_between_copy_sections_not_included(self, tmp_path):
+        """## Principle, ## Boundary slot, ## File format between Context and
+        Proposed change must NOT appear in the ticket body."""
+        harness, sr_path = _setup(tmp_path)
+        sr_path.write_text(_MULTI_SECTION_SR, encoding="utf-8")
+        result = _run(harness, "myws/SR-001")
+        assert result.returncode == 0, result.stderr
+        content = _open_ticket(harness).read_text(encoding="utf-8")
+        assert "PRINCIPLE_BODY_DO_NOT_COPY" not in content
+        assert "BOUNDARY_BODY_DO_NOT_COPY" not in content
+        assert "FILE_FORMAT_BODY_DO_NOT_COPY" not in content
+
+    def test_unknown_h2_after_proposed_change_not_included(self, tmp_path):
+        """Sections between Proposed change and Harness disposition (## CLIs to
+        build, ## Guardrails) must NOT appear in the ticket body."""
+        harness, sr_path = _setup(tmp_path)
+        sr_path.write_text(_MULTI_SECTION_SR, encoding="utf-8")
+        result = _run(harness, "myws/SR-001")
+        assert result.returncode == 0, result.stderr
+        content = _open_ticket(harness).read_text(encoding="utf-8")
+        assert "CLIS_BODY_DO_NOT_COPY" not in content
+        assert "GUARDRAILS_BODY_DO_NOT_COPY" not in content
+
+    def test_known_copy_sections_still_included(self, tmp_path):
+        """Regression: Context and Proposed change bodies still copied through
+        even when other H2 sections sit between them."""
+        harness, sr_path = _setup(tmp_path)
+        sr_path.write_text(_MULTI_SECTION_SR, encoding="utf-8")
+        result = _run(harness, "myws/SR-001")
+        assert result.returncode == 0, result.stderr
+        content = _open_ticket(harness).read_text(encoding="utf-8")
+        assert "Context body that should be copied" in content
+        assert "Proposed body that should be copied" in content
+
+    def test_h3_subheadings_inside_copy_section_are_preserved(self, tmp_path):
+        """### subheadings inside Context/Proposed change must NOT be treated as
+        section terminators — they're part of the section content."""
+        harness, sr_path = _setup(tmp_path)
+        sr_with_h3 = """\
+---
+id: SR-001
+from: myws
+raised: S5 2026-05-27
+title: H3 inside Context
+severity: high
+status: raised
+harness_ticket:
+---
+
+## Context
+
+Before subheading.
+
+### Sub-section
+
+H3_BODY_SHOULD_BE_COPIED
+
+After subheading.
+
+## Harness disposition
+
+(skip)
+"""
+        sr_path.write_text(sr_with_h3, encoding="utf-8")
+        result = _run(harness, "myws/SR-001")
+        assert result.returncode == 0, result.stderr
+        content = _open_ticket(harness).read_text(encoding="utf-8")
+        assert "H3_BODY_SHOULD_BE_COPIED" in content
+        assert "Sub-section" in content

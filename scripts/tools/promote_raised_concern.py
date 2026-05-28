@@ -57,16 +57,23 @@ def _find_sr_file(slug: str, sr_id: str) -> Path:
 
 
 def _extract_body(text: str, sr_id: str, slug: str) -> str:
-    """Return Context + Proposed change sections as ticket Problem body."""
+    """Return Context + Proposed change sections as ticket Problem body.
+
+    Any H2 header not in the copy_on allowlist terminates the current copy
+    section — so unknown sections like ## Principle, ## Boundary slot etc.
+    are not bled into the ticket body. ### subheadings within a copy section
+    are preserved (they're content, not boundaries).
+    """
     lines = [f"Promoted from {slug}/{sr_id}.", ""]
     in_section = False
     copy_on = {"## context", "## proposed change"}
-    stop_on = {"## harness disposition", "## acceptance criteria", "## related"}
     for line in text.split("\n"):
-        lower = line.strip().lower()
+        stripped = line.strip()
+        lower = stripped.lower()
+        is_h2 = stripped.startswith("## ") and not stripped.startswith("### ")
         if lower in copy_on:
             in_section = True
-        elif lower in stop_on:
+        elif is_h2:
             in_section = False
         if in_section:
             lines.append(line)
