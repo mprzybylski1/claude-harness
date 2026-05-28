@@ -25,8 +25,13 @@ print("S9")
 """
 
 
-def _setup(tmp_path: Path, slug: str = "myws") -> tuple[Path, Path]:
-    """Minimal harness skeleton with one workspace. Returns (harness, ws_dir)."""
+def _setup(tmp_path: Path, slug: str = "myws", with_ws_sessions: bool = True) -> tuple[Path, Path]:
+    """Minimal harness skeleton with one workspace. Returns (harness, ws_dir).
+
+    By default writes a workspace internal/sessions.md (S2) so the fail-closed
+    guard in raise_for_harness._current_session is satisfied. Pass
+    with_ws_sessions=False to exercise the missing-sessions.md path.
+    """
     (tmp_path / "docs").mkdir(parents=True)
     (tmp_path / "docs" / "sessions.md").write_text(
         "## Session Log\n\nS9 2026-05-27: init\n", encoding="utf-8"
@@ -37,6 +42,8 @@ def _setup(tmp_path: Path, slug: str = "myws") -> tuple[Path, Path]:
     ws_dir = tmp_path / "workspaces" / slug
     ws_dir.mkdir(parents=True)
     (ws_dir / "workspace.yaml").write_text(f"name: {slug}\n", encoding="utf-8")
+    if with_ws_sessions:
+        _add_workspace_sessions_md(ws_dir, "S2 2026-05-27: ws session")
     return tmp_path, ws_dir
 
 
@@ -189,13 +196,24 @@ class TestSessionIdSource:
         content = Path(result.stdout.strip()).read_text(encoding="utf-8")
         assert "raised: S3" in content
 
-    def test_falls_back_to_harness_session_when_internal_sessions_md_missing(self, tmp_path):
-        """Workspace with no sessions.md yet falls back to harness session."""
-        harness, _ = _setup(tmp_path)
+    def test_refuses_to_fall_back_when_internal_sessions_md_missing(self, tmp_path):
+        """T132: workspace with no sessions.md must NOT fall back to harness session.
+
+        Writing the harness session number into a workspace SR's `raised:`
+        frontmatter field would contaminate the workspace audit trail with a
+        cross-layer session ID — exactly the workspace↔harness separation
+        invariant. Fail closed (exit 2) instead.
+        """
+        harness, _ = _setup(tmp_path, with_ws_sessions=False)
         result = _run(harness, "Fallback case", "--workspace", "myws")
-        assert result.returncode == 0, result.stderr
-        content = Path(result.stdout.strip()).read_text(encoding="utf-8")
-        assert "raised: S9" in content
+        assert result.returncode == 2, (
+            f"expected exit 2, got {result.returncode}; "
+            f"stdout={result.stdout!r} stderr={result.stderr!r}"
+        )
+        assert "sessions.md" in result.stderr
+        # No SR file should have been created on the fail-closed path.
+        sr_files = list((tmp_path / "workspaces" / "myws" / "raised").glob("SR-*.md"))
+        assert sr_files == [], f"SR file should not be created on fail-closed: {sr_files}"
 
     def test_respects_docs_path_override_in_workspace_yaml(self, tmp_path):
         """docs_path in workspace.yaml redirects sessions.md to a custom location."""

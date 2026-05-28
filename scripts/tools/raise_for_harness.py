@@ -81,12 +81,33 @@ def _workspace_sessions_md(slug: str) -> Path | None:
     return sessions_md if sessions_md.is_file() else None
 
 
-def _current_session(sessions_md: Path | None = None) -> str:
-    """Resolve current session ID. When sessions_md is provided and exists,
-    queries that workspace's session log; otherwise falls back to harness-wide."""
-    cmd = [sys.executable, str(ROOT / "scripts" / "tools" / "current_session.py")]
-    if sessions_md is not None:
-        cmd.extend(["--sessions", str(sessions_md)])
+def _current_session(sessions_md: Path | None, slug: str) -> str:
+    """Resolve the workspace session ID. Fail-closed when sessions_md is None.
+
+    Why fail closed: this value lands in an SR file's `raised:` frontmatter,
+    a tracked record that downstream tools (list_raised_concerns.py,
+    promote_raised_concern.py) parse. Falling back to harness-global
+    current_session.py would stamp a harness session number into workspace
+    state — a workspace↔harness audit-trail contamination (Invariant 1).
+    surface_workspace_concerns.py warn-and-omits because its session ID only
+    appears in a commit message; here the cost of a wrong value is higher.
+    """
+    if sessions_md is None:
+        default_path = ROOT / "workspaces" / slug / "internal" / "sessions.md"
+        print(
+            f"ERROR: workspace '{slug}' has no sessions.md (looked for "
+            f"{default_path} or docs_path override in workspace.yaml) — "
+            f"refusing to fall back to harness session ID (would contaminate "
+            f"workspace audit trail).\n"
+            f"Run /session-start inside the workspace at least once to "
+            f"initialise its session log before raising concerns.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    cmd = [
+        sys.executable, str(ROOT / "scripts" / "tools" / "current_session.py"),
+        "--sessions", str(sessions_md),
+    ]
     try:
         return subprocess.check_output(cmd, text=True, stderr=subprocess.PIPE).strip()
     except subprocess.CalledProcessError as exc:
@@ -178,7 +199,7 @@ def main() -> None:
     raised_dir.mkdir(parents=True, exist_ok=True)
     (raised_dir / "archive").mkdir(exist_ok=True)
 
-    session = _current_session(_workspace_sessions_md(slug))
+    session = _current_session(_workspace_sessions_md(slug), slug)
     today = date.today().isoformat()
     slug_part = _slugify(args.title)
 
