@@ -309,9 +309,8 @@ Use this path when the workspace session cannot close cleanly. Do **not** run St
    ```
 
 2. **Raise a harness concern** so the blocker gets scheduled for a harness-root session:
-   ```bash
-   python scripts/tools/raise_for_harness.py "Description of blocker" \
-     --severity high --workspace <WORKSPACE_SLUG>
+   ```text
+   python scripts/tools/raise_for_harness.py "Description of blocker" --severity high --workspace <WORKSPACE_SLUG>
    ```
    Fill in the `## Context` and `## Proposed change` sections in the created SR file.
 
