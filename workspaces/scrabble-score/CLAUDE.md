@@ -64,3 +64,22 @@ xcodebuild -project ScrabbleScore.xcodeproj -scheme ScrabbleScore \
 
 The build step is sufficient for code-signing + bundling; launch via Xcode's
 Run button to actually install and start the app on the device.
+
+## Cross-repo ticket closes
+
+When a workspace ticket's deliverable lives in the **harness repo** (e.g. an
+edit to this `workspaces/scrabble-score/CLAUDE.md`, or to a shared script),
+expect **two commits in two repos**:
+
+1. Commit the deliverable in the harness repo first
+   (`docs(T###): <description>` or `fix(T###): <description>`)
+2. Then run `close_ticket.py T###` in the scrabble repo for the archive move
+   (`fix(T###): <title>` — auto-suggested message references the harness
+   commit SHA for traceability)
+
+`close_ticket.py --files` only stages files in the workspace repo. There is
+no `--harness-files` flag today — track via SR if this becomes painful at
+scale.
+
+Example: S9 / T018 — workspace CLAUDE.md edit committed to harness as
+`5f36dbc`, archive move committed to scrabble as `3c24ca5`.
