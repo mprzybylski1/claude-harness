@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S21 2026-05-28. 1 open tickets.
+Generated S21 2026-05-28. 0 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -15,11 +15,9 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Low (1)
+## Low (0)
 
-| ID | Title | Phase | Layer | Age |
-|----|-------|-------|-------|-----|
-| T121 | surface_workspace_concerns.py: stage archive moves for git audit trail | Ph2 | tooling | this session |
+*(none)*
 
 ## Unknown (0)
 

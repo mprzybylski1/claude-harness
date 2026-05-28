@@ -16,6 +16,7 @@ import argparse
 import os
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -155,9 +156,18 @@ def main() -> None:
 
     print("\n".join(lines).rstrip())
 
-    # Archive terminal items after surfacing so they appear exactly once
+    # Archive terminal items after surfacing so they appear exactly once.
+    # Stage the moves in git when possible so session-close picks them up
+    # instead of leaving an uncommitted delete+add pair lying around.
     for _, path in terminal:
-        shutil.move(str(path), str(archive_dir / path.name))
+        dest = archive_dir / path.name
+        shutil.move(str(path), str(dest))
+        subprocess.run(
+            ["git", "add", "--", str(path), str(dest)],
+            cwd=str(ROOT),
+            capture_output=True,
+            check=False,
+        )
 
 
 if __name__ == "__main__":

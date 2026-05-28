@@ -169,3 +169,57 @@ class TestSurfaceWorkspaceConcerns:
         harness, _ = _setup(tmp_path)
         result = _run(harness)  # cwd=harness root, not a workspace
         assert result.returncode != 0
+
+
+def _git_init(tmp_path: Path) -> None:
+    """Initialize a git repo at tmp_path with one initial commit."""
+    subprocess.run(["git", "-C", str(tmp_path), "init", "-q"], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "config", "user.email", "t@t"], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "config", "user.name", "t"], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "config", "commit.gpgsign", "false"], check=True)
+
+
+def _git_status_porcelain(tmp_path: Path) -> str:
+    return subprocess.run(
+        ["git", "-C", str(tmp_path), "status", "--porcelain"],
+        capture_output=True, text=True, check=True,
+    ).stdout
+
+
+class TestGitStaging:
+    """T121: terminal archive moves are staged in git so they appear in the
+    session-close commit instead of accumulating as uncommitted changes."""
+
+    def test_archived_terminal_is_staged(self, tmp_path):
+        harness, raised = _setup(tmp_path)
+        _git_init(tmp_path)
+        sr = _make_sr(raised, "SR-002", "myws", "Done", status="resolved", resolved_in="S19")
+        subprocess.run(["git", "-C", str(tmp_path), "add", str(sr)], check=True)
+        subprocess.run(
+            ["git", "-C", str(tmp_path), "commit", "-q", "-m", "initial"],
+            check=True,
+        )
+        result = _run(harness, "--workspace", "myws")
+        assert result.returncode == 0, result.stderr
+        status = _git_status_porcelain(tmp_path)
+        # Source path is gone, dest is new — both must be staged (uppercase first column)
+        assert sr.exists() is False
+        # Look for staged delete of source and staged add of dest (or rename)
+        # The exact prefix can be "R" (rename), "D" + "A", but no unstaged " D" or "??"
+        lines = [l for l in status.splitlines() if "SR-002" in l]
+        assert lines, f"No SR-002 lines in git status: {status!r}"
+        for line in lines:
+            # First column = staged change; second column = unstaged
+            assert line[1] == " ", \
+                f"Unstaged change for SR-002: {line!r} — expected staged-only"
+
+    def test_works_outside_git_repo(self, tmp_path):
+        """Best-effort staging: if not in a git repo, archive still proceeds."""
+        harness, raised = _setup(tmp_path)
+        # No git init — tmp_path is not a git repo
+        sr = _make_sr(raised, "SR-002", "myws", "Done", status="resolved", resolved_in="S19")
+        result = _run(harness, "--workspace", "myws")
+        assert result.returncode == 0, result.stderr
+        assert not sr.exists()
+        archive_files = list((raised / "archive").glob("SR-002-*.md"))
+        assert len(archive_files) == 1
