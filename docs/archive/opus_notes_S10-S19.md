@@ -698,4 +698,52 @@ None. T086 *restores* Invariant 5 alignment at the hook layer that S17 flagged a
 
 None. All S17 priority concerns addressed in T086–T088. The remaining items are S18-original.
 
+# Opus Review — S19
+
+Scope: closed T091–T102 (12 tickets) addressing all 6 S18 architectural concerns + 5 S19 workflow-review opens. Net: substantial work in `close_ticket.py` (`_check_gitignored`, `_stage_extra_files` extracted, scoped `_check_acs`/`_tick_acs`, `--tick-acs` flag mutually exclusive with `--force`), new `check_test_imports` in `repo_hygiene.py`, `create_ticket.py` gained `--layer`/`--repo`/`O_EXCL` retry. 16 close-ticket tests + 3 repo_hygiene tests + 5 create_ticket tests. Strong follow-through on every S18 priority. Three small concerns surface; none invariant-violating.
+
+## Invariant Violations
+
+None confirmed. The harness-level invariants 1–2 are placeholders ("[Name]") and invariant 3 is conditional. Invariant 4 (fail-closed) is *strengthened* by T098: `_check_gitignored` exits 2 on subprocess failure and on git returncode >= 128, rather than treating unknown rc as "not ignored". Invariant 5 (workspace isolation) is unaffected — `_check_gitignored` correctly groups paths by their actual git root via `_git_root_for(p)` so checks run against the correct repo.
+
+The S18 carry-forward "`layer: tooling` schema mismatch" is addressed at the create-ticket-script layer (T092 adds `--layer` enum including `tooling`) but the `docs/architecture_invariants.md` placeholder enum was NOT updated to include `tooling` (still says `backend | frontend | fullstack | infra | process` per the template embedded in opus_review_context.md). The session-close notes acknowledge this as "1 deferred (architecture_invariants.md placeholder stubs)". Not an invariant violation because the doc enum is the placeholder, but the schema-of-record drift remains and should be reconciled.
+
+## Architectural Concerns
+
+1. **`scripts/tools/close_ticket.py:284-294` — `_tick_acs` silently no-ops when `## Acceptance Criteria` header is missing, while `_check_acs` falls back to whole-content scan. Asymmetric.** [Concrete bug, low impact] If a ticket lacks the literal header (e.g. typo "Acceptance criteria" lowercase, or missing entirely), `_check_acs` walks the whole file and finds unchecked boxes everywhere, but `_tick_acs` returns content unchanged. Result with `--tick-acs`: the gate still fires (unchecked ACs found via fallback) and close fails with a confusing message — user passed `--tick-acs` expecting it to tick boxes, sees the gate fail anyway. Fix: either (a) make `_tick_acs` symmetric (rewrite all `- [ ]` in the whole file when header missing), or (b) print a clearer error like "`--tick-acs` requires a `## Acceptance Criteria` section". The test `test_tick_acs_scoped_to_ac_section_only` only exercises the happy path where the header exists.
+
+2. **`scripts/tools/repo_hygiene.py:185-244` — `check_test_imports` reports "missing pytest" as a `test-import-error` WARN via the generic fallback, contradicting the docstring "Best-effort: if pytest is unavailable...returns []".** [Concrete bug, moderate noise] The exception handler at line 199 only catches `FileNotFoundError, subprocess.TimeoutExpired, OSError`. When pytest is not installed but Python is, `python -m pytest` exits with returncode 1 and stderr `No module named pytest`. That falls through to the parsing logic; the "ModuleNotFoundError"-grep branch (line 219) matches and emits a WARN naming pytest itself, not a user test file. The AC was explicit: "Check is best-effort: missing pytest does not fail the script" — it doesn't fail, but it lies. Fix: pre-check `importlib.util.find_spec("pytest")` and return `[]` if missing. The test `test_missing_pytest_does_not_crash` mocks `subprocess.run` with `FileNotFoundError`, which does not exercise the real "pytest not installed but Python is" path — so this gap is uncovered.
+
+3. **`scripts/tools/repo_hygiene.py:230-242` — generic fallback WARN truncates `combined` to 200 chars without indicating truncation, hiding the actual error.** [Display bug, low impact] When pytest exits non-zero but neither "ERROR collecting" nor "ImportError" patterns match, the fallback emits `f"pytest --collect-only failed (exit {result.returncode}): {snippet}"` where snippet is silently sliced. A long traceback gets chopped mid-line. Fix: append `...` when truncated, or write the full output to a temp file and reference it.
+
+4. **`scripts/tools/close_ticket.py:259-264` — `_check_gitignored` silently skips paths whose `_git_root_for` returns None.** [Coverage gap, low impact] The comment says "Path is not inside any git repo — cannot check; proceed (staging will catch it)". That's true today because `_stage_extra_files` runs next and exits 2 for the same path, so the user sees an error. But the two checks are coupled by control flow only — if a future refactor reorders or wraps `_stage_extra_files` in a try/except, the gitignore check would silently no-op. Defense-in-depth: also exit 2 here with a clear "path not in any git repo" message rather than relying on the next stage.
+
+5. **`scripts/tools/repo_hygiene.py:335-339` — manual `sys.argv` walk for `--tests-dir` does not coexist with `--warn-only` if a user combines them as `--warn-only --tests-dir foo`.** [Diff suggests; low confidence — minor] The arg detection works for either flag in any position but neither uses argparse, so `--tests-dir=foo` (=-form) would not parse. Trivial today, but if more flags accrue this pattern will collapse. Convert to `argparse.ArgumentParser` next time anything is added.
+
+6. **`scripts/tools/close_ticket.py:316-325` — `_stage_extra_files` failure message advises `git reset HEAD` but only if there were multiple roots; the message is unconditional.** [Display lie, low impact] "Some paths from earlier repos may already be staged" appears even when there's only one git root and no partial state can exist. Fix: check `len(by_root) > 1` before printing the "earlier repos" line, or rephrase to "any earlier paths from this run may already be staged".
+
+## Architectural Concerns — Test Gaps
+
+1. **`_tick_acs` has no test for the missing-header case (Concern #1).** Add a ticket with no `## Acceptance Criteria` header and assert close behavior — currently it would fail confusingly.
+
+2. **`check_test_imports` has no test for the real "pytest not installed" path (Concern #2).** The existing test mocks `FileNotFoundError`, which is the wrong failure mode. Add a test using a subprocess in a venv without pytest, or mock `subprocess.run` to return `CompletedProcess(returncode=1, stderr="No module named pytest")` and assert the result is `[]`.
+
+3. **`_check_gitignored` has no test for the not-in-any-git-repo path (Concern #4).** Add a test passing a `/tmp/file.py` (outside any git repo) and assert the failure mode (today: silently skipped, then staging fails; after fix: gitignore check fails first with clear message).
+
+4. **`_check_gitignored` has no test for the `git check-ignore` rc >= 128 fail-closed path.** The new fail-closed branch (lines 287-294) is exercised only by code review. Add a test: mock `subprocess.run` to return rc=128 with a stderr message and assert `SystemExit(2)`.
+
+5. **No test verifies `_check_gitignored` works when --files spans multiple git roots.** Per-root grouping is the whole point of the change vs. the simpler single-call implementation, but the test suite has only single-root cases. A workspace ticket with `--files harness/foo.py /external/proj/bar.py` would exercise the grouping logic.
+
+## Suggested Next Session Focus
+
+1. **Fix the "missing pytest" misreport in `check_test_imports` (Concern #2, Test Gap #2).** ~5 LoC + 1 test. Add `importlib.util.find_spec("pytest")` early-return. Without this fix, every machine that runs `repo_hygiene.py --warn-only` without pytest installed gets a spurious WARN — the check becomes self-defeating noise.
+
+2. **Reconcile the `architecture_invariants.md` placeholder vs. actual ticket schema (deferred from S19).** Either fill in invariants 1–2 with real rules and align the layer enum to include `tooling`, or remove the placeholder template entirely and point Opus to `docs/tickets/TEMPLATE.md` as the schema of record. The "deferred to next session" note is real technical debt — Opus sees the placeholder enum in every review context.
+
+3. **Tighten `_tick_acs` symmetry with `_check_acs` (Concern #1, Test Gap #1).** ~5 LoC + 1 test. Cheap, prevents a confusing user experience for the first ticket that lacks the standard header.
+
+## Carry-forwards (issues unresolved ≥ 2 sessions)
+
+- **`architecture_invariants.md` is a placeholder file.** Now 2+ sessions of acknowledgment without action. The S18 review noted the `layer: tooling` enum mismatch (Concern #2); S19 implemented `--layer` in create_ticket.py but explicitly deferred updating the invariants doc. Until the doc has real invariants, every Opus review's "Invariant Violations" section is structurally weak — there's nothing concrete to check against.
+
 

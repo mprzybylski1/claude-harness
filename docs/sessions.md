@@ -19,32 +19,30 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Active Work
 
-**S20 — closed T104–T112 (9 tickets): full workspace↔harness separation tooling from SR-001.**
+**S21 — closed T113–T122 (10 tickets): Opus S20 backlog + SR-002/SR-003 + trading-app hygiene; 2 impl-review inline fixes.**
 
 Files changed:
-- `scripts/tools/raise_for_harness.py` — NEW (T104): workspace-side SR creation; O_CREAT|O_EXCL retry, CWD slug detection
-- `tests/test_raise_for_harness.py` — NEW (T104): 10 tests
-- `scripts/tools/list_raised_concerns.py` — NEW (T105): harness aggregator of pending concerns grouped by workspace; impl-review: YAML parse warning, dead archive filter removed
-- `tests/test_list_raised_concerns.py` — NEW (T105): 10 tests
-- `scripts/tools/promote_raised_concern.py` — NEW (T106): SR→ticket promotion, stamps source: backref; impl-review: _stamp_source fatal on miss, _update_sr warns if harness_ticket absent
-- `tests/test_promote_raised_concern.py` — NEW (T106): 12 tests
-- `scripts/tools/reject_raised_concern.py` — NEW (T107): terminal rejection with reason + resolved_in
-- `tests/test_reject_raised_concern.py` — NEW (T107): 11 tests
-- `scripts/tools/close_ticket.py` — T108: _parse_source + _resolve_source_sr (close-the-loop SR resolution on ticket close); impl-review: slug validation, status guard (raised/promoted only), resolved_in warning
-- `tests/test_close_ticket_source_sr.py` — NEW (T108): 7 tests
-- `.claude/skills/session-start/SKILL.md` — T109: list_raised_concerns step (harness root); T110: surface_workspace_concerns step; state-file write step added
-- `scripts/tools/surface_workspace_concerns.py` — NEW (T110): workspace own-concerns surface + auto-archive terminal items
-- `tests/test_surface_workspace_concerns.py` — NEW (T110): 12 tests
-- `scripts/hooks/check_cross_layer_writes.py` — NEW (T111): PreToolUse hook blocking workspace→harness and harness→workspace-internal writes; impl-review: resolved path constants, parse-error warning
-- `tests/test_check_cross_layer_writes.py` — NEW (T111): 12 tests
-- `.claude/settings.json` — T111: hook registered as PreToolUse Edit|Write
-- `.gitignore` — T111: .claude/.active_workspace session state file
-- `.claude/skills/session-close/SKILL.md` — T112: abandoned-session pattern; impl-review: bash→text fence on template blocks
-- `workspaces/scrabble-score/raised/SR-001-*.md` — promoted (status: promoted, harness_ticket: T104–T112)
+- `.claude/skills/implementation-review/SKILL.md` — T113: workspace form of prepare_opus_context.py + <CONTEXT_PATH> placeholder in Step 2
+- `.claude/skills/session-close/SKILL.md` — T114: shared-file commit discipline guidance; T118: bash fence fix (backslash → single-line text fence)
+- `scripts/hooks/check_cross_layer_writes.py` — T115: __harness__ sentinel, fail-closed on missing/empty state file, cross-workspace internal write blocking; 12 new tests
+- `tests/test_check_cross_layer_writes.py` — T115: TestCrossWorkspaceWrites + TestUndeclaredSession (12 tests)
+- `scripts/tools/raise_for_harness.py` — T116: _workspace_sessions_md + _current_session(sessions_md) for workspace session stamping; 4 new tests; impl-review: named exception handling on yaml parse
+- `tests/test_raise_for_harness.py` — T116: TestSessionIdSource (4 tests)
+- `scripts/tools/promote_raised_concern.py` — T117: _extract_body stops at any H2 not in copy_on; T119: argparse + --layer flag forwarded to create_ticket.py; 4 + 3 new tests
+- `tests/test_promote_raised_concern.py` — T117: TestExtractBodyH2Boundary (4 tests); T119: TestLayerFlag (3 tests)
+- `scripts/tools/close_ticket.py` — T120: fail-closed on missing source SR (exit 2 default, --ignore-missing-sr override); 3 tests replacing 1
+- `tests/test_close_ticket_source_sr.py` — T120: 3 new tests
+- `scripts/tools/surface_workspace_concerns.py` — T121: git add after shutil.move for archive moves; impl-review: warning on staging failure; 2 new tests
+- `tests/test_surface_workspace_concerns.py` — T121: TestGitStaging (2 tests)
+- `scripts/tools/repo_hygiene.py` — T122: STALE_FILES entries for 5 trading-app artifact dirs; drop dead data/, research/ ALWAYS_SKIP entries; 4 new tests
+- `tests/test_repo_hygiene.py` — T122: TestTradingAppArtifactGuards (4 tests)
+- `.claude/skills/session-start/SKILL.md` — T115: __harness__ sentinel documented; fail-closed semantics explained
+- `workspaces/scrabble-score/raised/SR-002-*.md` — resolved (T113)
+- `workspaces/scrabble-score/raised/SR-003-*.md` — resolved (T114)
 
-Tickets closed: T104–T112 (9 tickets from SR-001 child tickets)
-Tickets opened: none (0 open at close)
-Impl review: 8 findings fixed inline (path resolve, slug validation, status guard, resolved_in warning, _stamp_source fatal, _update_sr warn, dead filter, bash→text fence)
+Tickets closed: T113–T122 (10 tickets; SR-002→T113, SR-003→T114, Opus S20 backlog T115–T121, hygiene T122)
+Tickets opened: T115–T122 (opened and closed same session)
+Impl review: 2 findings fixed inline (yaml parse bare-except → named exceptions; staging failure silent → warning)
 
 ---
 
@@ -73,3 +71,4 @@ S17 2026-05-26: closed T078-T085 (8 tickets: S16 workflow-review backlog + T083-
 S18 2026-05-26: closed T086-T090 (Opus S17 concerns + workflow-review T089-T090); impl-review 4 inline fixes; 0 open at close
 S19 2026-05-26: closed T091-T102 (12 tickets: Opus S18 concerns + workflow-review T098-T102); impl-review 9 inline fixes; 0 open at close
 S20 2026-05-27: closed T104-T112 (9 tickets: SR-001 workspace↔harness separation tooling); impl-review 8 inline fixes; 0 open at close
+S21 2026-05-28: closed T113-T122 (10 tickets: SR-002/SR-003 + Opus S20 backlog + trading-app hygiene); impl-review 2 inline fixes; 0 open at close

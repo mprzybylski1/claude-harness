@@ -1,51 +1,3 @@
-# Opus Review — S19
-
-Scope: closed T091–T102 (12 tickets) addressing all 6 S18 architectural concerns + 5 S19 workflow-review opens. Net: substantial work in `close_ticket.py` (`_check_gitignored`, `_stage_extra_files` extracted, scoped `_check_acs`/`_tick_acs`, `--tick-acs` flag mutually exclusive with `--force`), new `check_test_imports` in `repo_hygiene.py`, `create_ticket.py` gained `--layer`/`--repo`/`O_EXCL` retry. 16 close-ticket tests + 3 repo_hygiene tests + 5 create_ticket tests. Strong follow-through on every S18 priority. Three small concerns surface; none invariant-violating.
-
-## Invariant Violations
-
-None confirmed. The harness-level invariants 1–2 are placeholders ("[Name]") and invariant 3 is conditional. Invariant 4 (fail-closed) is *strengthened* by T098: `_check_gitignored` exits 2 on subprocess failure and on git returncode >= 128, rather than treating unknown rc as "not ignored". Invariant 5 (workspace isolation) is unaffected — `_check_gitignored` correctly groups paths by their actual git root via `_git_root_for(p)` so checks run against the correct repo.
-
-The S18 carry-forward "`layer: tooling` schema mismatch" is addressed at the create-ticket-script layer (T092 adds `--layer` enum including `tooling`) but the `docs/architecture_invariants.md` placeholder enum was NOT updated to include `tooling` (still says `backend | frontend | fullstack | infra | process` per the template embedded in opus_review_context.md). The session-close notes acknowledge this as "1 deferred (architecture_invariants.md placeholder stubs)". Not an invariant violation because the doc enum is the placeholder, but the schema-of-record drift remains and should be reconciled.
-
-## Architectural Concerns
-
-1. **`scripts/tools/close_ticket.py:284-294` — `_tick_acs` silently no-ops when `## Acceptance Criteria` header is missing, while `_check_acs` falls back to whole-content scan. Asymmetric.** [Concrete bug, low impact] If a ticket lacks the literal header (e.g. typo "Acceptance criteria" lowercase, or missing entirely), `_check_acs` walks the whole file and finds unchecked boxes everywhere, but `_tick_acs` returns content unchanged. Result with `--tick-acs`: the gate still fires (unchecked ACs found via fallback) and close fails with a confusing message — user passed `--tick-acs` expecting it to tick boxes, sees the gate fail anyway. Fix: either (a) make `_tick_acs` symmetric (rewrite all `- [ ]` in the whole file when header missing), or (b) print a clearer error like "`--tick-acs` requires a `## Acceptance Criteria` section". The test `test_tick_acs_scoped_to_ac_section_only` only exercises the happy path where the header exists.
-
-2. **`scripts/tools/repo_hygiene.py:185-244` — `check_test_imports` reports "missing pytest" as a `test-import-error` WARN via the generic fallback, contradicting the docstring "Best-effort: if pytest is unavailable...returns []".** [Concrete bug, moderate noise] The exception handler at line 199 only catches `FileNotFoundError, subprocess.TimeoutExpired, OSError`. When pytest is not installed but Python is, `python -m pytest` exits with returncode 1 and stderr `No module named pytest`. That falls through to the parsing logic; the "ModuleNotFoundError"-grep branch (line 219) matches and emits a WARN naming pytest itself, not a user test file. The AC was explicit: "Check is best-effort: missing pytest does not fail the script" — it doesn't fail, but it lies. Fix: pre-check `importlib.util.find_spec("pytest")` and return `[]` if missing. The test `test_missing_pytest_does_not_crash` mocks `subprocess.run` with `FileNotFoundError`, which does not exercise the real "pytest not installed but Python is" path — so this gap is uncovered.
-
-3. **`scripts/tools/repo_hygiene.py:230-242` — generic fallback WARN truncates `combined` to 200 chars without indicating truncation, hiding the actual error.** [Display bug, low impact] When pytest exits non-zero but neither "ERROR collecting" nor "ImportError" patterns match, the fallback emits `f"pytest --collect-only failed (exit {result.returncode}): {snippet}"` where snippet is silently sliced. A long traceback gets chopped mid-line. Fix: append `...` when truncated, or write the full output to a temp file and reference it.
-
-4. **`scripts/tools/close_ticket.py:259-264` — `_check_gitignored` silently skips paths whose `_git_root_for` returns None.** [Coverage gap, low impact] The comment says "Path is not inside any git repo — cannot check; proceed (staging will catch it)". That's true today because `_stage_extra_files` runs next and exits 2 for the same path, so the user sees an error. But the two checks are coupled by control flow only — if a future refactor reorders or wraps `_stage_extra_files` in a try/except, the gitignore check would silently no-op. Defense-in-depth: also exit 2 here with a clear "path not in any git repo" message rather than relying on the next stage.
-
-5. **`scripts/tools/repo_hygiene.py:335-339` — manual `sys.argv` walk for `--tests-dir` does not coexist with `--warn-only` if a user combines them as `--warn-only --tests-dir foo`.** [Diff suggests; low confidence — minor] The arg detection works for either flag in any position but neither uses argparse, so `--tests-dir=foo` (=-form) would not parse. Trivial today, but if more flags accrue this pattern will collapse. Convert to `argparse.ArgumentParser` next time anything is added.
-
-6. **`scripts/tools/close_ticket.py:316-325` — `_stage_extra_files` failure message advises `git reset HEAD` but only if there were multiple roots; the message is unconditional.** [Display lie, low impact] "Some paths from earlier repos may already be staged" appears even when there's only one git root and no partial state can exist. Fix: check `len(by_root) > 1` before printing the "earlier repos" line, or rephrase to "any earlier paths from this run may already be staged".
-
-## Architectural Concerns — Test Gaps
-
-1. **`_tick_acs` has no test for the missing-header case (Concern #1).** Add a ticket with no `## Acceptance Criteria` header and assert close behavior — currently it would fail confusingly.
-
-2. **`check_test_imports` has no test for the real "pytest not installed" path (Concern #2).** The existing test mocks `FileNotFoundError`, which is the wrong failure mode. Add a test using a subprocess in a venv without pytest, or mock `subprocess.run` to return `CompletedProcess(returncode=1, stderr="No module named pytest")` and assert the result is `[]`.
-
-3. **`_check_gitignored` has no test for the not-in-any-git-repo path (Concern #4).** Add a test passing a `/tmp/file.py` (outside any git repo) and assert the failure mode (today: silently skipped, then staging fails; after fix: gitignore check fails first with clear message).
-
-4. **`_check_gitignored` has no test for the `git check-ignore` rc >= 128 fail-closed path.** The new fail-closed branch (lines 287-294) is exercised only by code review. Add a test: mock `subprocess.run` to return rc=128 with a stderr message and assert `SystemExit(2)`.
-
-5. **No test verifies `_check_gitignored` works when --files spans multiple git roots.** Per-root grouping is the whole point of the change vs. the simpler single-call implementation, but the test suite has only single-root cases. A workspace ticket with `--files harness/foo.py /external/proj/bar.py` would exercise the grouping logic.
-
-## Suggested Next Session Focus
-
-1. **Fix the "missing pytest" misreport in `check_test_imports` (Concern #2, Test Gap #2).** ~5 LoC + 1 test. Add `importlib.util.find_spec("pytest")` early-return. Without this fix, every machine that runs `repo_hygiene.py --warn-only` without pytest installed gets a spurious WARN — the check becomes self-defeating noise.
-
-2. **Reconcile the `architecture_invariants.md` placeholder vs. actual ticket schema (deferred from S19).** Either fill in invariants 1–2 with real rules and align the layer enum to include `tooling`, or remove the placeholder template entirely and point Opus to `docs/tickets/TEMPLATE.md` as the schema of record. The "deferred to next session" note is real technical debt — Opus sees the placeholder enum in every review context.
-
-3. **Tighten `_tick_acs` symmetry with `_check_acs` (Concern #1, Test Gap #1).** ~5 LoC + 1 test. Cheap, prevents a confusing user experience for the first ticket that lacks the standard header.
-
-## Carry-forwards (issues unresolved ≥ 2 sessions)
-
-- **`architecture_invariants.md` is a placeholder file.** Now 2+ sessions of acknowledgment without action. The S18 review noted the `layer: tooling` enum mismatch (Concern #2); S19 implemented `--layer` in create_ticket.py but explicitly deferred updating the invariants doc. Until the doc has real invariants, every Opus review's "Invariant Violations" section is structurally weak — there's nothing concrete to check against.
-
 # Opus Review — S20 2026-05-27
 
 Scope: closed T104–T112 (9 tickets) implementing the full SR-001 workspace↔harness separation tooling. Net: 5 new tools, 1 new PreToolUse hook, 1 new SKILL.md pattern, ~860 LoC production + ~1240 LoC tests. Round-trip pipeline works in the happy path; tests cover the obvious shapes. Several safety-critical gaps in the hook + an Invariant 5 hole; one concrete bug in body extraction; and a session-id conflation that taints the audit trail this SR system was supposed to provide.
@@ -110,4 +62,52 @@ Fix: in the workspace branch, also block any write to `workspaces/<other_slug>/i
 ## Carry-forwards (issues unresolved ≥ 2 sessions)
 
 - **`architecture_invariants.md` is a placeholder file.** Now 3 sessions of acknowledgment without action. The S20 work added a concrete, testable invariant (workspace isolation via the new hook) but `docs/architecture_invariants.md` still has `[Name]` placeholders for invariants 1–2 and conditional language for 3–4. Invariant 5 (workspace isolation) is now demonstrably wrong as written — the new hook protects layer separation but not workspace separation; the doc should reflect what the code actually enforces.
+
+# Opus Review — S21 2026-05-28
+
+Scope: closed T113–T122 (10 tickets) — SR-002 + SR-003 from scrabble-score plus all 8 S20 Opus backlog items + trading-app hygiene. Net: substantial hook rewrite (cross-workspace blocking + fail-closed undeclared state + `__harness__` sentinel), workspace-session-id resolution in `raise_for_harness.py`, H2-boundary fix in `_extract_body`, `--layer` flag on promote, fail-closed missing-SR on `close_ticket.py`, git staging of archive moves, repo_hygiene trading-app guards. ~340 LoC production + ~470 LoC tests. Strong, focused follow-through — every S20 priority concern is addressed at the code level. A few residual edges remain; no invariant violations introduced.
+
+## Invariant Violations
+
+None. Invariant 5 (workspace isolation) is now *strengthened* at the hook layer by T115: workspace A writing to `workspaces/B/internal/` is rejected (`test_cross_workspace_internal_write_blocked`), closing the S20 hole. Invariant 4 (fail-closed) is also strengthened — T115 fails closed on missing/empty state file, T120 fails closed on missing source SR.
+
+Caveat: the `docs/architecture_invariants.md` doc still has `[Name]` placeholders for Invariants 1–2 — now 3 sessions of carry-forward. Not a violation of the harness's own rules (the doc is intentionally a placeholder), but Opus has no concrete invariants 1–2 to check against. This is structural debt, not new in S21.
+
+## Architectural Concerns
+
+1. **`scripts/tools/raise_for_harness.py:80` — `_workspace_sessions_md` silently returns `None` when `<INTERNAL>/sessions.md` is missing, and `_current_session(None)` falls back to harness-wide session numbering.** [Concrete bug, moderate impact on audit trail] T116 fixes the happy path, but the failure mode is silent: a workspace with `workspace.yaml` present but `internal/sessions.md` missing (e.g. fresh workspace not yet session-logged, typo in `docs_path`, file deleted) gets a harness-stamped SR with no warning. Confirmed from the diff: `sessions_md if sessions_md.is_file() else None` returns `None`, then `_current_session(None)` constructs `cmd` without `--sessions`, then `current_session.py` defaults to harness `docs/sessions.md`. The S20 Concern #3 was about exactly this audit-trail lying problem; the fix narrows the window but leaves a silent fallback. Fix: when `_workspace_sessions_md` would return `None` for a real workspace (i.e. `workspaces/<slug>/` exists), emit a WARNING naming the missing path and the harness session number that will be used, so the operator sees the audit-trail break instead of discovering it later.
+
+2. **`scripts/hooks/check_cross_layer_writes.py:97` — `__harness__` sentinel string collides with any workspace named `__harness__`.** [Diff suggests; low confidence — namespace hygiene] The sentinel is a magic string in `.claude/.active_workspace` content space, but `workspace.py create` does not (visible from the diff alone) reject `__harness__` as a slug. If a workspace gets that slug, the hook reads `__harness__` and treats the session as harness-root, permitting writes to *any* `workspaces/*/internal/` including this one's. Mitigation: reject the slug `__harness__` in `workspace.py create`, or change the sentinel to something that's not a valid slug pattern (e.g. include a `/` or start with `!`). Test coverage for this is absent in the new TestUndeclaredSession class.
+
+3. **`scripts/tools/promote_raised_concern.py:158` — argparse handles the positional, then a manual `"/" not in args.sr_ref` check runs *after* parsing.** [Cosmetic, low impact] The post-argparse validation prints a custom usage line on missing `/`, but argparse has already accepted the value. Result is fine for behaviour (still exit 1 with usage). However the printed usage line `"Usage: promote_raised_concern.py <slug>/SR-NNN\nExample: ..."` duplicates what argparse already prints on its own errors, and the two messages will diverge as flags are added. Either fold the slash-validation into a `type=` callable on the positional or rely on a custom argparse `error` override. Trivial.
+
+4. **`scripts/tools/repo_hygiene.py:90-118` — five trading-app artifact directories are hard-coded as STALE_FILES at the harness layer.** [Architectural fragility, low impact] `core/`, `execution/`, `data/`, `strategies/`, `risk_engine/` are project-specific names from the previous trading-app codebase. The harness aspires to be project-agnostic — these hard-coded names will be wrong noise for the next workspace that legitimately uses `data/` or `strategies/` at the harness root (unlikely but possible) and will be irrelevant dead config for every other workspace. Better long-term shape: move trading-app-specific stale entries into a workspace-local config (e.g. `workspaces/<slug>/repo_hygiene.yaml`) and have `repo_hygiene.py` merge them; or, since these dirs *should never exist* at harness root regardless of workspace, lift the check into a generic "harness root must not contain top-level dirs outside an allowlist" rule. The current shape works but bleeds project-specific knowledge into the harness.
+
+5. **`scripts/tools/close_ticket.py:509-533` — fail-closed branch reports `len(matches)` matches but logs `"no matching file"` only when `matches` is empty.** [Cosmetic, low impact] When `len(matches) > 1` (multiple SR files match the glob — possible if the SR ID is reused or filename was duplicated), the `detail` says e.g. "found 3 matches" which is correct, but the message still says "SR file not found" which contradicts itself. Should distinguish "not found" (0 matches) from "ambiguous" (≥2 matches) and emit different remediation guidance — for the ambiguous case, advise listing and de-duplicating; for the missing case, advise fixing `source:` or `--ignore-missing-sr`. The conjoined branch handling masks the ambiguous-match case as if it were missing.
+
+6. **`scripts/tools/surface_workspace_concerns.py:175-189` — `git add` after `shutil.move` runs even when not inside a git repo.** [Diff suggests; low confidence — minor] If the harness root somehow isn't a git repo (test fixture, copied tree), the `git add --` invocation fails with returncode != 0, the WARNING fires, and the user sees a "stage manually" instruction that won't work. Detection of "is this a git repo at all?" before attempting to stage would let the script silently skip staging in non-git contexts. Not a real failure mode in production, but the new tests would need a git-init in the temp dir to exercise the happy path.
+
+## Architectural Concerns — Test Gaps
+
+1. **No test for the silent harness-session fallback when `<INTERNAL>/sessions.md` is missing (Concern #1).** The new `TestSessionIdSource` tests verify the happy path (sessions.md present → workspace session used). Add a test: workspace.yaml present, `internal/sessions.md` deleted, assert (a) WARNING printed naming the missing path and (b) the SR gets harness-stamped (current behavior with no warning is the bug to fix).
+
+2. **No test that `__harness__` is rejected as a workspace slug (Concern #2).** Add a test in test_workspace.py: `workspace.py create __harness__` should exit nonzero with an error naming the reserved sentinel.
+
+3. **No test for the ambiguous-match case in `close_ticket.py --ignore-missing-sr` (Concern #5).** The new tests cover 0-match (fail closed) and the override flag, but not the ≥2-match case where `len(matches) > 1` and the message conflates with "not found".
+
+4. **No round-trip integration test** (carried forward from S20 Test Gap #5). Still no end-to-end raise→promote→close test asserting (a) workspace session number on raise, (b) ticket body correctly extracted, (c) SR resolved with correct `resolved_in`. Each piece is unit-tested in isolation; the integration shape is uncovered.
+
+## Suggested Next Session Focus
+
+1. **Fix the silent harness-fallback in `raise_for_harness._workspace_sessions_md` (Concern #1, Test Gap #1).** ~10 LoC + 1 test. The S20 fix (T116) narrowed the window for audit-trail lies but didn't close it — when `internal/sessions.md` is absent, the SR still gets harness-stamped silently. Emit a WARNING naming the missing file and the fallback session being used. Without this, the same class of audit-trail bug T116 was created to fix can still happen, just in a narrower miss-mode.
+
+2. **Reject `__harness__` as a workspace slug and add the test (Concern #2, Test Gap #2).** ~5 LoC + 1 test in `scripts/tools/workspace.py` create-validation. The sentinel collision is unlikely but real, and the cost of fixing it now is much smaller than recovering from a workspace named `__harness__` later.
+
+3. **Reconcile `architecture_invariants.md` (3-session carry-forward).** Either fill in Invariants 1–2 with concrete harness rules (e.g. "no writes to `.claude/.active_workspace` outside session-start", "all hook scripts must `sys.exit(2)` on block — not 1") and update Invariant 5's verification clause to reference `check_cross_layer_writes.py` (which actually enforces the workspace-write side now), or delete the placeholder file and point Opus at `docs/tickets/TEMPLATE.md` as the schema-of-record. Every Opus review since S18 has noted this; the structural value of an "Invariant Violations" section depends on having real invariants.
+
+## Carry-forwards (issues unresolved ≥ 2 sessions)
+
+- **`architecture_invariants.md` placeholder.** S18, S19, S20, S21 — 4 consecutive review acknowledgments. T115 added enforcement for a *real* workspace-isolation rule but the doc still says "[Name]" for Invariants 1–2 and the verification clause for Invariant 5 still references the non-existent `workspace_config.assert_workspace_boundary()` rather than the new hook.
+
+- **No round-trip integration test for the SR pipeline.** S20 Test Gap #5 flagged this; S21 added unit tests for the individual fixes but no end-to-end test. As more SR-pipeline scripts accrete (raise → promote → close → resolve), unit-test-only coverage will miss the cross-script regressions.
 
