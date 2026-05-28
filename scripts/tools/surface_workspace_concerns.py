@@ -25,11 +25,10 @@ ROOT = Path(os.environ.get("HARNESS_ROOT", str(_default_root)))
 
 sys.path.insert(0, str(ROOT / "scripts" / "tools"))
 
+import session_lookup
+
 _ACTIVE = {"raised", "promoted"}
 _TERMINAL = {"resolved", "rejected"}
-
-
-import session_lookup
 
 
 def _current_session(sessions_md: Path | None) -> str | None:

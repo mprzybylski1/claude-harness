@@ -117,16 +117,22 @@ default value is always higher than the cost of an explicit error, because the
 wrong value persists in audit trails and downstream parsers.
 
 **Verification:**
+
+Tools that write tracked audit state must fail-closed (exit 2) on workspace-boundary
+ambiguity. Tools that are read-only or whose session-ID only appears in a commit
+message may warn-and-omit instead (see `surface_workspace_concerns._current_session`
+docstring). Check the two write-path tools specifically:
 ```
 grep -nE "sys\.exit\(2\)" \
     scripts/tools/raise_for_harness.py \
-    scripts/tools/surface_workspace_concerns.py \
-    scripts/tools/close_ticket.py \
-    scripts/tools/prepare_opus_context.py
+    scripts/tools/close_ticket.py
 ```
-Each tool listed must have at least one fail-closed `sys.exit(2)` covering the
-workspace-boundary ambiguity case for that tool. Tests must cover the rejection
-path, not only the happy path.
+Both must show at least one `sys.exit(2)` covering workspace-boundary ambiguity.
+Tests must cover the rejection path, not only the happy path:
+```
+python -m pytest tests/test_raise_for_harness.py::TestSessionIdSource::test_refuses_to_fall_back_when_internal_sessions_md_missing
+python -m pytest tests/test_close_ticket_source_sr.py
+```
 
 ---
 

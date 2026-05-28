@@ -401,3 +401,20 @@ class TestProposedChangeACs:
         assert "Here's what we should do" not in ac_block
         assert "This will let downstream callers" not in ac_block
         assert "(fill in)" not in ac_block
+
+    def test_bullets_inside_fenced_code_block_are_ignored(self, tmp_path):
+        """Bullet-like lines inside a fenced code block must not become ACs."""
+        harness, sr_path = _setup(tmp_path)
+        self._make_sr(sr_path,
+                      "Run the migration script:\n\n"
+                      "```bash\n"
+                      "- old-flag  # looks like a bullet\n"
+                      "- new-flag\n"
+                      "```\n\n"
+                      "- Verify the output matches expected")
+        result = _run(harness, "myws/SR-001")
+        assert result.returncode == 0, result.stderr
+        ac_block = self._ac_block(_open_ticket(harness).read_text(encoding="utf-8"))
+        assert "- [ ] Verify the output matches expected" in ac_block
+        assert "old-flag" not in ac_block
+        assert "new-flag" not in ac_block

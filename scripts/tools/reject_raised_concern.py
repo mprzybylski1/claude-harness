@@ -25,6 +25,8 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent
 
 sys.path.insert(0, str(ROOT / "scripts" / "tools"))
 
+import session_lookup
+
 _TERMINAL = {"resolved", "rejected"}
 
 
@@ -56,9 +58,6 @@ def _find_sr_file(slug: str, sr_id: str) -> Path:
         print(f"ERROR: multiple files match {sr_id} in {raised_dir}", file=sys.stderr)
         sys.exit(1)
     return matches[0]
-
-
-import session_lookup
 
 
 def _current_session() -> str:

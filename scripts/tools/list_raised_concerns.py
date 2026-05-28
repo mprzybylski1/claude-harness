@@ -30,8 +30,9 @@ def _parse_frontmatter(path: Path) -> dict | None:
     them silently (T130)."""
     try:
         text = path.read_text(encoding="utf-8")
-    except OSError:
-        return {}
+    except OSError as exc:
+        print(f"WARNING: could not read {path}: {exc}", file=sys.stderr)
+        return None
     parts = text.split("---", 2)
     if len(parts) < 3:
         return {}

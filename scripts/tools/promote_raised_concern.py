@@ -94,15 +94,20 @@ def _extract_proposed_change_acs(text: str) -> list[str]:
     the operator hand-fills before closing (T127)."""
     items: list[str] = []
     in_section = False
+    in_fence = False
     for line in text.split("\n"):
         stripped = line.strip()
-        is_h2 = stripped.startswith("## ") and not stripped.startswith("### ")
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+        is_h2 = stripped.startswith("## ")
         if stripped.lower() == "## proposed change":
             in_section = True
             continue
         if in_section and is_h2:
             break
         if not in_section:
+            continue
+        if in_fence:
             continue
         m = _BULLET_RE.match(line) or _NUMBERED_RE.match(line)
         if m:

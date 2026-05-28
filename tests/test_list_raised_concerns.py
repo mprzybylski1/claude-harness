@@ -214,3 +214,21 @@ class TestUnparseableSurface:
         assert "Clean one" in result.stdout
         assert "unparseable" in result.stdout.lower()
         assert "SR-099" in result.stdout
+
+    def test_unreadable_sr_appears_in_unparseable_section(self, tmp_path):
+        """SR file that raises OSError (e.g. broken symlink) appears in the
+        unparseable section rather than being silently dropped."""
+        import os
+        harness = _setup(tmp_path)
+        raised = harness / "workspaces" / "myws" / "raised"
+        raised.mkdir(parents=True, exist_ok=True)
+        (raised / "archive").mkdir(exist_ok=True)
+        # Symlink that resolves to a non-existent target → OSError on read.
+        broken = raised / "SR-077-broken.md"
+        os.symlink("/nonexistent/path/SR-077-broken.md", broken)
+        result = _run(harness)
+        assert result.returncode == 0, result.stderr
+        assert "unparseable" in result.stdout.lower(), (
+            f"expected unparseable section, got: {result.stdout!r}"
+        )
+        assert "SR-077-broken" in result.stdout or broken.name in result.stdout

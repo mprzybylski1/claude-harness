@@ -23,6 +23,8 @@ ROOT = Path(os.environ.get("HARNESS_ROOT", str(_default_root)))
 
 sys.path.insert(0, str(ROOT / "scripts" / "tools"))
 
+import session_lookup
+
 
 def _active_workspace_slug() -> str | None:
     """Return workspace slug if CWD is inside workspaces/<slug>/, else None."""
@@ -54,9 +56,6 @@ def _slugify(title: str) -> str:
     slug = title.lower()
     slug = re.sub(r"[^a-z0-9]+", "-", slug)
     return slug.strip("-")[:50]
-
-
-import session_lookup
 
 
 def _current_session(sessions_md: Path | None, slug: str) -> str:

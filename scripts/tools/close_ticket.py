@@ -31,6 +31,7 @@ _default_root = Path(__file__).resolve().parents[2]
 ROOT = Path(os.environ.get("HARNESS_ROOT", str(_default_root)))
 
 sys.path.insert(0, str(ROOT / "scripts" / "tools"))
+import session_lookup
 from workspace_config import load_workspace
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -100,9 +101,6 @@ def _find_ticket(ticket_id: str, workspace_slug: str | None = None) -> tuple[Pat
         sys.exit(1)
 
     return matches[0]
-
-
-import session_lookup
 
 
 def _current_session(internal: Path | None) -> str:

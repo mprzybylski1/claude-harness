@@ -24,6 +24,7 @@ _default_root = Path(__file__).resolve().parents[2]
 ROOT = Path(os.environ.get("HARNESS_ROOT", str(_default_root)))
 
 sys.path.insert(0, str(ROOT / "scripts" / "tools"))
+import session_lookup
 from workspace_config import load_workspace
 
 
@@ -86,9 +87,6 @@ def _resolve_internal(workspace_slug: str) -> Path:
         print(f"ERROR: workspace internal dir not found at {internal}", file=sys.stderr)
         sys.exit(1)
     return internal
-
-
-import session_lookup
 
 
 def _current_session(internal: Path | None) -> str:
