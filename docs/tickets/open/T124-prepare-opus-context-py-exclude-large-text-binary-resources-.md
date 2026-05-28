@@ -1,13 +1,19 @@
 ---
-id: SR-004
-from: scrabble-score
-raised: S9 2026-05-28
-title: "prepare_opus_context.py: exclude large text/binary resources from diff"
+id: T124
+title: prepare_opus_context.py: exclude large text/binary resources from diff
 severity: low
-status: promoted
-harness_ticket: T124
-resolved_in:
+status: open
+phase: 2
+layer: tooling
+# repo: <name from workspace.yaml repos list>
+opened: S22 2026-05-28
+closed:
+source: scrabble-score/SR-004
 ---
+
+## Problem
+
+Promoted from scrabble-score/SR-004.
 
 ## Context
 
@@ -35,7 +41,9 @@ test files always appear first within the cap.
 
 The stat section (file-level change counts) can keep the full list —
 removing large files only from the *diff body*, not the summary.
+## Acceptance Criteria
 
-## Harness disposition
+- [ ] (fill in)
 
-(Filled by harness on promotion or rejection.)
+## Resolution
+(Fill in on close.)

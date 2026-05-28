@@ -1,13 +1,19 @@
 ---
-id: SR-006
-from: scrabble-score
-raised: S10 2026-05-28
-title: "session-start: surface_workspace_concerns.py stages archives but does not commit them"
+id: T126
+title: session-start: surface_workspace_concerns.py stages archives but does not commit them
 severity: low
-status: promoted
-harness_ticket: T126
-resolved_in:
+status: open
+phase: 2
+layer: tooling
+# repo: <name from workspace.yaml repos list>
+opened: S22 2026-05-28
+closed:
+source: scrabble-score/SR-006
 ---
+
+## Problem
+
+Promoted from scrabble-score/SR-006.
 
 ## Context
 
@@ -52,7 +58,9 @@ of their session-start ritual or before first ticket. Side-steps the
 
 Preferred: B — keeps session-start a read-mostly phase, but eliminates the
 "what's this staged rename?" surprise.
+## Acceptance Criteria
 
-## Harness disposition
+- [ ] (fill in)
 
-(Filled by harness on promotion or rejection.)
+## Resolution
+(Fill in on close.)

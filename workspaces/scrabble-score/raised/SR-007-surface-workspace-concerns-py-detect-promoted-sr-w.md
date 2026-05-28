@@ -4,9 +4,9 @@ from: scrabble-score
 raised: S10 2026-05-28
 title: "surface_workspace_concerns.py: detect promoted-SR with all linked tickets closed"
 severity: low
-status: raised
+status: rejected
 harness_ticket:
-resolved_in:
+resolved_in: S22
 ---
 
 ## Context
@@ -61,4 +61,4 @@ Two layers:
 
 ## Harness disposition
 
-(Filled by harness on promotion or rejection.)
+Rejected S22 2026-05-28. Reason: Speculative guard against a class of bug eliminated at root. SR-001 was the only known case and was a bootstrap artefact (manual promotion pre-dating promote_raised_concern.py); every future SR goes through promote_raised_concern.py which stamps source: correctly, so close-the-loop fires automatically. Reject for now; resurrect if another stuck-promoted SR appears. S22 2026-05-28.

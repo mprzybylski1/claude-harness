@@ -1,13 +1,19 @@
 ---
-id: SR-005
-from: scrabble-score
-raised: S10 2026-05-28
-title: "close_ticket.py: support cross-repo deliverables (workspace ticket → harness file)"
+id: T125
+title: close_ticket.py: support cross-repo deliverables (workspace ticket → harness file)
 severity: medium
-status: promoted
-harness_ticket: T125
-resolved_in:
+status: open
+phase: 2
+layer: tooling
+# repo: <name from workspace.yaml repos list>
+opened: S22 2026-05-28
+closed:
+source: scrabble-score/SR-005
 ---
+
+## Problem
+
+Promoted from scrabble-score/SR-005.
 
 ## Context
 
@@ -59,7 +65,9 @@ problem.
 
 Preferred: B for first iteration (cheap, makes the friction visible to the
 operator at the right moment), then A if cross-repo close becomes routine.
+## Acceptance Criteria
 
-## Harness disposition
+- [ ] (fill in)
 
-(Filled by harness on promotion or rejection.)
+## Resolution
+(Fill in on close.)
