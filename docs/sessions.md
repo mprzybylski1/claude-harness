@@ -19,15 +19,27 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Active Work
 
-**S21 — closed T113–T122 (10 tickets): Opus S20 backlog + SR-002/SR-003 + trading-app hygiene; 2 impl-review inline fixes.**
+**S22 — closed T123–T126 (4 tickets): SR triage + data fixes + 3 workflow-review tickets; 5 impl-review inline fixes; workflow-review opened T127–T131.**
 
 Files changed:
-- `.claude/skills/implementation-review/SKILL.md` — T113: workspace form of prepare_opus_context.py + <CONTEXT_PATH> placeholder in Step 2
-- `.claude/skills/session-close/SKILL.md` — T114: shared-file commit discipline guidance; T118: bash fence fix (backslash → single-line text fence)
-- `scripts/hooks/check_cross_layer_writes.py` — T115: __harness__ sentinel, fail-closed on missing/empty state file, cross-workspace internal write blocking; 12 new tests
-- `tests/test_check_cross_layer_writes.py` — T115: TestCrossWorkspaceWrites + TestUndeclaredSession (12 tests)
-- `scripts/tools/raise_for_harness.py` — T116: _workspace_sessions_md + _current_session(sessions_md) for workspace session stamping; 4 new tests; impl-review: named exception handling on yaml parse
-- `tests/test_raise_for_harness.py` — T116: TestSessionIdSource (4 tests)
+- `scripts/tools/raise_for_harness.py` — T123: _yaml_scalar helper YAML-quotes title field; 4 new tests (TestTitleQuoting)
+- `tests/test_raise_for_harness.py` — T123: TestTitleQuoting (4 tests)
+- `workspaces/scrabble-score/raised/SR-001` — T123: status promoted→resolved, resolved_in: S20
+- `workspaces/scrabble-score/raised/SR-004..SR-007` — T123: titles re-quoted so list_raised_concerns.py parses them
+- `scripts/tools/close_ticket.py` — T125: _check_cross_repo_files pre-flight; exits 1 with recipe when --files spans repos; 3 new tests (TestCloseTicketCrossRepoFiles)
+- `tests/test_close_ticket_stage_files.py` — T125: TestCloseTicketCrossRepoFiles (3 tests)
+- `scripts/tools/prepare_opus_context.py` — T124: _LARGE_ASSET_EXTS + _LARGE_ASSET_LINE_THRESHOLD; large data-file blocks stripped from diff body; impl-review: "only large data files changed" fallback message
+- `tests/test_prepare_opus_context_large_assets.py` — T124: TestIsLargeAsset + TestApplyDiffCapLargeAssets (12 tests); impl-review: test_all_large_assets_returns_empty_display
+- `scripts/tools/surface_workspace_concerns.py` — T126: auto-commit archive moves via isolated pathspec commit (Option A); _workspace_sessions_md + _current_session helpers; impl-review: named exception types, _current_session(None)→None (no harness-fallback), commit-failure warning to stdout+stderr
+- `tests/test_surface_workspace_concerns.py` — T126: TestGitStaging extended (3 new tests: auto-commit happy path, unrelated-staged-work isolation, pre-commit-hook-reject fallback); impl-review: test_archived_terminal_is_committed workspace sessions.md fixture
+- `workspaces/scrabble-score/raised/SR-004..SR-006` — resolved via close-the-loop (T124→SR-004, T125→SR-005, T126→SR-006)
+- `workspaces/scrabble-score/raised/SR-007` — rejected S22 (speculative tooling, root cause eliminated)
+- `docs/tickets/open/T127–T131` — workflow-review: promote SR ACs into tickets, session_lookup consolidation, stale doc ref, list_raised_concerns unparseable surface, architecture_invariants placeholder
+
+Tickets closed: T123–T126 (4 tickets; SR-004→T124, SR-005→T125, SR-006→T126 all promoted/closed same session)
+Tickets opened: T127–T131 (workflow-review findings)
+Impl review: 5 findings fixed inline (broad Exception catch, _current_session harness-fallback, subprocess error detail, commit-failure stderr-only, all-large-assets misleading message)
+Workflow review: 5 tickets opened (T127–T131); SR-007 rejected; SR-001 fixed manually
 - `scripts/tools/promote_raised_concern.py` — T117: _extract_body stops at any H2 not in copy_on; T119: argparse + --layer flag forwarded to create_ticket.py; 4 + 3 new tests
 - `tests/test_promote_raised_concern.py` — T117: TestExtractBodyH2Boundary (4 tests); T119: TestLayerFlag (3 tests)
 - `scripts/tools/close_ticket.py` — T120: fail-closed on missing source SR (exit 2 default, --ignore-missing-sr override); 3 tests replacing 1
@@ -72,3 +84,4 @@ S18 2026-05-26: closed T086-T090 (Opus S17 concerns + workflow-review T089-T090)
 S19 2026-05-26: closed T091-T102 (12 tickets: Opus S18 concerns + workflow-review T098-T102); impl-review 9 inline fixes; 0 open at close
 S20 2026-05-27: closed T104-T112 (9 tickets: SR-001 workspace↔harness separation tooling); impl-review 8 inline fixes; 0 open at close
 S21 2026-05-28: closed T113-T122 (10 tickets: SR-002/SR-003 + Opus S20 backlog + trading-app hygiene); impl-review 2 inline fixes; 0 open at close
+S22 2026-05-28: closed T123-T126 (4 tickets: SR triage + YAML-quoting + cross-repo close guard + large-asset diff exclusion + auto-commit archives); impl-review 5 inline fixes; workflow-review opened T127-T131

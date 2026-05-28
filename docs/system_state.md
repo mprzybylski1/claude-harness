@@ -1,6 +1,6 @@
 # System State
 
-_Last updated: S21 2026-05-28_
+_Last updated: S22 2026-05-28_
 
 ---
 
@@ -23,7 +23,15 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Open Tickets
 
-_No open tickets._
+**5 open tickets**
+
+| ID | Title | Phase | Age |
+|----|-------|-------|-----|
+| T127 | promote_raised_concern.py: carry SR Proposed change bullets into harness ticket ACs | Ph2 | tooling | this session |
+| T128 | Consolidate _current_session + _workspace_sessions_md into shared session_lookup module | Ph2 | tooling | this session |
+| T129 | prepare_opus_context.py: stale tests/test_prepare_opus_context.py reference in docstring + comment | Ph2 | tooling | this session |
+| T130 | list_raised_concerns.py: surface unparseable SRs instead of silently skipping | Ph2 | tooling | this session |
+| T131 | architecture_invariants.md: reconcile placeholder Invariants 1-2 (4-session Opus carry-forward) | Ph2 | process | this session |
 
 ---
 
