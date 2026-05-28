@@ -11,11 +11,14 @@ harness_ticket: T###. Refuses if the SR is not in 'raised' status.
 """
 from __future__ import annotations
 
+import argparse
 import os
 import re
 import subprocess
 import sys
 from pathlib import Path
+
+_LAYER_VALUES = ("backend", "frontend", "fullstack", "infra", "process", "tooling")
 
 _default_root = Path(__file__).resolve().parents[2]
 ROOT = Path(os.environ.get("HARNESS_ROOT", str(_default_root)))
@@ -140,7 +143,24 @@ def _update_sr(sr_path: Path, ticket_id: str) -> None:
 
 
 def main() -> None:
-    if len(sys.argv) != 2 or "/" not in sys.argv[1]:
+    parser = argparse.ArgumentParser(
+        description="Promote a workspace→harness concern into a harness ticket.",
+        usage="promote_raised_concern.py <slug>/SR-NNN [--layer LAYER]",
+    )
+    parser.add_argument(
+        "sr_ref",
+        metavar="<slug>/SR-NNN",
+        help="SR reference, e.g. scrabble-score/SR-001",
+    )
+    parser.add_argument(
+        "--layer",
+        choices=_LAYER_VALUES,
+        default="tooling",
+        help="Layer for the created ticket (default: tooling)",
+    )
+    args = parser.parse_args()
+
+    if "/" not in args.sr_ref:
         print(
             "Usage: promote_raised_concern.py <slug>/SR-NNN\n"
             "Example: promote_raised_concern.py scrabble-score/SR-001",
@@ -148,7 +168,7 @@ def main() -> None:
         )
         sys.exit(1)
 
-    raw_slug, raw_id = sys.argv[1].split("/", 1)
+    raw_slug, raw_id = args.sr_ref.split("/", 1)
     sr_id = raw_id.upper()
     if not re.fullmatch(r"SR-\d+", sr_id):
         print(f"ERROR: invalid SR ID '{raw_id}' — expected SR-NNN format", file=sys.stderr)
@@ -178,6 +198,7 @@ def main() -> None:
             str(_SCRIPTS_DIR / "create_ticket.py"),
             title,
             "--severity", severity,
+            "--layer", args.layer,
         ],
         capture_output=True, text=True,
         env={**os.environ, "HARNESS_ROOT": str(ROOT)},

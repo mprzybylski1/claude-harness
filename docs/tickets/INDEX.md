@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S21 2026-05-28. 3 open tickets.
+Generated S21 2026-05-28. 2 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -15,11 +15,10 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Low (3)
+## Low (2)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
-| T119 | add --layer flag to promote_raised_concern.py | Ph2 | tooling | this session |
 | T120 | close_ticket.py: fail closed when source: SR file is missing | Ph2 | tooling | this session |
 | T121 | surface_workspace_concerns.py: stage archive moves for git audit trail | Ph2 | tooling | this session |
 

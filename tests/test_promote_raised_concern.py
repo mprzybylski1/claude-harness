@@ -217,6 +217,30 @@ GUARDRAILS_BODY_DO_NOT_COPY
 """
 
 
+class TestLayerFlag:
+    """T119: promote_raised_concern.py accepts --layer to override default."""
+
+    def test_layer_flag_sets_ticket_layer(self, tmp_path):
+        harness, _ = _setup(tmp_path)
+        result = _run(harness, "myws/SR-001", "--layer", "infra")
+        assert result.returncode == 0, result.stderr
+        content = _open_ticket(harness).read_text(encoding="utf-8")
+        assert "layer: infra" in content
+
+    def test_default_layer_is_tooling(self, tmp_path):
+        """Backwards compat: omitting --layer still produces layer: tooling."""
+        harness, _ = _setup(tmp_path)
+        result = _run(harness, "myws/SR-001")
+        assert result.returncode == 0, result.stderr
+        content = _open_ticket(harness).read_text(encoding="utf-8")
+        assert "layer: tooling" in content
+
+    def test_invalid_layer_rejected(self, tmp_path):
+        harness, _ = _setup(tmp_path)
+        result = _run(harness, "myws/SR-001", "--layer", "nonsense")
+        assert result.returncode != 0
+
+
 class TestExtractBodyH2Boundary:
     """T117: _extract_body must stop at any unknown H2, not just the stop_on allowlist."""
 
