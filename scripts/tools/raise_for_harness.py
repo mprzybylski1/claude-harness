@@ -56,8 +56,33 @@ def _slugify(title: str) -> str:
     return slug.strip("-")[:50]
 
 
-def _current_session() -> str:
+def _workspace_sessions_md(slug: str) -> Path | None:
+    """Resolve <INTERNAL>/sessions.md for a workspace, or None if not found.
+
+    Honors docs_path override in workspace.yaml; falls back to
+    workspaces/<slug>/internal/.
+    """
+    ws_dir = ROOT / "workspaces" / slug
+    yaml_path = ws_dir / "workspace.yaml"
+    docs_path = None
+    if yaml_path.is_file():
+        try:
+            import yaml
+            cfg = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+            docs_path = cfg.get("docs_path")
+        except Exception:
+            pass
+    internal = Path(docs_path).expanduser().resolve() if docs_path else ws_dir / "internal"
+    sessions_md = internal / "sessions.md"
+    return sessions_md if sessions_md.is_file() else None
+
+
+def _current_session(sessions_md: Path | None = None) -> str:
+    """Resolve current session ID. When sessions_md is provided and exists,
+    queries that workspace's session log; otherwise falls back to harness-wide."""
     cmd = [sys.executable, str(ROOT / "scripts" / "tools" / "current_session.py")]
+    if sessions_md is not None:
+        cmd.extend(["--sessions", str(sessions_md)])
     try:
         return subprocess.check_output(cmd, text=True, stderr=subprocess.PIPE).strip()
     except subprocess.CalledProcessError as exc:
@@ -130,7 +155,7 @@ def main() -> None:
     raised_dir.mkdir(parents=True, exist_ok=True)
     (raised_dir / "archive").mkdir(exist_ok=True)
 
-    session = _current_session()
+    session = _current_session(_workspace_sessions_md(slug))
     today = date.today().isoformat()
     slug_part = _slugify(args.title)
 

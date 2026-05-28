@@ -1,17 +1,16 @@
 # Ticket Index
 
-Generated S21 2026-05-28. 6 open tickets.
+Generated S21 2026-05-28. 5 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
 
 *(none)*
 
-## High (2)
+## High (1)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
-| T116 | fix raise_for_harness.py: use workspace session number for SR stamping | Ph2 | tooling | this session |
 | T117 | fix promote_raised_concern.py _extract_body: stop at any unknown H2 header | Ph2 | tooling | this session |
 
 ## Medium (0)
