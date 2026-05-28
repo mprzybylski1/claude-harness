@@ -2,12 +2,12 @@
 id: T124
 title: prepare_opus_context.py: exclude large text/binary resources from diff
 severity: low
-status: open
+status: closed
 phase: 2
 layer: tooling
 # repo: <name from workspace.yaml repos list>
 opened: S22 2026-05-28
-closed:
+closed: S22 2026-05-28
 source: scrabble-score/SR-004
 ---
 
@@ -43,7 +43,14 @@ The stat section (file-level change counts) can keep the full list —
 removing large files only from the *diff body*, not the summary.
 ## Acceptance Criteria
 
-- [ ] (fill in)
+- [x] prepare_opus_context.py excludes large data-file diff blocks from the displayed diff body (default extensions: .txt, .json, .csv, .plist, .xml, .yaml, .yml, .lock)
+- [x] Exclusion is gated by a line-count threshold (1000) so small config edits are unaffected
+- [x] Excluded files are listed in a "Large data files" section so Opus knows they changed
+- [x] Stat section (`git diff --stat`) still shows the full list — exclusion is diff-body-only
+- [x] Regression: under-cap diffs with no large assets return unchanged
+- [x] Regression: the 267k-line wordlist scenario no longer truncates code (5×30-line code blocks all visible under 600-line cap)
 
 ## Resolution
-(Fill in on close.)
+Added _LARGE_ASSET_EXTS (.txt/.json/.csv/.plist/.xml/.yaml/.yml/.lock) + _LARGE_ASSET_LINE_THRESHOLD=1000 to prepare_opus_context.py. _apply_diff_cap now identifies large-asset diff blocks early and returns them as a 4th tuple element (large_asset_paths); the displayed diff body strips them entirely, even when under cap. Both call sites in main() surface a new 'Large data files (diff body excluded)' section when the list is non-empty. Stat section is unaffected so Opus still sees the file-level change count. 12 new unit tests in tests/test_prepare_opus_context_large_assets.py (TestIsLargeAsset + TestApplyDiffCapLargeAssets) cover: extension match, threshold gating, source-code exemption, lock-file recognition, under-cap stripping, over-cap exclusion, regression preservation, and the original 267k-line sowpods.txt scenario.
+
+Closed S22 2026-05-28.

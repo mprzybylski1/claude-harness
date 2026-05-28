@@ -52,6 +52,15 @@ _DIFF_ALWAYS_INCLUDE = ("scripts/tools/prepare_opus_context.py",
 _TIER_CORE = ("scripts/tools/", "scripts/hooks/")  # tier 0 — harness core logic
 _TIER_TESTS = ("tests/",)                          # tier 2
 
+# Large-asset filtering (T124 / SR-004): files matching these extensions whose
+# diff block exceeds _LARGE_ASSET_LINE_THRESHOLD are excluded from the displayed
+# diff body and listed separately. Stops a single huge wordlist / fixture from
+# consuming the entire signal cap (observed: 267k-line sowpods.txt blew the
+# 600-line cap, leaving every code file truncated). Stat section still shows
+# them; only the diff body is suppressed.
+_LARGE_ASSET_EXTS = (".txt", ".json", ".csv", ".plist", ".xml", ".yaml", ".yml", ".lock")
+_LARGE_ASSET_LINE_THRESHOLD = 1000
+
 
 def _priority_tier(path: str) -> int:
     if any(path.startswith(p) for p in _TIER_CORE):
@@ -59,6 +68,12 @@ def _priority_tier(path: str) -> int:
     if any(path.startswith(p) for p in _TIER_TESTS):
         return 2
     return 1
+
+
+def _is_large_asset(path: str, block: str) -> bool:
+    if not any(path.endswith(ext) for ext in _LARGE_ASSET_EXTS):
+        return False
+    return len(block.splitlines()) > _LARGE_ASSET_LINE_THRESHOLD
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -90,29 +105,44 @@ def _split_diff_files(diff: str) -> list[tuple[str, str]]:
     return blocks
 
 
-def _apply_diff_cap(diff: str, cap: int) -> tuple[str, bool, list[str]]:
+def _apply_diff_cap(diff: str, cap: int) -> tuple[str, bool, list[str], list[str]]:
     """Apply line cap to a diff, excluding noise paths and preserving governance files.
 
-    Returns (display_diff, was_truncated, truncated_paths).
+    Returns (display_diff, was_truncated, truncated_paths, large_asset_paths).
     - docs/tickets/ and docs/archive/ blocks are excluded from line counting.
     - Governance files (_DIFF_ALWAYS_INCLUDE) are appended in full even when cap hits.
+    - Large data files (_LARGE_ASSET_EXTS over _LARGE_ASSET_LINE_THRESHOLD lines) are
+      always stripped from the displayed diff body, even when under cap. Listed in
+      large_asset_paths so Opus knows they changed. Stat section still includes them.
     - Signal blocks are filled in priority order: scripts/tools/ and scripts/hooks/ first,
       then other, then tests/ — so harness core logic is never truncated at the expense
       of test files.
     - truncated_paths lists file paths that were cut; empty when nothing was truncated.
     """
     if not diff.strip():
-        return diff, False, []
+        return diff, False, [], []
 
     blocks = _split_diff_files(diff)
     noise = {p for p, _ in blocks if any(p.startswith(x) for x in _DIFF_CAP_EXCLUDE)}
     governance = {p for p, _ in blocks if any(x in p for x in _DIFF_ALWAYS_INCLUDE)}
-    signal = [(p, d) for p, d in blocks if p not in noise and p not in governance]
+    large = {
+        p for p, d in blocks
+        if p not in noise and p not in governance and _is_large_asset(p, d)
+    }
+    signal = [
+        (p, d) for p, d in blocks
+        if p not in noise and p not in governance and p not in large
+    ]
     governance_blocks = [(p, d) for p, d in blocks if p in governance]
+    large_asset_paths = sorted(large)
 
     signal_line_count = sum(len(d.splitlines()) for p, d in signal)
     if signal_line_count <= cap:
-        return diff, False, []
+        if not large_asset_paths:
+            return diff, False, [], []
+        # Under cap, but rebuild diff to strip large-asset blocks from the body.
+        kept_blocks = [d for p, d in blocks if p not in large]
+        return "".join(kept_blocks), False, [], large_asset_paths
 
     # Over cap: fill by priority tier (0 = core first, 3 = research last)
     sorted_signal = sorted(signal, key=lambda x: _priority_tier(x[0]))
@@ -139,7 +169,7 @@ def _apply_diff_cap(diff: str, cap: int) -> tuple[str, bool, list[str]]:
     if governance_blocks:
         truncated_diff += "\n\n# (governance files — always shown in full)\n"
         truncated_diff += "".join(d for _, d in governance_blocks)
-    return truncated_diff, True, truncated_paths
+    return truncated_diff, True, truncated_paths, large_asset_paths
 
 
 def _section(title: str, body: str, fence: str = "") -> str:
@@ -391,7 +421,9 @@ def main() -> None:
                 file=sys.stderr,
             )
 
-    capped_diff, was_truncated, truncated_paths = _apply_diff_cap(diff.strip(), MAX_DIFF_LINES)
+    capped_diff, was_truncated, truncated_paths, large_assets = _apply_diff_cap(
+        diff.strip(), MAX_DIFF_LINES
+    )
     if was_truncated:
         parts.append(_section("Session diff — stat (full diff truncated)", diff_stat))
         parts.append(_section(
@@ -407,8 +439,14 @@ def main() -> None:
     else:
         parts.append(_section(
             "Session diff (committed)",
-            diff.strip() or "(no committed changes this session)",
+            capped_diff or "(no committed changes this session)",
             fence="diff",
+        ))
+    if large_assets:
+        parts.append(_section(
+            f"Large data files (diff body excluded — >{_LARGE_ASSET_LINE_THRESHOLD} lines; "
+            f"stat above lists them)",
+            "\n".join(f"- {p}" for p in large_assets),
         ))
 
     # ── Uncommitted / staged changes ──────────────────────────────────────────
@@ -416,7 +454,7 @@ def main() -> None:
     staged = run(["git", "diff", "--cached"]).stdout
     extra = (staged + unstaged).strip()
     if extra:
-        extra_capped, extra_truncated, extra_cut = _apply_diff_cap(extra, 400)
+        extra_capped, extra_truncated, extra_cut, extra_large = _apply_diff_cap(extra, 400)
         if extra_truncated:
             extra_capped += "\n\n...(truncated)"
         parts.append(_section("Uncommitted / staged changes", extra_capped, fence="diff"))
@@ -424,6 +462,12 @@ def main() -> None:
             parts.append(_section(
                 "Uncommitted files truncated",
                 "\n".join(f"- {p}" for p in extra_cut),
+            ))
+        if extra_large:
+            parts.append(_section(
+                f"Uncommitted large data files (diff body excluded — "
+                f">{_LARGE_ASSET_LINE_THRESHOLD} lines)",
+                "\n".join(f"- {p}" for p in extra_large),
             ))
 
     # ── Static analysis ───────────────────────────────────────────────────────

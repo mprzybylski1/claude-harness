@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S22 2026-05-28. 2 open tickets.
+Generated S22 2026-05-28. 1 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -15,11 +15,10 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Low (2)
+## Low (1)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
-| T124 | prepare_opus_context.py: exclude large text/binary resources from diff | Ph2 | tooling | this session |
 | T126 | session-start: surface_workspace_concerns.py stages archives but does not commit them | Ph2 | tooling | this session |
 
 ## Unknown (0)
