@@ -70,8 +70,12 @@ def _workspace_sessions_md(slug: str) -> Path | None:
             import yaml
             cfg = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
             docs_path = cfg.get("docs_path")
-        except Exception:
-            pass
+        except ImportError as exc:
+            print(f"WARNING: PyYAML not available — cannot read docs_path from {yaml_path}: {exc}",
+                  file=sys.stderr)
+        except Exception as exc:
+            print(f"WARNING: could not parse {yaml_path}: {exc} — falling back to internal/",
+                  file=sys.stderr)
     internal = Path(docs_path).expanduser().resolve() if docs_path else ws_dir / "internal"
     sessions_md = internal / "sessions.md"
     return sessions_md if sessions_md.is_file() else None

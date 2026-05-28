@@ -162,12 +162,20 @@ def main() -> None:
     for _, path in terminal:
         dest = archive_dir / path.name
         shutil.move(str(path), str(dest))
-        subprocess.run(
+        git_result = subprocess.run(
             ["git", "add", "--", str(path), str(dest)],
             cwd=str(ROOT),
             capture_output=True,
             check=False,
         )
+        if git_result.returncode != 0:
+            detail = git_result.stderr.strip() or git_result.stdout.strip()
+            print(
+                f"WARNING: failed to stage archive move for {path.name} — "
+                f"run 'git add {dest}' manually before session-close. "
+                f"git: {detail}",
+                file=sys.stderr,
+            )
 
 
 if __name__ == "__main__":
