@@ -4,9 +4,9 @@ from: scrabble-score
 raised: S10 2026-05-28
 title: "close_ticket.py: support cross-repo deliverables (workspace ticket → harness file)"
 severity: medium
-status: promoted
+status: resolved
 harness_ticket: T125
-resolved_in:
+resolved_in: S22
 ---
 
 ## Context

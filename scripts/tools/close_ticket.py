@@ -296,6 +296,64 @@ def _check_gitignored(paths: list[Path]) -> list[Path]:
     return ignored
 
 
+def _check_cross_repo_files(
+    ticket_path: Path, extra_files: list[Path], ticket_id: str
+) -> None:
+    """Exit 1 if any --files path lives in a different git repo than the ticket.
+
+    A workspace ticket's deliverable sometimes accidentally includes a harness-
+    repo file (e.g. workspaces/<slug>/CLAUDE.md or scripts/tools/X.py). Without
+    this guard the cross-repo path would be staged in its own repo but the
+    single suggested commit lands in only one repo — orphan staging discovered
+    later. Refuse the close with a concrete recipe instead. T125 / SR-005.
+    """
+    if not extra_files:
+        return
+    ticket_root, _ = _git_root_for(ticket_path)
+    if ticket_root is None:
+        return  # _git_stage will surface the not-in-a-repo case
+    from collections import defaultdict
+    out_of_repo: dict[str, list[Path]] = defaultdict(list)
+    for ef in extra_files:
+        ef_root, _ = _git_root_for(ef)
+        if ef_root is not None and ef_root != ticket_root:
+            out_of_repo[ef_root].append(ef)
+    if not out_of_repo:
+        return
+    print(
+        f"ERROR: {ticket_id} has --files paths in a different repo than the ticket.",
+        file=sys.stderr,
+    )
+    print(f"  Ticket repo: {ticket_root}", file=sys.stderr)
+    print("  Out-of-repo --files:", file=sys.stderr)
+    for root, files in out_of_repo.items():
+        for f in files:
+            try:
+                rel = f.resolve().relative_to(root)
+            except ValueError:
+                rel = f
+            print(f"    {rel}  (in {root})", file=sys.stderr)
+    print(file=sys.stderr)
+    print(
+        f"  Commit those paths in their own repo first, then re-run "
+        f"close_ticket.py {ticket_id} without them:",
+        file=sys.stderr,
+    )
+    for root, files in out_of_repo.items():
+        rels: list[str] = []
+        for f in files:
+            try:
+                rels.append(str(f.resolve().relative_to(root)))
+            except ValueError:
+                rels.append(str(f))
+        print(f"    git -C {root} add -- {' '.join(rels)}", file=sys.stderr)
+        print(
+            f"    git -C {root} commit -m \"docs({ticket_id}): <description>\"",
+            file=sys.stderr,
+        )
+    sys.exit(1)
+
+
 def _stage_extra_files(extra_files: list[Path]) -> None:
     """Stage extra_files grouped by their git root. Exit 2 on failure."""
     if not extra_files:
@@ -556,6 +614,7 @@ def main() -> None:
             for p in ignored:
                 print(f"ERROR: --files path '{p}' is gitignored — cannot stage", file=sys.stderr)
             sys.exit(1)
+        _check_cross_repo_files(ticket_path, extra_files, ticket_id)
 
     # AC check (--tick-acs rewrites boxes before the gate; --force skips it)
     if args.tick_acs:

@@ -375,6 +375,143 @@ class TestCloseTicketStageFiles:
         assert not (tmp_path / "docs" / "archive" / ticket.name).exists()
 
 
+class TestCloseTicketCrossRepoFiles:
+    """T125 / SR-005: refuse --files paths that span a different git repo than the ticket.
+
+    Pre-T125 the cross-repo path would be staged in its own repo but the
+    single suggested commit only lands in one repo, leaving orphan staged
+    changes that only get noticed via git archaeology later.
+    """
+
+    def _setup_workspace(self, tmp_path: Path) -> tuple[Path, Path, Path, Path]:
+        """Build a harness repo + a workspace project repo with docs_path pointing into the project.
+
+        Returns (harness_root, project_root, ticket_path, project_code_file).
+        """
+        harness = tmp_path / "harness"
+        (harness / "docs" / "tickets" / "open").mkdir(parents=True)
+        (harness / "docs" / "archive").mkdir(parents=True)
+        (harness / "docs" / "tickets" / "INDEX.md").write_text("# Index\n")
+        (harness / "docs" / "sessions.md").write_text(
+            "## Session Log\n\nS1 2026-01-01: init\n"
+        )
+        tools = harness / "scripts" / "tools"
+        tools.mkdir(parents=True)
+        (tools / "current_session.py").write_text("import sys\nprint('S9')\n")
+        (tools / "generate_ticket_index.py").write_text(
+            "import sys; from pathlib import Path\n"
+            "args = sys.argv\n"
+            "if '--output' in args:\n"
+            "    Path(args[args.index('--output') + 1]).write_text('# Updated\\n')\n"
+        )
+        harness_side_file = harness / "scripts" / "tools" / "shared.py"
+        harness_side_file.write_text("# v1\n")
+
+        project = tmp_path / "project"
+        harness_dir = project / ".harness"
+        (harness_dir / "tickets" / "open").mkdir(parents=True)
+        (harness_dir / "archive").mkdir(parents=True)
+        (harness_dir / "tickets" / "INDEX.md").write_text("# Index\n")
+        (harness_dir / "sessions.md").write_text(
+            "## Session Log\n\nS1 2026-01-01: init\n"
+        )
+        ticket = harness_dir / "tickets" / "open" / "T999-synthetic-test-ticket.md"
+        ticket.write_text(OPEN_TICKET, encoding="utf-8")
+
+        src_dir = project / "src"
+        src_dir.mkdir()
+        project_code = src_dir / "main.py"
+        project_code.write_text("# v1\n")
+
+        for cmd in [
+            ["git", "-C", str(project), "init", "-q"],
+            ["git", "-C", str(project), "config", "user.email", "t@test.com"],
+            ["git", "-C", str(project), "config", "user.name", "Test"],
+            ["git", "-C", str(project), "config", "commit.gpgsign", "false"],
+            ["git", "-C", str(project), "add", "-A"],
+            ["git", "-C", str(project), "commit", "-q", "-m", "init"],
+        ]:
+            subprocess.run(cmd, check=True, capture_output=True)
+        project_code.write_text("# v2\n")  # dirty post-commit
+
+        for cmd in [
+            ["git", "-C", str(harness), "init", "-q"],
+            ["git", "-C", str(harness), "config", "user.email", "t@test.com"],
+            ["git", "-C", str(harness), "config", "user.name", "Test"],
+            ["git", "-C", str(harness), "config", "commit.gpgsign", "false"],
+            ["git", "-C", str(harness), "add", "-A"],
+            ["git", "-C", str(harness), "commit", "-q", "-m", "init"],
+        ]:
+            subprocess.run(cmd, check=True, capture_output=True)
+        harness_side_file.write_text("# v2\n")  # dirty post-commit
+
+        ws_dir = harness / "workspaces" / "test-ws"
+        (ws_dir / "internal" / "tickets" / "open").mkdir(parents=True)
+        ws_dir.joinpath("workspace.yaml").write_text(
+            f"name: test-ws\ndocs_path: {harness_dir}\n", encoding="utf-8"
+        )
+
+        return harness, project, ticket, project_code
+
+    def _run(self, harness: Path, *extra_args: str) -> subprocess.CompletedProcess:
+        import os as _os
+        return subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "tools" / "close_ticket.py"),
+             *extra_args],
+            capture_output=True, text=True,
+            env={**_os.environ, "HARNESS_ROOT": str(harness), "PYTHONPATH": str(ROOT)},
+        )
+
+    def test_workspace_ticket_refuses_harness_rooted_file(self, tmp_path):
+        """Workspace ticket + harness-repo --files path → exit 1, ticket stays in open/."""
+        harness, project, ticket, _ = self._setup_workspace(tmp_path)
+        harness_file = harness / "scripts" / "tools" / "shared.py"
+
+        result = self._run(
+            harness, "T999", "--workspace", "test-ws", "--resolution", "done",
+            "--files", str(harness_file),
+        )
+        assert result.returncode == 1, (
+            f"Expected exit 1, got {result.returncode}\n{result.stderr}"
+        )
+        assert "different repo" in result.stderr.lower(), result.stderr
+        assert "shared.py" in result.stderr, result.stderr
+        assert ticket.exists(), "ticket must remain in open/ after cross-repo refusal"
+        archive = project / ".harness" / "archive" / ticket.name
+        assert not archive.exists(), "archive must not be created on cross-repo refusal"
+
+    def test_workspace_ticket_mixed_files_lists_only_offenders(self, tmp_path):
+        """Mixed --files: error lists only the harness-rooted paths, not the workspace ones."""
+        harness, project, ticket, project_code = self._setup_workspace(tmp_path)
+        harness_file = harness / "scripts" / "tools" / "shared.py"
+
+        result = self._run(
+            harness, "T999", "--workspace", "test-ws", "--resolution", "done",
+            "--files", str(project_code), str(harness_file),
+        )
+        assert result.returncode == 1, result.stderr
+        # Offending path appears under "Out-of-repo --files:"
+        assert "shared.py" in result.stderr, result.stderr
+        # Non-offending path must not be listed as a problem
+        out_of_repo_section = result.stderr.split("Out-of-repo --files:")[1] \
+            .split("Commit those paths")[0]
+        assert "main.py" not in out_of_repo_section, (
+            f"Workspace-project file must not be flagged as out-of-repo:\n{result.stderr}"
+        )
+        assert ticket.exists()
+
+    def test_workspace_ticket_workspace_files_still_works(self, tmp_path):
+        """Regression: workspace ticket + workspace-project --files closes cleanly."""
+        harness, project, _, project_code = self._setup_workspace(tmp_path)
+        result = self._run(
+            harness, "T999", "--workspace", "test-ws", "--resolution", "done",
+            "--files", str(project_code),
+        )
+        assert result.returncode == 0, (
+            f"Expected success for workspace-only --files, got:\n{result.stderr}"
+        )
+
+
 class TestCloseTicketTickAcs:
     """T100: --tick-acs auto-checks unchecked ACs before close."""
 

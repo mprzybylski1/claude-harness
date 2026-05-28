@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S22 2026-05-28. 3 open tickets.
+Generated S22 2026-05-28. 2 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -11,11 +11,9 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Medium (1)
+## Medium (0)
 
-| ID | Title | Phase | Layer | Age |
-|----|-------|-------|-------|-----|
-| T125 | close_ticket.py: support cross-repo deliverables (workspace ticket → harness file) | Ph2 | tooling | this session |
+*(none)*
 
 ## Low (2)
 

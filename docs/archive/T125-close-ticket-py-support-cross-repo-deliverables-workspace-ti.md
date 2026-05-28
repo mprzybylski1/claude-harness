@@ -2,12 +2,12 @@
 id: T125
 title: close_ticket.py: support cross-repo deliverables (workspace ticket → harness file)
 severity: medium
-status: open
+status: closed
 phase: 2
 layer: tooling
 # repo: <name from workspace.yaml repos list>
 opened: S22 2026-05-28
-closed:
+closed: S22 2026-05-28
 source: scrabble-score/SR-005
 ---
 
@@ -67,7 +67,13 @@ Preferred: B for first iteration (cheap, makes the friction visible to the
 operator at the right moment), then A if cross-repo close becomes routine.
 ## Acceptance Criteria
 
-- [ ] (fill in)
+- [x] close_ticket.py refuses (exit 1) when any --files path resolves to a different git repo than the ticket
+- [x] Refusal happens before any destructive operation (ticket stays in open/, archive not created)
+- [x] Error message names the ticket repo, the offending paths, and gives a `git -C <root> add` + `git commit` recipe to commit them separately before re-running close_ticket.py
+- [x] Mixed --files (some same-repo, some cross-repo) lists only the cross-repo paths as offenders
+- [x] Existing workspace-ticket + workspace-project --files path still closes cleanly (regression)
 
 ## Resolution
-(Fill in on close.)
+Implemented Option B per SR-005 disposition. close_ticket.py now runs a pre-flight _check_cross_repo_files after --files validation: it resolves each --files path's git root and the ticket's git root, refusing (exit 1, before any destructive op) when any path lives in a different repo. Error message names ticket repo, offending paths (grouped by their out-of-repo root), and prints a concrete 'git -C <root> add ... && git -C <root> commit -m "docs(T###): ..."' recipe. 3 new tests in TestCloseTicketCrossRepoFiles (harness-rooted refusal, mixed-files lists only offenders, workspace-project-only still works). All 35 close_ticket tests pass.
+
+Closed S22 2026-05-28.
