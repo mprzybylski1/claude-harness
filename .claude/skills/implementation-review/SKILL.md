@@ -20,12 +20,32 @@ becoming ticket churn for the next session.
 
 ### Step 1 — Build the review context
 
+**Harness-root session** (no active workspace):
+
 ```bash
 python scripts/tools/prepare_opus_context.py
 ```
 
-This builds `docs/opus_review_context.md` with the session diff, architecture
-invariants, and static analysis results. Safe to call multiple times per session.
+Builds `docs/opus_review_context.md` with the harness session diff.
+
+**Workspace session** — pass the primary repo path and workspace-scoped session
+files (matches session-close Step 5):
+
+```bash
+python scripts/tools/prepare_opus_context.py \
+  --repo <primary-repo-path> \
+  --sessions <INTERNAL>/sessions.md \
+  --opus <INTERNAL>/opus_notes.md \
+  --output <INTERNAL>/opus_review_context.md
+```
+
+Without `--repo`, the script targets the harness repo's git, which is empty for
+workspace sessions — the Opus reviewer then "reviews" a 0-line diff and reports
+clean by definition. **Check the script's output line for the diff size**: if it
+shows `0 diff lines` in a workspace session, you missed the flags — re-run with
+the workspace form above before spawning the reviewer.
+
+Safe to call multiple times per session.
 
 ### Step 2 — Spawn Opus reviewer
 
@@ -45,9 +65,13 @@ session close.
 
 ## Read these two files, in order
 
-1. `docs/opus_review_context.md` — session diff, architecture invariants, static
-   analysis results. Do NOT run git diff or re-read source files separately.
-2. `docs/architecture_invariants.md` — hard constraints.
+1. `<CONTEXT_PATH>` — session diff, architecture invariants, static analysis
+   results. Do NOT run git diff or re-read source files separately.
+2. `docs/architecture_invariants.md` — hard constraints (always at harness root).
+
+Substitute `<CONTEXT_PATH>` with the `--output` path used in Step 1:
+- Harness-root session: `docs/opus_review_context.md`
+- Workspace session: `<INTERNAL>/opus_review_context.md`
 
 ## What to look for
 

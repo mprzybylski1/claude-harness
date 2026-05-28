@@ -1,13 +1,19 @@
 ---
-id: SR-002
-from: scrabble-score
-raised: S21 2026-05-28
+id: T113
 title: implementation-review SKILL missing --repo flag for workspace sessions
 severity: medium
-status: resolved
-harness_ticket: T113
-resolved_in: S21
+status: closed
+phase: 2
+layer: process
+# repo: <name from workspace.yaml repos list>
+opened: S21 2026-05-28
+closed: S21 2026-05-28
+source: scrabble-score/SR-002
 ---
+
+## Problem
+
+Promoted from scrabble-score/SR-002.
 
 ## Context
 
@@ -47,7 +53,14 @@ session-close Step 5 pattern:
   workspace form if 0 diff lines appear in a workspace session.
 
 Three-to-five-line change. No script changes needed.
+## Acceptance Criteria
 
-## Harness disposition
+- [x] `implementation-review/SKILL.md` Step 1 shows both harness-root and workspace forms of `prepare_opus_context.py`
+- [x] Workspace form passes `--repo`, `--sessions`, `--opus`, `--output` matching session-close Step 5
+- [x] SKILL tells the model to verify the diff line count and re-run with flags if 0 diff lines appear in a workspace session
+- [x] Step 2 Agent prompt references the correct context path per session type (no hardcoded `docs/opus_review_context.md`)
 
-(Filled by harness on promotion or rejection.)
+## Resolution
+Updated implementation-review SKILL Step 1 to show both harness-root and workspace forms of prepare_opus_context.py (matching session-close Step 5), with a check for 0 diff lines to catch missing flags. Also fixed Step 2's Agent prompt to reference the correct context path via <CONTEXT_PATH> placeholder instead of hardcoded docs/opus_review_context.md.
+
+Closed S21 2026-05-28.
