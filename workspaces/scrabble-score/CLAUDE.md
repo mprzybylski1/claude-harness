@@ -37,6 +37,20 @@ as a destination. List currently-installed simulators with:
 xcrun simctl list devices available | grep -E "iPhone|iPad"
 ```
 
+#### Stale incremental builds
+
+If `xcodebuild test` reports `"no member"` / `"cannot find"` for a symbol that
+is clearly present in source, the incremental build cache is stale — this
+happens after edits to `@MainActor`-isolated types, `@Model` types, or any
+test-target signature change. `xcodebuild clean` followed by a re-run resolves
+it; do this on the first occurrence rather than re-debugging the source:
+
+```bash
+xcodebuild -project ScrabbleScore.xcodeproj -scheme ScrabbleScore \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' clean test 2>&1 \
+  | grep -E "Test Suite|Test case|Executed|error:|BUILD (SUCCEEDED|FAILED)"
+```
+
 ### Build & deploy to physical iPhone
 
 Marcin's iPhone udid is pinned below for convenience. If a different device gets
