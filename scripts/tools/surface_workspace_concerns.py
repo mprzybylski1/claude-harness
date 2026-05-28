@@ -41,21 +41,55 @@ def _workspace_sessions_md(slug: str) -> Path | None:
             import yaml
             cfg = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
             docs_path = cfg.get("docs_path")
-        except (ImportError, OSError, Exception):
-            pass
+        except ImportError as exc:
+            print(
+                f"WARNING: PyYAML not available — cannot read docs_path from {yaml_path}: {exc}",
+                file=sys.stderr,
+            )
+        except OSError as exc:
+            print(
+                f"WARNING: could not read {yaml_path}: {exc} — using default internal/",
+                file=sys.stderr,
+            )
+        except Exception as exc:  # yaml.YAMLError and unexpected parse errors
+            print(
+                f"WARNING: could not parse {yaml_path}: {exc} — using default internal/",
+                file=sys.stderr,
+            )
     internal = Path(docs_path).expanduser().resolve() if docs_path else ws_dir / "internal"
     sessions_md = internal / "sessions.md"
     return sessions_md if sessions_md.is_file() else None
 
 
 def _current_session(sessions_md: Path | None) -> str | None:
-    """Return S<N> for the active session, or None if lookup fails."""
-    cmd = [sys.executable, str(ROOT / "scripts" / "tools" / "current_session.py")]
-    if sessions_md is not None:
-        cmd.extend(["--sessions", str(sessions_md)])
+    """Return S<N> for the active workspace session, or None if lookup fails.
+
+    Requires sessions_md to be a resolved Path — intentionally does NOT fall
+    back to harness-global current_session.py when sessions_md is None, because
+    a harness session ID in a workspace archive-commit message would violate
+    workspace↔harness session-number separation.
+    """
+    if sessions_md is None:
+        return None
     try:
-        return subprocess.check_output(cmd, text=True, stderr=subprocess.PIPE).strip()
-    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        return subprocess.check_output(
+            [sys.executable, str(ROOT / "scripts" / "tools" / "current_session.py"),
+             "--sessions", str(sessions_md)],
+            text=True, stderr=subprocess.PIPE,
+        ).strip()
+    except subprocess.CalledProcessError as exc:
+        print(
+            f"WARNING: current_session.py failed: {exc.stderr.strip()} "
+            f"— archive commit will omit session ID",
+            file=sys.stderr,
+        )
+        return None
+    except (FileNotFoundError, OSError) as exc:
+        print(
+            f"WARNING: could not run current_session.py: {exc} "
+            f"— archive commit will omit session ID",
+            file=sys.stderr,
+        )
         return None
 
 
@@ -226,13 +260,14 @@ def main() -> None:
         )
         if commit_result.returncode != 0:
             detail = commit_result.stderr.strip() or commit_result.stdout.strip()
-            print(
-                f"WARNING: auto-commit of archive moves failed — changes remain staged. "
-                f"Commit manually:\n"
-                f"  git -C {ROOT} commit -m \"{msg}\" -- workspaces/{slug}/raised/\n"
-                f"  git: {detail}",
-                file=sys.stderr,
+            warning = (
+                f"WARNING: auto-commit of archive moves failed — changes remain staged.\n"
+                f"  Commit manually:\n"
+                f"    git -C {ROOT} commit -m \"{msg}\" -- workspaces/{slug}/raised/\n"
+                f"  git: {detail}"
             )
+            print(warning)           # stdout — visible in session-start briefing
+            print(warning, file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -437,9 +437,13 @@ def main() -> None:
             "\n".join(f"- {p}" for p in truncated_paths) or "(none)",
         ))
     else:
+        if not capped_diff and large_assets:
+            diff_body = "(only large data files changed — see Large data files section below)"
+        else:
+            diff_body = capped_diff or "(no committed changes this session)"
         parts.append(_section(
             "Session diff (committed)",
-            capped_diff or "(no committed changes this session)",
+            diff_body,
             fence="diff",
         ))
     if large_assets:

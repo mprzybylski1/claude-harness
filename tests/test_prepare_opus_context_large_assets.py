@@ -135,3 +135,14 @@ class TestApplyDiffCapLargeAssets:
         """Empty input still returns the new 4-tuple shape."""
         result = _apply_diff_cap("", cap=600)
         assert result == ("", False, [], [])
+
+    def test_all_large_assets_returns_empty_display(self):
+        """When every changed file is a large asset, display diff is empty string
+        (main() will substitute a "only large data files changed" message — not
+        the misleading "no committed changes" fallback)."""
+        wordlist = _make_block("data/sowpods.txt", _LARGE_ASSET_LINE_THRESHOLD + 1)
+        display, was_truncated, cut, large = _apply_diff_cap(wordlist, cap=600)
+        assert display == "", "all-large-asset diff should yield empty display string"
+        assert was_truncated is False
+        assert cut == []
+        assert large == ["data/sowpods.txt"]

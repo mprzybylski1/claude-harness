@@ -208,6 +208,12 @@ class TestGitStaging:
         harness, raised = _setup(tmp_path)
         _git_init(tmp_path)
         _stub_current_session(tmp_path, "S42")
+        # Create workspace sessions.md so _workspace_sessions_md returns a path
+        internal = tmp_path / "workspaces" / "myws" / "internal"
+        internal.mkdir(parents=True, exist_ok=True)
+        (internal / "sessions.md").write_text(
+            "## Session Log\n\nS42 2026-05-28: ws session\n", encoding="utf-8"
+        )
         sr = _make_sr(raised, "SR-002", "myws", "Done", status="resolved", resolved_in="S19")
         subprocess.run(["git", "-C", str(tmp_path), "add", str(sr)], check=True)
         subprocess.run(
