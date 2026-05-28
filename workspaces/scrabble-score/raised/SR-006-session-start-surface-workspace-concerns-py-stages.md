@@ -4,9 +4,9 @@ from: scrabble-score
 raised: S10 2026-05-28
 title: "session-start: surface_workspace_concerns.py stages archives but does not commit them"
 severity: low
-status: promoted
+status: resolved
 harness_ticket: T126
-resolved_in:
+resolved_in: S22
 ---
 
 ## Context

@@ -186,13 +186,28 @@ def _git_status_porcelain(tmp_path: Path) -> str:
     ).stdout
 
 
+def _stub_current_session(tmp_path: Path, session: str = "S42") -> None:
+    """Drop a stub current_session.py into tmp_path/scripts/tools/ that prints `session`."""
+    tools = tmp_path / "scripts" / "tools"
+    tools.mkdir(parents=True, exist_ok=True)
+    (tools / "current_session.py").write_text(
+        f"import sys\nprint({session!r})\n", encoding="utf-8"
+    )
+
+
 class TestGitStaging:
     """T121: terminal archive moves are staged in git so they appear in the
-    session-close commit instead of accumulating as uncommitted changes."""
+    session-close commit instead of accumulating as uncommitted changes.
 
-    def test_archived_terminal_is_staged(self, tmp_path):
+    T126 (Option A) extends this: after staging, the moves are committed in an
+    isolated chore commit so they no longer accumulate at all.
+    """
+
+    def test_archived_terminal_is_committed(self, tmp_path):
+        """T126: archive moves are auto-committed; nothing remains staged."""
         harness, raised = _setup(tmp_path)
         _git_init(tmp_path)
+        _stub_current_session(tmp_path, "S42")
         sr = _make_sr(raised, "SR-002", "myws", "Done", status="resolved", resolved_in="S19")
         subprocess.run(["git", "-C", str(tmp_path), "add", str(sr)], check=True)
         subprocess.run(
@@ -201,17 +216,83 @@ class TestGitStaging:
         )
         result = _run(harness, "--workspace", "myws")
         assert result.returncode == 0, result.stderr
-        status = _git_status_porcelain(tmp_path)
-        # Source path is gone, dest is new — both must be staged (uppercase first column)
         assert sr.exists() is False
-        # Look for staged delete of source and staged add of dest (or rename)
-        # The exact prefix can be "R" (rename), "D" + "A", but no unstaged " D" or "??"
-        lines = [l for l in status.splitlines() if "SR-002" in l]
-        assert lines, f"No SR-002 lines in git status: {status!r}"
+
+        # Nothing staged or unstaged related to SR-002 — it was committed
+        status = _git_status_porcelain(tmp_path)
+        assert "SR-002" not in status, (
+            f"After auto-commit, SR-002 must not appear in git status: {status!r}"
+        )
+
+        # The HEAD commit's message includes the session id and 'auto-archive'
+        head_msg = subprocess.run(
+            ["git", "-C", str(tmp_path), "log", "-1", "--pretty=%s"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        assert "auto-archive" in head_msg, head_msg
+        assert "S42" in head_msg, head_msg
+
+    def test_unrelated_staged_changes_preserved(self, tmp_path):
+        """T126: auto-commit must NOT sweep up unrelated staged work."""
+        harness, raised = _setup(tmp_path)
+        _git_init(tmp_path)
+        _stub_current_session(tmp_path, "S42")
+        sr = _make_sr(raised, "SR-002", "myws", "Done", status="resolved", resolved_in="S19")
+        subprocess.run(["git", "-C", str(tmp_path), "add", str(sr)], check=True)
+        subprocess.run(
+            ["git", "-C", str(tmp_path), "commit", "-q", "-m", "initial"],
+            check=True,
+        )
+        # Pre-stage an unrelated file
+        unrelated = tmp_path / "unrelated.txt"
+        unrelated.write_text("hello\n")
+        subprocess.run(["git", "-C", str(tmp_path), "add", str(unrelated)], check=True)
+
+        result = _run(harness, "--workspace", "myws")
+        assert result.returncode == 0, result.stderr
+
+        # unrelated.txt must still be staged (not committed)
+        status = _git_status_porcelain(tmp_path)
+        lines = [ln for ln in status.splitlines() if "unrelated.txt" in ln]
+        assert lines, f"unrelated.txt must remain staged: {status!r}"
         for line in lines:
-            # First column = staged change; second column = unstaged
-            assert line[1] == " ", \
-                f"Unstaged change for SR-002: {line!r} — expected staged-only"
+            assert line[0] == "A", (
+                f"unrelated.txt must be staged-added, not committed: {line!r}"
+            )
+
+    def test_commit_failure_leaves_staged(self, tmp_path):
+        """T126: if commit fails (e.g. signing issue, hook rejection), fall back
+        to today's behaviour — moves remain staged, warning printed."""
+        harness, raised = _setup(tmp_path)
+        _git_init(tmp_path)
+        _stub_current_session(tmp_path, "S42")
+        sr = _make_sr(raised, "SR-002", "myws", "Done", status="resolved", resolved_in="S19")
+        subprocess.run(["git", "-C", str(tmp_path), "add", str(sr)], check=True)
+        subprocess.run(
+            ["git", "-C", str(tmp_path), "commit", "-q", "-m", "initial"],
+            check=True,
+        )
+        # Install a pre-commit hook that always rejects — forces commit to fail
+        hook = tmp_path / ".git" / "hooks" / "pre-commit"
+        hook.write_text("#!/bin/sh\necho 'pre-commit reject' >&2\nexit 1\n")
+        hook.chmod(0o755)
+
+        result = _run(harness, "--workspace", "myws")
+        assert result.returncode == 0, result.stderr
+        assert "auto-commit of archive moves failed" in result.stderr, result.stderr
+
+        # Move still happened — file is in archive, source deleted
+        archive_files = list((raised / "archive").glob("SR-002-*.md"))
+        assert len(archive_files) == 1
+
+        # Staged state preserved (delete of source + add of dest)
+        status = _git_status_porcelain(tmp_path)
+        sr_lines = [ln for ln in status.splitlines() if "SR-002" in ln]
+        assert sr_lines, f"Expected SR-002 still staged after commit failure: {status!r}"
+        for line in sr_lines:
+            assert line[0] != " " or line[0] == "R", (
+                f"SR-002 must remain staged (index column non-blank): {line!r}"
+            )
 
     def test_works_outside_git_repo(self, tmp_path):
         """Best-effort staging: if not in a git repo, archive still proceeds."""

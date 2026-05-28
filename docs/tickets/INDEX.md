@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S22 2026-05-28. 1 open tickets.
+Generated S22 2026-05-28. 0 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -15,11 +15,9 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Low (1)
+## Low (0)
 
-| ID | Title | Phase | Layer | Age |
-|----|-------|-------|-------|-----|
-| T126 | session-start: surface_workspace_concerns.py stages archives but does not commit them | Ph2 | tooling | this session |
+*(none)*
 
 ## Unknown (0)
 

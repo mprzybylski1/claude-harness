@@ -2,12 +2,12 @@
 id: T126
 title: session-start: surface_workspace_concerns.py stages archives but does not commit them
 severity: low
-status: open
+status: closed
 phase: 2
 layer: tooling
 # repo: <name from workspace.yaml repos list>
 opened: S22 2026-05-28
-closed:
+closed: S22 2026-05-28
 source: scrabble-score/SR-006
 ---
 
@@ -60,7 +60,13 @@ Preferred: B — keeps session-start a read-mostly phase, but eliminates the
 "what's this staged rename?" surprise.
 ## Acceptance Criteria
 
-- [ ] (fill in)
+- [x] surface_workspace_concerns.py auto-commits archive moves after staging them (Option A)
+- [x] Commit uses pathspec — only the archive paths are committed, unrelated staged work in the operator's tree is preserved
+- [x] Commit message includes the workspace's current session id (`chore: auto-archive resolved SRs S<N>`)
+- [x] Commit failure (signing issue, pre-commit hook reject, etc.) falls back to pre-T126 behaviour: moves remain staged + warning printed
+- [x] Session-start no longer leaves a pre-staged housekeeping change for the operator to deal with
 
 ## Resolution
-(Fill in on close.)
+Implemented Option A per the T126 disposition (re-litigated A vs B vs C-prime in-session: C-prime would have required session-close to grow cross-repo behaviour — the same shape we just refused in T125 — so it was the wrong cost/value trade). Auto-commit happens via 'git -C <ROOT> commit -- <staged paths>' with explicit pathspec, so unrelated staged work in the operator's tree is preserved. Commit message includes the workspace's current session id resolved through _workspace_sessions_md(slug). If any step fails (no git identity, signing issue, pre-commit hook reject), the script falls back to pre-T126 behaviour: moves remain staged and a warning explains how to commit manually. 3 new tests cover auto-commit happy path with session id in HEAD message, unrelated-staged-work isolation, and pre-commit-hook-reject fallback.
+
+Closed S22 2026-05-28.
