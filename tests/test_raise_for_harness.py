@@ -212,3 +212,54 @@ class TestSessionIdSource:
         assert result.returncode == 0, result.stderr
         content = Path(result.stdout.strip()).read_text(encoding="utf-8")
         assert "raised: S7" in content
+
+
+class TestTitleQuoting:
+    """T123: titles with colons must survive yaml.safe_load.
+
+    Pre-T123, a title like 'prepare_opus_context.py: exclude X' was written
+    unquoted, so yaml.safe_load read 'prepare_opus_context.py' as a mapping
+    key and errored on the next colon — causing list_raised_concerns.py to
+    silently skip the SR. SR-004..SR-007 (S22 2026-05-28) were all affected.
+    """
+
+    def _frontmatter(self, path: Path) -> dict:
+        import yaml
+        text = path.read_text(encoding="utf-8")
+        parts = text.split("---", 2)
+        assert len(parts) >= 3, f"missing frontmatter delimiters in {path}"
+        return yaml.safe_load(parts[1])
+
+    def test_title_with_colon_round_trips(self, tmp_path):
+        harness, _ = _setup(tmp_path)
+        title = "prepare_opus_context.py: exclude large text/binary resources"
+        result = _run(harness, title, "--workspace", "myws")
+        assert result.returncode == 0, result.stderr
+        data = self._frontmatter(Path(result.stdout.strip()))
+        assert data["title"] == title
+
+    def test_title_with_hash_round_trips(self, tmp_path):
+        harness, _ = _setup(tmp_path)
+        title = "Bug #42 needs handling"
+        result = _run(harness, title, "--workspace", "myws")
+        assert result.returncode == 0, result.stderr
+        data = self._frontmatter(Path(result.stdout.strip()))
+        assert data["title"] == title
+
+    def test_plain_title_unquoted(self, tmp_path):
+        """Backward-compat: titles that don't need quoting stay unquoted."""
+        harness, _ = _setup(tmp_path)
+        result = _run(harness, "Database timeout bug", "--workspace", "myws")
+        assert result.returncode == 0, result.stderr
+        content = Path(result.stdout.strip()).read_text(encoding="utf-8")
+        assert "title: Database timeout bug\n" in content
+        data = self._frontmatter(Path(result.stdout.strip()))
+        assert data["title"] == "Database timeout bug"
+
+    def test_title_with_embedded_quote_escaped(self, tmp_path):
+        harness, _ = _setup(tmp_path)
+        title = 'Strange: with "quotes" inside'
+        result = _run(harness, title, "--workspace", "myws")
+        assert result.returncode == 0, result.stderr
+        data = self._frontmatter(Path(result.stdout.strip()))
+        assert data["title"] == title

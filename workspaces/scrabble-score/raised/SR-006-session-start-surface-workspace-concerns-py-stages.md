@@ -2,7 +2,7 @@
 id: SR-006
 from: scrabble-score
 raised: S10 2026-05-28
-title: session-start: surface_workspace_concerns.py stages archives but does not commit them
+title: "session-start: surface_workspace_concerns.py stages archives but does not commit them"
 severity: low
 status: raised
 harness_ticket:

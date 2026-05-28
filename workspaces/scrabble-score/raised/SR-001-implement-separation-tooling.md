@@ -4,8 +4,9 @@ from: scrabble-score
 raised: S5 2026-05-27
 title: Implement workspace↔harness separation tooling and guardrails
 severity: high
-status: promoted
+status: resolved
 harness_ticket: T104–T112
+resolved_in: S20
 ---
 
 ## Context
@@ -230,6 +231,11 @@ Promoted S20 2026-05-27. Accepted in full. Broken into 9 implementation tickets:
 
 T111 (hooks) is the riskiest; implement last after the round-trip scripts are
 proven. SR-001 resolves when all 9 tickets are closed.
+
+Resolved S22 2026-05-28: all 9 tickets (T104–T112) closed in S20. Status update
+applied manually because SR-001 predates `promote_raised_concern.py` — the
+tickets carry no `source:` frontmatter, so `close_ticket.py` close-the-loop
+never fired.
 
 ## Related
 

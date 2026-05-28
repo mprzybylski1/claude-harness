@@ -94,6 +94,25 @@ def _current_session(sessions_md: Path | None = None) -> str:
         sys.exit(2)
 
 
+def _yaml_scalar(value: str) -> str:
+    """Return value as a YAML scalar. Double-quote when a plain scalar would
+    be misparsed (e.g. titles containing ': ', which YAML reads as a nested
+    mapping key — observed S22 with SR-004..SR-007 silently dropped by
+    list_raised_concerns.py)."""
+    needs_quote = (
+        not value
+        or value != value.strip()
+        or ": " in value
+        or value.endswith(":")
+        or " #" in value
+        or value[0] in "-?:,[]{}#&*!|>'\"%@`"
+    )
+    if not needs_quote:
+        return value
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
 _TEMPLATE = """\
 ---
 id: {sr_id}
@@ -173,7 +192,7 @@ def main() -> None:
             slug=slug,
             session=session,
             today=today,
-            title=args.title,
+            title=_yaml_scalar(args.title),
             severity=args.severity,
         )
         try:

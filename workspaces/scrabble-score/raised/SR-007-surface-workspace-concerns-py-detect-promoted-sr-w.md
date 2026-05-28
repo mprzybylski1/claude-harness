@@ -2,7 +2,7 @@
 id: SR-007
 from: scrabble-score
 raised: S10 2026-05-28
-title: surface_workspace_concerns.py: detect promoted-SR with all linked tickets closed
+title: "surface_workspace_concerns.py: detect promoted-SR with all linked tickets closed"
 severity: low
 status: raised
 harness_ticket:

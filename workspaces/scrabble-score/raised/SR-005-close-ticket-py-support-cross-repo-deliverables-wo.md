@@ -2,7 +2,7 @@
 id: SR-005
 from: scrabble-score
 raised: S10 2026-05-28
-title: close_ticket.py: support cross-repo deliverables (workspace ticket → harness file)
+title: "close_ticket.py: support cross-repo deliverables (workspace ticket → harness file)"
 severity: medium
 status: raised
 harness_ticket:

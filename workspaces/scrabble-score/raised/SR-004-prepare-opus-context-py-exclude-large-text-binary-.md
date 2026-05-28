@@ -2,7 +2,7 @@
 id: SR-004
 from: scrabble-score
 raised: S9 2026-05-28
-title: prepare_opus_context.py: exclude large text/binary resources from diff
+title: "prepare_opus_context.py: exclude large text/binary resources from diff"
 severity: low
 status: raised
 harness_ticket:
