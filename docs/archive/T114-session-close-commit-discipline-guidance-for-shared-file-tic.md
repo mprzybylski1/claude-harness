@@ -1,13 +1,19 @@
 ---
-id: SR-003
-from: scrabble-score
-raised: S21 2026-05-28
+id: T114
 title: session-close commit discipline guidance for shared-file tickets
 severity: low
-status: resolved
-harness_ticket: T114
-resolved_in: S21
+status: closed
+phase: 2
+layer: process
+# repo: <name from workspace.yaml repos list>
+opened: S21 2026-05-28
+closed: S21 2026-05-28
+source: scrabble-score/SR-003
 ---
+
+## Problem
+
+Promoted from scrabble-score/SR-003.
 
 ## Context
 
@@ -41,7 +47,12 @@ Add one sentence to `session-close/SKILL.md` Commit discipline section, near
 > get clean per-ticket commits.
 
 One sentence. No tooling change.
+## Acceptance Criteria
 
-## Harness disposition
+- [x] `session-close/SKILL.md` Commit discipline section includes a directive on shared-file ticket sequencing
+- [x] Guidance lives next to the per-ticket-commit pattern so it's visible at the relevant decision point
 
-(Filled by harness on promotion or rejection.)
+## Resolution
+Added one sentence to session-close SKILL Commit discipline section directing the model to close each ticket before writing the next ticket's changes when both touch the same file. TDD sequence makes per-ticket staging fall out naturally; deviation requires revert-and-reapply.
+
+Closed S21 2026-05-28.

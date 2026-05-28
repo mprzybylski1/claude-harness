@@ -53,6 +53,11 @@ The pattern for every ticket closed during a session:
 3. **Immediately commit in the workspace repo:** the commit targets the workspace's primary repo
 4. Only then move to the next ticket
 
+**When two tickets edit the same file, close each ticket before writing the next
+ticket's changes to that file** — TDD sequence makes the per-ticket staging fall
+out naturally. Otherwise you'll have to revert-and-reapply to get clean
+per-ticket commits.
+
 ## When to use the abandoned-session pattern instead
 
 If a mid-session blocker means the session **cannot close cleanly** — a missing harness
