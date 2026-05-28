@@ -10,6 +10,12 @@ Check 1 — Ticket attribution (always runs):
   found in the Active Work header of docs/sessions.md.
   Exits 1 if any mismatch is found.
 
+Check 1b — Active Work integrity (always runs, T134):
+  Verify Active Work section has exactly one `**S<N> — ...**` header and
+  at most one `Tickets closed:` line. Catches the failure mode where
+  session-close prepended new content instead of replacing the section.
+  Exits 1 if drift detected.
+
 Check 2 — Session log (runs only when core Python files were changed):
   Verify that docs/sessions.md Session Log has an entry for today.
   Exits 1 if sessions.md was not updated.
@@ -239,6 +245,66 @@ def run_attribution_check(project_root: str) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Check 1b: Active Work section integrity (T134)
+# ---------------------------------------------------------------------------
+
+_ACTIVE_WORK_HEADER_RE = re.compile(r"^\*\*S\d+[\s\-—].*\*\*", re.MULTILINE)
+
+
+def _extract_active_work_section(sessions_content: str) -> str | None:
+    """Return the body between `## Active Work` and the next `---` horizontal
+    rule or `## Session Log` header, or None when the section is absent."""
+    parts = sessions_content.split("## Active Work", 1)
+    if len(parts) < 2:
+        return None
+    body = parts[1]
+    # Terminate at the next H2 (## Session Log) or HR (---).
+    for terminator in ("\n## ", "\n---"):
+        idx = body.find(terminator)
+        if idx != -1:
+            body = body[:idx]
+            break
+    return body
+
+
+def run_active_work_check(project_root: str) -> list[str]:
+    """Validate Active Work has exactly one `**S<N> — ...**` header and no
+    duplicate `Tickets closed:` lines. Returns error strings (empty = pass).
+
+    Catches the failure mode where session-close prepended new S<N> content
+    on top of the prior session's content instead of replacing the section
+    (S22→S23 regression, T133/T134)."""
+    sessions_path, _ = _resolve_paths(project_root)
+    if not os.path.exists(sessions_path):
+        return []
+    try:
+        with open(sessions_path) as f:
+            content = f.read()
+    except OSError:
+        return []
+
+    active_work = _extract_active_work_section(content)
+    if active_work is None:
+        return []  # No Active Work section — docs-only / fresh workspace; skip.
+
+    header_count = len(_ACTIVE_WORK_HEADER_RE.findall(active_work))
+    tickets_closed_count = active_work.count("Tickets closed:")
+
+    errors: list[str] = []
+    if header_count != 1:
+        errors.append(
+            f"  Active Work has {header_count} `**S<N> — ...**` headers (expected exactly 1). "
+            f"session-close Step 1 must REPLACE the section, not prepend."
+        )
+    if tickets_closed_count > 1:
+        errors.append(
+            f"  Active Work has {tickets_closed_count} 'Tickets closed:' lines "
+            f"(expected at most 1) — orphan content from a prior session."
+        )
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # Check 2: Session log
 # ---------------------------------------------------------------------------
 
@@ -463,6 +529,23 @@ def main() -> None:
         print(
             f"\nFix the closed: fields to say '{session_id} YYYY-MM-DD' "
             f"before ending the session.\n",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # Check 1b: Active Work section integrity (T134)
+    active_work_errors = run_active_work_check(project_root)
+    if active_work_errors:
+        sessions_path, _ = _resolve_paths(project_root)
+        print(
+            f"\n[STOP HOOK] Active Work section drift in {sessions_path}:\n",
+            file=sys.stderr,
+        )
+        for err in active_work_errors:
+            print(err, file=sys.stderr)
+        print(
+            "\nFix before ending the session. See .claude/skills/session-close/SKILL.md "
+            "Step 1 — Active Work must be REPLACED, not prepended.\n",
             file=sys.stderr,
         )
         sys.exit(1)

@@ -118,6 +118,100 @@ class TestCheckSessionLogPathDetection:
         assert closed_dir == str(ws_dir / "internal" / "tickets" / "closed")
 
 
+class TestActiveWorkIntegrity:
+    """T134: run_active_work_check validates Active Work section hasn't drifted."""
+
+    def _write_sessions(self, tmp_path: Path, active_work_body: str) -> None:
+        sessions_file = tmp_path / "docs" / "sessions.md"
+        sessions_file.parent.mkdir(parents=True, exist_ok=True)
+        sessions_file.write_text(
+            "## Active Work\n\n"
+            f"{active_work_body}\n\n"
+            "---\n\n"
+            "## Session Log\n\n"
+            "S1 2026-05-28: init\n",
+            encoding="utf-8",
+        )
+
+    def test_clean_single_header_passes(self, tmp_path):
+        """One **S<N> — ...** header + one Tickets closed: line = clean."""
+        hook = _load_hook("check_session_log")
+        self._write_sessions(
+            tmp_path,
+            "**S5 — closed T100 (1 ticket).**\n\n"
+            "Files changed:\n"
+            "- `scripts/tools/foo.py` — fixed bug\n\n"
+            "Tickets closed: T100 (1 ticket)",
+        )
+        with patch.object(hook, "active_workspace_dir", return_value=None):
+            errors = hook.run_active_work_check(str(tmp_path))
+        assert errors == [], f"expected clean pass, got: {errors}"
+
+    def test_two_headers_fails(self, tmp_path):
+        """Two **S<N> — ...** headers in Active Work → error."""
+        hook = _load_hook("check_session_log")
+        self._write_sessions(
+            tmp_path,
+            "**S5 — new session.**\n\nNew content.\n\n"
+            "**S4 — old session.**\n\nOld content.",
+        )
+        with patch.object(hook, "active_workspace_dir", return_value=None):
+            errors = hook.run_active_work_check(str(tmp_path))
+        assert errors, "expected drift error, got none"
+        assert any("2" in e and "headers" in e for e in errors), errors
+
+    def test_zero_headers_fails(self, tmp_path):
+        """Active Work present but with zero S<N> headers → error."""
+        hook = _load_hook("check_session_log")
+        self._write_sessions(
+            tmp_path,
+            "Some content without a session header.\n\nTickets closed: T999",
+        )
+        with patch.object(hook, "active_workspace_dir", return_value=None):
+            errors = hook.run_active_work_check(str(tmp_path))
+        assert errors, "expected error when no header present"
+        assert any("0" in e and "headers" in e for e in errors), errors
+
+    def test_s22_s23_regression_case(self, tmp_path):
+        """One header + orphan 'Tickets closed:' from prior session → error.
+
+        Reproduces the S22 regression: session-close wrote new S22 header on
+        top of S21's tail content, leaving one header but two 'Tickets closed:'
+        lines."""
+        hook = _load_hook("check_session_log")
+        self._write_sessions(
+            tmp_path,
+            "**S22 — closed T123–T126.**\n\n"
+            "Files changed:\n"
+            "- `scripts/tools/foo.py` — fixed bug\n\n"
+            "Tickets closed: T123–T126\n"
+            "Tickets opened: T127–T131\n\n"
+            "- `scripts/tools/orphan.py` — T117: orphan content from S21\n\n"
+            "Tickets closed: T113–T122 (orphan from S21)",
+        )
+        with patch.object(hook, "active_workspace_dir", return_value=None):
+            errors = hook.run_active_work_check(str(tmp_path))
+        assert errors, "expected drift error, got none"
+        assert any("Tickets closed:" in e and "2" in e for e in errors), errors
+
+    def test_missing_sessions_md_returns_empty(self, tmp_path):
+        """No sessions.md → no errors (workspace just initialised, etc)."""
+        hook = _load_hook("check_session_log")
+        with patch.object(hook, "active_workspace_dir", return_value=None):
+            errors = hook.run_active_work_check(str(tmp_path))
+        assert errors == []
+
+    def test_no_active_work_section_returns_empty(self, tmp_path):
+        """sessions.md exists but has no ## Active Work section → no errors."""
+        sessions_file = tmp_path / "docs" / "sessions.md"
+        sessions_file.parent.mkdir(parents=True)
+        sessions_file.write_text("## Session Log\n\nS1 2026-05-28: init\n", encoding="utf-8")
+        hook = _load_hook("check_session_log")
+        with patch.object(hook, "active_workspace_dir", return_value=None):
+            errors = hook.run_active_work_check(str(tmp_path))
+        assert errors == []
+
+
 # ---------------------------------------------------------------------------
 # check_ticket_acs.py — closed-dir detection
 # ---------------------------------------------------------------------------
