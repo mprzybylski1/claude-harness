@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 """
-PreToolUse hook: block cross-layer writes between workspace and harness state.
+PreToolUse hook: block cross-layer and cross-workspace writes.
 
 Reads HARNESS_ROOT/.claude/.active_workspace to determine session type:
-  - Non-empty content → workspace session (value is the slug)
-  - Empty or absent   → harness-root session
+  - "__harness__"           → harness-root session
+  - Any other non-empty str → workspace session (value is the slug)
+  - Empty or absent file    → undeclared session (fail closed)
 
 Blocks:
   - Workspace session writing to harness-layer docs:
       docs/tickets/  docs/sessions.md  docs/opus_notes.md
       docs/architecture_invariants.md
-  - Harness-root session writing to workspaces/*/internal/
+  - Workspace session writing to a DIFFERENT workspace's internal/
+      (Invariant 5 — workspace isolation)
+  - Harness-root session writing to any workspaces/*/internal/
+  - Undeclared session writing to any protected zone above
 
 Exempt:
   - workspaces/*/raised/ — boundary slot, always allowed
@@ -29,6 +33,7 @@ ROOT = Path(os.environ.get("HARNESS_ROOT", str(_default_root)))
 
 _STATE_FILE = ROOT / ".claude" / ".active_workspace"
 _WS_BASE = (ROOT / "workspaces").resolve()
+_HARNESS_SENTINEL = "__harness__"
 
 _HARNESS_PROTECTED = [
     (ROOT / "docs" / "tickets").resolve(),
@@ -37,13 +42,22 @@ _HARNESS_PROTECTED = [
     (ROOT / "docs" / "architecture_invariants.md").resolve(),
 ]
 
+STATE_UNDECLARED = "undeclared"
+STATE_HARNESS = "harness"
+STATE_WORKSPACE = "workspace"
 
-def _active_workspace_slug() -> str | None:
+
+def _read_session_state() -> tuple[str, str | None]:
+    """Return (state, slug). slug is set only for STATE_WORKSPACE."""
     try:
-        slug = _STATE_FILE.read_text(encoding="utf-8").strip()
-        return slug if slug else None
+        content = _STATE_FILE.read_text(encoding="utf-8").strip()
     except OSError:
-        return None
+        return (STATE_UNDECLARED, None)
+    if not content:
+        return (STATE_UNDECLARED, None)
+    if content == _HARNESS_SENTINEL:
+        return (STATE_HARNESS, None)
+    return (STATE_WORKSPACE, content)
 
 
 def _is_boundary_slot(resolved: Path) -> bool:
@@ -65,13 +79,16 @@ def _is_harness_protected(resolved: Path) -> bool:
     return False
 
 
-def _is_workspace_internal(resolved: Path) -> bool:
+def _workspace_internal_slug(resolved: Path) -> str | None:
+    """Return the workspace slug if path is inside workspaces/<slug>/internal/, else None."""
     try:
         rel = resolved.relative_to(_WS_BASE)
         parts = rel.parts
-        return len(parts) >= 2 and parts[1] == "internal"
+        if len(parts) >= 2 and parts[1] == "internal":
+            return parts[0]
     except ValueError:
-        return False
+        pass
+    return None
 
 
 def _block(message: str) -> None:
@@ -99,26 +116,46 @@ def main() -> None:
     if _is_boundary_slot(resolved):
         sys.exit(0)
 
-    workspace_slug = _active_workspace_slug()
+    state, workspace_slug = _read_session_state()
 
-    if workspace_slug:
-        if _is_harness_protected(resolved):
-            try:
-                rel = str(resolved.relative_to(ROOT))
-            except ValueError:
-                rel = str(resolved)
+    if state == STATE_UNDECLARED:
+        if _is_harness_protected(resolved) or _workspace_internal_slug(resolved) is not None:
             _block(
-                f"workspace session '{workspace_slug}' may not write to harness-layer "
-                f"path '{rel}'. Use workspaces/{workspace_slug}/raised/ to communicate "
-                f"with the harness, or close the workspace session first."
+                f"session type undeclared (.claude/.active_workspace is missing or empty). "
+                f"Run /session-start to declare workspace context, then retry the write to "
+                f"'{resolved}'."
             )
-    else:
-        if _is_workspace_internal(resolved):
+        sys.exit(0)
+
+    if state == STATE_HARNESS:
+        target_slug = _workspace_internal_slug(resolved)
+        if target_slug is not None:
             _block(
                 f"harness-root session may not write to workspace-internal path "
                 f"'{resolved}'. Open a workspace session (select a workspace at "
                 f"session start) to write workspace-internal files."
             )
+        sys.exit(0)
+
+    # state == STATE_WORKSPACE
+    if _is_harness_protected(resolved):
+        try:
+            rel = str(resolved.relative_to(ROOT))
+        except ValueError:
+            rel = str(resolved)
+        _block(
+            f"workspace session '{workspace_slug}' may not write to harness-layer "
+            f"path '{rel}'. Use workspaces/{workspace_slug}/raised/ to communicate "
+            f"with the harness, or close the workspace session first."
+        )
+
+    target_slug = _workspace_internal_slug(resolved)
+    if target_slug is not None and target_slug != workspace_slug:
+        _block(
+            f"workspace session '{workspace_slug}' may not write to other workspace "
+            f"'{target_slug}' internal path '{resolved}'. Cross-workspace writes "
+            f"violate Invariant 5 (workspace isolation)."
+        )
 
     sys.exit(0)
 

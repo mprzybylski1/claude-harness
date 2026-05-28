@@ -12,17 +12,24 @@ SCRIPT = ROOT / "scripts" / "hooks" / "check_cross_layer_writes.py"
 
 
 def _setup(tmp_path: Path, workspace_slug: str | None = None) -> Path:
-    """Set up minimal harness skeleton. Returns harness root."""
+    """Set up minimal harness skeleton. Returns harness root.
+
+    workspace_slug=None    → harness session (writes "__harness__" sentinel)
+    workspace_slug="<slug>" → workspace session (writes the slug)
+
+    Tests wanting to simulate undeclared state (missing or empty file) should
+    unlink or truncate the state file after _setup returns.
+    """
     harness = tmp_path / "harness"
     harness.mkdir()
     (harness / ".claude").mkdir()
     (harness / "docs").mkdir()
     (harness / "docs" / "tickets").mkdir()
     (harness / "workspaces").mkdir()
-    if workspace_slug:
-        (harness / ".claude" / ".active_workspace").write_text(
-            workspace_slug, encoding="utf-8"
-        )
+    state_value = workspace_slug if workspace_slug else "__harness__"
+    (harness / ".claude" / ".active_workspace").write_text(
+        state_value, encoding="utf-8"
+    )
     return harness
 
 
@@ -127,3 +134,110 @@ class TestCrossLayerWrites:
             str(harness / "workspaces" / "my-ws" / "internal" / "sessions.md"),
         )
         assert "harness-root session" in result.stderr
+
+
+class TestCrossWorkspaceWrites:
+    """T115: workspace A may not write to workspace B's internal/ (Invariant 5)."""
+
+    def test_cross_workspace_internal_write_blocked(self, tmp_path):
+        harness = _setup(tmp_path, workspace_slug="ws-a")
+        result = _run(
+            harness, "Write",
+            str(harness / "workspaces" / "ws-b" / "internal" / "sessions.md"),
+        )
+        assert result.returncode == 2
+        assert "CROSS-LAYER WRITE BLOCKED" in result.stderr
+
+    def test_cross_workspace_error_names_both_slugs(self, tmp_path):
+        harness = _setup(tmp_path, workspace_slug="ws-a")
+        result = _run(
+            harness, "Write",
+            str(harness / "workspaces" / "ws-b" / "internal" / "notes.md"),
+        )
+        assert "ws-a" in result.stderr
+        assert "ws-b" in result.stderr
+
+    def test_same_workspace_internal_still_allowed(self, tmp_path):
+        """Regression: workspace writing its own internal/ remains allowed."""
+        harness = _setup(tmp_path, workspace_slug="ws-a")
+        result = _run(
+            harness, "Write",
+            str(harness / "workspaces" / "ws-a" / "internal" / "sessions.md"),
+        )
+        assert result.returncode == 0
+
+    def test_cross_workspace_raised_slot_still_exempt(self, tmp_path):
+        """workspaces/*/raised/ is the boundary slot — even cross-workspace writes
+        there are allowed (it's the only legitimate inbox)."""
+        harness = _setup(tmp_path, workspace_slug="ws-a")
+        result = _run(
+            harness, "Write",
+            str(harness / "workspaces" / "ws-b" / "raised" / "SR-001-foo.md"),
+        )
+        assert result.returncode == 0
+
+
+class TestUndeclaredSession:
+    """T115: state file missing or empty fails closed."""
+
+    def test_missing_state_file_blocks_harness_docs(self, tmp_path):
+        harness = _setup(tmp_path)
+        (harness / ".claude" / ".active_workspace").unlink()
+        result = _run(harness, "Write", str(harness / "docs" / "sessions.md"))
+        assert result.returncode == 2
+        assert "CROSS-LAYER WRITE BLOCKED" in result.stderr
+
+    def test_missing_state_file_blocks_workspace_internal(self, tmp_path):
+        harness = _setup(tmp_path)
+        (harness / ".claude" / ".active_workspace").unlink()
+        result = _run(
+            harness, "Write",
+            str(harness / "workspaces" / "ws-a" / "internal" / "sessions.md"),
+        )
+        assert result.returncode == 2
+
+    def test_empty_state_file_blocks_harness_docs(self, tmp_path):
+        harness = _setup(tmp_path)
+        (harness / ".claude" / ".active_workspace").write_text("", encoding="utf-8")
+        result = _run(harness, "Write", str(harness / "docs" / "opus_notes.md"))
+        assert result.returncode == 2
+
+    def test_empty_state_file_blocks_workspace_internal(self, tmp_path):
+        harness = _setup(tmp_path)
+        (harness / ".claude" / ".active_workspace").write_text("", encoding="utf-8")
+        result = _run(
+            harness, "Write",
+            str(harness / "workspaces" / "ws-a" / "internal" / "sessions.md"),
+        )
+        assert result.returncode == 2
+
+    def test_undeclared_state_allows_unrelated_path(self, tmp_path):
+        """Fail-closed only blocks protected zones — code/scripts paths pass through."""
+        harness = _setup(tmp_path)
+        (harness / ".claude" / ".active_workspace").unlink()
+        result = _run(harness, "Write", str(harness / "scripts" / "tools" / "foo.py"))
+        assert result.returncode == 0
+
+    def test_undeclared_state_allows_boundary_slot(self, tmp_path):
+        """workspaces/*/raised/ is the boundary slot — exempt even when undeclared."""
+        harness = _setup(tmp_path)
+        (harness / ".claude" / ".active_workspace").unlink()
+        result = _run(
+            harness, "Write",
+            str(harness / "workspaces" / "ws-a" / "raised" / "SR-001-foo.md"),
+        )
+        assert result.returncode == 0
+
+    def test_undeclared_state_error_mentions_session_start(self, tmp_path):
+        harness = _setup(tmp_path)
+        (harness / ".claude" / ".active_workspace").unlink()
+        result = _run(harness, "Write", str(harness / "docs" / "sessions.md"))
+        assert "/session-start" in result.stderr or "session-start" in result.stderr
+
+    def test_undeclared_state_allows_outside_harness_root(self, tmp_path):
+        """Paths outside HARNESS_ROOT (e.g. workspace repo files) pass through."""
+        harness = _setup(tmp_path)
+        (harness / ".claude" / ".active_workspace").unlink()
+        outside = tmp_path / "elsewhere" / "src" / "main.py"
+        result = _run(harness, "Write", str(outside))
+        assert result.returncode == 0

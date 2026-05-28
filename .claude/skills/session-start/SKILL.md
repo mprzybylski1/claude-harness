@@ -45,10 +45,15 @@ python scripts/tools/workspace.py list
   ```bash
   echo -n "<WORKSPACE_SLUG>" > .claude/.active_workspace
   ```
-- **Harness-root session:** clear the state file:
+- **Harness-root session:** write the harness sentinel:
   ```bash
-  echo -n "" > .claude/.active_workspace
+  echo -n "__harness__" > .claude/.active_workspace
   ```
+
+The hook **fails closed** if the state file is missing or empty — writes to
+`docs/tickets/`, `docs/sessions.md`, `docs/opus_notes.md`, and `workspaces/*/internal/`
+will be blocked until you declare session type. This prevents the "forgot to write
+the slug" failure mode where a workspace session silently writes harness docs.
 
 **Path substitution for workspace sessions:**
 
