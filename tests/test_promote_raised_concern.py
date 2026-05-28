@@ -313,3 +313,91 @@ After subheading.
         content = _open_ticket(harness).read_text(encoding="utf-8")
         assert "H3_BODY_SHOULD_BE_COPIED" in content
         assert "Sub-section" in content
+
+
+class TestProposedChangeACs:
+    """T127: bullet/numbered list items in the SR's ## Proposed change section
+    are carried into the harness ticket as Acceptance Criteria."""
+
+    def _make_sr(self, sr_path: Path, proposed_change_body: str) -> None:
+        sr_path.write_text(
+            "---\n"
+            "id: SR-001\nfrom: myws\nraised: S5 2026-05-27\n"
+            "title: AC seeding test\nseverity: medium\nstatus: raised\n"
+            "harness_ticket:\n---\n\n"
+            "## Context\n\nSome context.\n\n"
+            "## Proposed change\n\n" + proposed_change_body + "\n\n"
+            "## Harness disposition\n\n(skip)\n",
+            encoding="utf-8",
+        )
+
+    def _ac_block(self, ticket_content: str) -> str:
+        """Return the Acceptance Criteria block (between ## AC and the next H2)."""
+        m = re.search(
+            r"## Acceptance Criteria\n(.*?)(?:\n## |\Z)",
+            ticket_content,
+            re.DOTALL,
+        )
+        assert m is not None, f"No AC section in ticket:\n{ticket_content}"
+        return m.group(1)
+
+    def test_bullet_list_becomes_acs(self, tmp_path):
+        """- and * bullets in Proposed change → one AC each, default placeholder gone."""
+        harness, sr_path = _setup(tmp_path)
+        self._make_sr(sr_path,
+                      "- Add fail-closed guard in foo()\n"
+                      "- Update test_foo to cover the new branch\n"
+                      "* Document the guard in CLAUDE.md")
+        result = _run(harness, "myws/SR-001")
+        assert result.returncode == 0, result.stderr
+        ac_block = self._ac_block(_open_ticket(harness).read_text(encoding="utf-8"))
+        assert "- [ ] Add fail-closed guard in foo()" in ac_block
+        assert "- [ ] Update test_foo to cover the new branch" in ac_block
+        assert "- [ ] Document the guard in CLAUDE.md" in ac_block
+        assert "(fill in)" not in ac_block
+
+    def test_numbered_list_becomes_acs(self, tmp_path):
+        """1. and 2) numbered list items in Proposed change → one AC each."""
+        harness, sr_path = _setup(tmp_path)
+        self._make_sr(sr_path,
+                      "1. First step\n"
+                      "2. Second step\n"
+                      "3) Third step")
+        result = _run(harness, "myws/SR-001")
+        assert result.returncode == 0, result.stderr
+        ac_block = self._ac_block(_open_ticket(harness).read_text(encoding="utf-8"))
+        assert "- [ ] First step" in ac_block
+        assert "- [ ] Second step" in ac_block
+        assert "- [ ] Third step" in ac_block
+        assert "(fill in)" not in ac_block
+
+    def test_prose_only_falls_back_to_placeholder(self, tmp_path):
+        """No list items in Proposed change → ticket keeps create_ticket.py's
+        default '- [ ] (fill in)' placeholder so operator can hand-fill."""
+        harness, sr_path = _setup(tmp_path)
+        self._make_sr(sr_path,
+                      "We should refactor the foo module to use the bar pattern. "
+                      "It will simplify the call sites and improve testability.")
+        result = _run(harness, "myws/SR-001")
+        assert result.returncode == 0, result.stderr
+        ac_block = self._ac_block(_open_ticket(harness).read_text(encoding="utf-8"))
+        assert "- [ ] (fill in)" in ac_block
+
+    def test_mixed_bullets_and_prose(self, tmp_path):
+        """When bullets and prose are interleaved, only bullets become ACs;
+        prose paragraphs do not leak into the AC list."""
+        harness, sr_path = _setup(tmp_path)
+        self._make_sr(sr_path,
+                      "Here's what we should do:\n\n"
+                      "- Replace the cached value\n"
+                      "- Add a TTL guard\n\n"
+                      "This will let downstream callers stop polling.")
+        result = _run(harness, "myws/SR-001")
+        assert result.returncode == 0, result.stderr
+        ac_block = self._ac_block(_open_ticket(harness).read_text(encoding="utf-8"))
+        assert "- [ ] Replace the cached value" in ac_block
+        assert "- [ ] Add a TTL guard" in ac_block
+        # Prose lines must not be turned into ACs.
+        assert "Here's what we should do" not in ac_block
+        assert "This will let downstream callers" not in ac_block
+        assert "(fill in)" not in ac_block

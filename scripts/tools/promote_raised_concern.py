@@ -83,6 +83,33 @@ def _extract_body(text: str, sr_id: str, slug: str) -> str:
     return "\n".join(lines).strip()
 
 
+_BULLET_RE = re.compile(r"^\s*[-*]\s+(.+?)\s*$")
+_NUMBERED_RE = re.compile(r"^\s*\d+[.)]\s+(.+?)\s*$")
+
+
+def _extract_proposed_change_acs(text: str) -> list[str]:
+    """Return one AC text per bullet/numbered list item found inside the SR's
+    ## Proposed change section. Empty when the section is prose-only or absent;
+    create_ticket.py then keeps its default '- [ ] (fill in)' placeholder so
+    the operator hand-fills before closing (T127)."""
+    items: list[str] = []
+    in_section = False
+    for line in text.split("\n"):
+        stripped = line.strip()
+        is_h2 = stripped.startswith("## ") and not stripped.startswith("### ")
+        if stripped.lower() == "## proposed change":
+            in_section = True
+            continue
+        if in_section and is_h2:
+            break
+        if not in_section:
+            continue
+        m = _BULLET_RE.match(line) or _NUMBERED_RE.match(line)
+        if m:
+            items.append(m.group(1).strip())
+    return items
+
+
 def _stamp_source(ticket_path: Path, sr_ref: str) -> None:
     """Insert source: <sr_ref> into ticket frontmatter after closed: field."""
     text = ticket_path.read_text(encoding="utf-8")
@@ -190,16 +217,20 @@ def main() -> None:
     title = data.get("title", sr_id)
     severity = data.get("severity", "medium")
     body = _extract_body(text, sr_id, raw_slug)
+    acs = _extract_proposed_change_acs(text)
 
     # Create harness ticket via create_ticket.py
+    cmd = [
+        sys.executable,
+        str(_SCRIPTS_DIR / "create_ticket.py"),
+        title,
+        "--severity", severity,
+        "--layer", args.layer,
+    ]
+    for ac in acs:
+        cmd.extend(["--ac", ac])
     result = subprocess.run(
-        [
-            sys.executable,
-            str(_SCRIPTS_DIR / "create_ticket.py"),
-            title,
-            "--severity", severity,
-            "--layer", args.layer,
-        ],
+        cmd,
         capture_output=True, text=True,
         env={**os.environ, "HARNESS_ROOT": str(ROOT)},
     )
