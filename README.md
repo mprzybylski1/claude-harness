@@ -110,7 +110,7 @@ git clone https://github.com/<you>/<your-project> && cd <your-project>
 <summary><b>Graft onto an existing project</b></summary>
 
 ```bash
-git clone https://github.com/mprzybylski/claude-harness /tmp/claude-harness
+git clone https://github.com/mprzybylski1/claude-harness /tmp/claude-harness
 cd your-existing-project
 
 cp -r /tmp/claude-harness/.claude/skills    .claude/
