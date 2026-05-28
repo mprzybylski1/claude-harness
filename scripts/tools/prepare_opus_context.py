@@ -16,7 +16,8 @@ Reduces Opus tool calls by:
 
 IMPORTANT: The static analysis section is load-bearing for Opus invariant checks.
 The Opus review prompt instructs Opus to trust these results without re-reading source files.
-Do not modify the static-analysis check functions without updating tests/test_prepare_opus_context.py.
+Do not modify the static-analysis check functions without updating
+tests/test_prepare_opus_context_workspace.py and tests/test_prepare_opus_context_large_assets.py.
 
 Called from session-close skill Step 4.
 """
@@ -227,8 +228,8 @@ def _trim_sessions_md(content: str) -> str:
 
 # ── Individual static-analysis checks ────────────────────────────────────────
 # Each function takes a repo root Path, returns one PASS / WARN / FAIL / SKIP line.
-# Tests in tests/test_prepare_opus_context.py call these directly without running
-# the full context-builder.
+# Tests in tests/test_prepare_opus_context_workspace.py call these directly
+# without running the full context-builder.
 
 def _is_within_root(path: Path, root: Path) -> bool:
     """Return True if path resolves to a location inside root.
