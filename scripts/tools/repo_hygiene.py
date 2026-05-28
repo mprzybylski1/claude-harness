@@ -37,11 +37,6 @@ ALWAYS_SKIP = {
     "scripts/tools/repo_hygiene.py",
     # Virtual environment — never contains project stale refs
     "venv/",
-    # Research output files and backtest results — historical record, not operational
-    "research/results/",
-    "research/contexts/",
-    # Data files
-    "data/",
     # Logs
     "logs/",
 }
@@ -93,6 +88,33 @@ STALE_FILES = [
         "INFO",
         "docs/phase3_strategy_validation_checklist.md",
         "Phase 3 validation checklist — Phase 3 closed S114; consider archiving",
+    ),
+    # Trading-app migration artifacts — these top-level dirs belong to the
+    # source project, not the harness. Flag if any reappear.
+    (
+        "WARN",
+        "core/",
+        "Trading-app artifact directory at harness root — migration leftover; delete or move out of harness",
+    ),
+    (
+        "WARN",
+        "execution/",
+        "Trading-app artifact directory at harness root — migration leftover; delete or move out of harness",
+    ),
+    (
+        "WARN",
+        "data/",
+        "Trading-app artifact directory at harness root — migration leftover; delete or move out of harness",
+    ),
+    (
+        "WARN",
+        "strategies/",
+        "Trading-app artifact directory at harness root — migration leftover; delete or move out of harness",
+    ),
+    (
+        "WARN",
+        "risk_engine/",
+        "Trading-app artifact directory at harness root — migration leftover; delete or move out of harness",
     ),
 ]
 

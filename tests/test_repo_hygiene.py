@@ -56,3 +56,47 @@ class TestPytestCollectCheck:
         with mock.patch("subprocess.run", side_effect=FileNotFoundError("no pytest")):
             findings = mod.check_test_imports(tests_dir)
         assert findings == [], f"Expected no findings when pytest is missing, got: {findings}"
+
+
+class TestTradingAppArtifactGuards:
+    """T122: STALE_FILES flags trading-app artifact dirs that shouldn't appear in harness."""
+
+    def _load(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("repo_hygiene", HYGIENE)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_stale_files_lists_trading_app_artifact_dirs(self):
+        mod = self._load()
+        stale_paths = {entry[1].rstrip("/") for entry in mod.STALE_FILES}
+        for d in ("core", "execution", "data", "strategies", "risk_engine"):
+            assert d in stale_paths, (
+                f"Expected {d!r} in STALE_FILES — trading-app artifact dirs must "
+                f"trigger a WARN if reintroduced. Current entries: {sorted(stale_paths)}"
+            )
+
+    def test_trading_app_artifact_entries_are_warn_severity(self):
+        mod = self._load()
+        artifact_dirs = {"core", "execution", "data", "strategies", "risk_engine"}
+        for severity, path, _hint in mod.STALE_FILES:
+            if path.rstrip("/") in artifact_dirs:
+                assert severity == "WARN", \
+                    f"Trading-app artifact {path} should be WARN, got {severity}"
+
+    def test_always_skip_drops_dead_trading_app_entries(self):
+        """Skip-list entries that referenced trading-app paths are removed."""
+        mod = self._load()
+        for dead in ("data/", "research/results/", "research/contexts/"):
+            assert dead not in mod.ALWAYS_SKIP, (
+                f"{dead!r} should be removed from ALWAYS_SKIP — "
+                f"it was a trading-app migration leftover"
+            )
+
+    def test_real_harness_still_clean(self):
+        """The new STALE_FILES entries do not fire on the current harness."""
+        result = _run("--warn-only")
+        assert result.returncode == 0
+        assert "(repo hygiene clean" in result.stdout, \
+            f"Expected clean output, got:\n{result.stdout}"
