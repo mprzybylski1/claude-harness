@@ -109,7 +109,7 @@ Concrete cases this covers:
   staging (T125).
 - Workspace-scoped diff/context tools targeting a path outside the workspace's
   declared repos → reject via `workspace_config.assert_workspace_boundary`
-  (Invariant 5 below).
+  (see "Workspace isolation" below).
 
 **Why:** Silent defaults caused workspace SRs to ship with harness session numbers
 (pre-T116) and risked cross-repo staged commits (pre-T125). The cost of a wrong

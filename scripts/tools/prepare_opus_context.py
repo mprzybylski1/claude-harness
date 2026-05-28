@@ -235,7 +235,7 @@ def _is_within_root(path: Path, root: Path) -> bool:
 
     Symlinks are resolved before the check so that a symlink inside root that
     points outside (e.g. tests/test_evil.py -> /tmp/outside/evil.py) is
-    detected and can be skipped — enforcing Invariant 5 (workspace isolation)
+    detected and can be skipped — enforcing the Workspace Isolation invariant
     inside individual check functions (T044).
     """
     try:
@@ -248,8 +248,8 @@ def _is_within_root(path: Path, root: Path) -> bool:
 def check_test_syntax(root: Path) -> str:
     """1. Compile every test_*.py — catches SyntaxErrors before Opus review.
 
-    Symlinks that resolve outside root are skipped to enforce Invariant 5
-    (workspace isolation). Only files whose resolved path is under root are
+    Symlinks that resolve outside root are skipped to enforce the Workspace
+    Isolation invariant. Only files whose resolved path is under root are
     passed to py_compile (T044).
     """
     tests_dir = root / "tests"

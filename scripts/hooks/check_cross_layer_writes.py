@@ -12,7 +12,7 @@ Blocks:
       docs/tickets/  docs/sessions.md  docs/opus_notes.md
       docs/architecture_invariants.md
   - Workspace session writing to a DIFFERENT workspace's internal/
-      (Invariant 5 — workspace isolation)
+      (Workspace Isolation invariant)
   - Harness-root session writing to any workspaces/*/internal/
   - Undeclared session writing to any protected zone above
 
@@ -154,7 +154,7 @@ def main() -> None:
         _block(
             f"workspace session '{workspace_slug}' may not write to other workspace "
             f"'{target_slug}' internal path '{resolved}'. Cross-workspace writes "
-            f"violate Invariant 5 (workspace isolation)."
+            f"violate the Workspace Isolation invariant."
         )
 
     sys.exit(0)

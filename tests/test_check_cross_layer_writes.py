@@ -137,7 +137,7 @@ class TestCrossLayerWrites:
 
 
 class TestCrossWorkspaceWrites:
-    """T115: workspace A may not write to workspace B's internal/ (Invariant 5)."""
+    """T115: workspace A may not write to workspace B's internal/ (Workspace Isolation invariant)."""
 
     def test_cross_workspace_internal_write_blocked(self, tmp_path):
         harness = _setup(tmp_path, workspace_slug="ws-a")
