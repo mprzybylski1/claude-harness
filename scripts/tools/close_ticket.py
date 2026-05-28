@@ -477,6 +477,8 @@ def main() -> None:
                         help="Code/test files to stage together with the archive move")
     parser.add_argument("--path-only", action="store_true",
                         help="Print the ticket file path and exit; no other action taken")
+    parser.add_argument("--ignore-missing-sr", action="store_true",
+                        help="Close even if the source: SR file is missing (manual override)")
     args = parser.parse_args()
 
     ticket_id = args.ticket_id.upper()
@@ -494,7 +496,7 @@ def main() -> None:
     ticket_path, internal = _find_ticket(ticket_id, args.workspace)
     content = ticket_path.read_text(encoding="utf-8")
 
-    # Locate source SR now so we can warn early if it's missing
+    # Locate source SR now; fail closed if it's missing (override with --ignore-missing-sr)
     sr_source_path: Path | None = None
     source_info = _parse_source(content)
     if source_info:
@@ -504,11 +506,28 @@ def main() -> None:
         if len(matches) == 1:
             sr_source_path = matches[0]
         else:
-            print(
-                f"WARNING: ticket has source: {slug}/{sr_id} but SR file not found — "
-                f"update {raised_dir / f'{sr_id}-*.md'} manually.",
-                file=sys.stderr,
-            )
+            search_path = raised_dir / f"{sr_id}-*.md"
+            if args.ignore_missing_sr:
+                print(
+                    f"WARNING: source: {slug}/{sr_id} not found at {search_path} "
+                    f"(closing anyway due to --ignore-missing-sr)",
+                    file=sys.stderr,
+                )
+            else:
+                detail = (
+                    f"found {len(matches)} matches" if matches
+                    else "no matching file"
+                )
+                print(
+                    f"ERROR: ticket has source: {slug}/{sr_id} but SR file not found "
+                    f"at {search_path} ({detail}).\n"
+                    f"  - If the SR was manually archived or the workspace renamed, "
+                    f"re-run with --ignore-missing-sr.\n"
+                    f"  - Otherwise, fix the source: field in the ticket or restore "
+                    f"the SR file before closing.",
+                    file=sys.stderr,
+                )
+                sys.exit(2)
 
     # Resolution text
     if args.resolution_file:

@@ -201,13 +201,34 @@ class TestCloseTicketSourceSR:
         assert not (tmp_path / "workspaces").exists() or \
                not (tmp_path / "workspaces" / "myws").exists()
 
-    def test_missing_sr_file_warns_but_closes(self, tmp_path):
-        """If the source SR file is missing, ticket still closes with a warning."""
+    def test_missing_sr_file_blocks_close_by_default(self, tmp_path):
+        """T120: missing source SR file blocks close (exit 2) by default."""
         _setup(tmp_path, with_sr=False)
         result = _run(tmp_path, "T999", "--resolution", "Done.", "--tick-acs")
+        assert result.returncode == 2, result.stderr
+        assert "SR" in result.stderr
+        # Ticket NOT moved to archive
+        assert not (tmp_path / "docs" / "archive" / "T999-synthetic-source-ticket.md").exists()
+        assert (tmp_path / "docs" / "tickets" / "open" / "T999-synthetic-source-ticket.md").exists()
+
+    def test_missing_sr_file_message_includes_sr_path(self, tmp_path):
+        """T120: error message includes the path that was searched."""
+        _setup(tmp_path, with_sr=False)
+        result = _run(tmp_path, "T999", "--resolution", "Done.", "--tick-acs")
+        assert result.returncode == 2
+        # Path should reference the workspace raised/ dir and SR-001
+        assert "myws" in result.stderr
+        assert "SR-001" in result.stderr
+        assert "--ignore-missing-sr" in result.stderr
+
+    def test_ignore_missing_sr_flag_allows_close(self, tmp_path):
+        """T120: --ignore-missing-sr allows close to proceed when SR file absent."""
+        _setup(tmp_path, with_sr=False)
+        result = _run(
+            tmp_path, "T999", "--resolution", "Done.",
+            "--tick-acs", "--ignore-missing-sr",
+        )
         assert result.returncode == 0, result.stderr
-        assert "WARNING" in result.stderr
-        # Ticket is still closed (moved to archive)
         assert (tmp_path / "docs" / "archive" / "T999-synthetic-source-ticket.md").exists()
 
     def test_sr_resolved_in_inserted_when_field_absent(self, tmp_path):
