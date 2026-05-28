@@ -160,3 +160,57 @@ class TestListRaisedConcerns:
         result = _run(harness)
         assert result.returncode == 0, result.stderr
         assert "promote" not in result.stdout.lower()
+
+
+class TestUnparseableSurface:
+    """T130: SRs with malformed YAML frontmatter must be surfaced in stdout,
+    not silently skipped."""
+
+    def _make_bad_sr(self, raised_dir: Path, sr_id: str) -> Path:
+        """Write an SR with malformed YAML frontmatter (unquoted colon in title)."""
+        raised_dir.mkdir(parents=True, exist_ok=True)
+        (raised_dir / "archive").mkdir(exist_ok=True)
+        dest = raised_dir / f"{sr_id}-bad.md"
+        # Two colons on the title line — yaml.safe_load will fail.
+        dest.write_text(
+            f"---\nid: {sr_id}\nfrom: myws\nraised: S1 2026-05-28\n"
+            f"title: foo: bar: baz\nseverity: high\nstatus: raised\n"
+            f"harness_ticket:\n---\n\n## Context\n\nx\n",
+            encoding="utf-8",
+        )
+        return dest
+
+    def test_unparseable_sr_appears_in_dedicated_section(self, tmp_path):
+        """Malformed-frontmatter SR is surfaced under an 'unparseable' section
+        with its file path, instead of being silently dropped."""
+        harness = _setup(tmp_path)
+        bad = self._make_bad_sr(harness / "workspaces" / "myws" / "raised", "SR-099")
+        result = _run(harness)
+        assert result.returncode == 0, result.stderr
+        assert "unparseable" in result.stdout.lower(), (
+            f"expected 'unparseable' header, got: {result.stdout!r}"
+        )
+        assert str(bad) in result.stdout or bad.name in result.stdout, (
+            f"expected path to bad SR in stdout, got: {result.stdout!r}"
+        )
+
+    def test_unparseable_section_omitted_when_no_bad_files(self, tmp_path):
+        """No 'unparseable' header when all SRs parse cleanly."""
+        harness = _setup(tmp_path)
+        _make_sr(harness / "workspaces" / "myws" / "raised",
+                 "SR-001", "myws", "Clean concern")
+        result = _run(harness)
+        assert result.returncode == 0, result.stderr
+        assert "unparseable" not in result.stdout.lower()
+
+    def test_unparseable_does_not_block_clean_items(self, tmp_path):
+        """A bad SR coexists with a clean SR; both are surfaced."""
+        harness = _setup(tmp_path)
+        raised = harness / "workspaces" / "myws" / "raised"
+        _make_sr(raised, "SR-001", "myws", "Clean one", severity="medium")
+        self._make_bad_sr(raised, "SR-099")
+        result = _run(harness)
+        assert result.returncode == 0, result.stderr
+        assert "Clean one" in result.stdout
+        assert "unparseable" in result.stdout.lower()
+        assert "SR-099" in result.stdout

@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S23 2026-05-28. 3 open tickets.
+Generated S23 2026-05-28. 2 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -18,11 +18,9 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 | T127 | promote_raised_concern.py: carry SR Proposed change bullets into harness ticket ACs | Ph2 | tooling | 1 session |
 | T128 | Consolidate _current_session + _workspace_sessions_md into shared session_lookup module | Ph2 | tooling | 1 session |
 
-## Low (1)
+## Low (0)
 
-| ID | Title | Phase | Layer | Age |
-|----|-------|-------|-------|-----|
-| T130 | list_raised_concerns.py: surface unparseable SRs instead of silently skipping | Ph2 | tooling | 1 session |
+*(none)*
 
 ## Unknown (0)
 

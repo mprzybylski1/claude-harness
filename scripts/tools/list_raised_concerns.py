@@ -23,8 +23,11 @@ _ACTIVE_STATUSES = {"raised", "promoted"}
 _SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 
 
-def _parse_frontmatter(path: Path) -> dict:
-    """Return YAML frontmatter fields as a dict, or {} on any parse error."""
+def _parse_frontmatter(path: Path) -> dict | None:
+    """Return frontmatter dict, {} when no frontmatter is present, or None on
+    a YAML parse error. The None vs {} distinction lets main() bucket truly
+    malformed SRs into a dedicated 'unparseable' section instead of dropping
+    them silently (T130)."""
     try:
         text = path.read_text(encoding="utf-8")
     except OSError:
@@ -35,9 +38,9 @@ def _parse_frontmatter(path: Path) -> dict:
     import yaml
     try:
         data = yaml.safe_load(parts[1]) or {}
-    except yaml.YAMLError:
-        print(f"WARNING: could not parse frontmatter in {path} — skipping", file=sys.stderr)
-        return {}
+    except yaml.YAMLError as exc:
+        print(f"WARNING: could not parse frontmatter in {path}: {exc}", file=sys.stderr)
+        return None
     return data if isinstance(data, dict) else {}
 
 
@@ -50,8 +53,9 @@ def main() -> None:
     if not ws_base.is_dir():
         return
 
-    # Collect: {slug: [item_dict, ...]}
+    # Collect: {slug: [item_dict, ...]} and a flat list of unparseable paths.
     by_workspace: dict[str, list[dict]] = {}
+    unparseable: list[Path] = []
 
     for ws_dir in sorted(ws_base.iterdir()):
         if not ws_dir.is_dir():
@@ -61,8 +65,11 @@ def main() -> None:
             continue
         slug = ws_dir.name
         items: list[dict] = []
-        for md in raised_dir.glob("*.md"):
+        for md in sorted(raised_dir.glob("*.md")):
             data = _parse_frontmatter(md)
+            if data is None:
+                unparseable.append(md)
+                continue
             if not data:
                 continue
             if data.get("status") not in _ACTIVE_STATUSES:
@@ -72,25 +79,35 @@ def main() -> None:
             items.sort(key=_severity_key)
             by_workspace[slug] = items
 
-    if not by_workspace:
+    if not by_workspace and not unparseable:
         return
 
-    lines: list[str] = ["Pending raised concerns:", ""]
-    for slug, items in by_workspace.items():
-        lines.append(f"  {slug}:")
-        for item in items:
-            sr_id = item.get("id", "SR-???")
-            severity = item.get("severity", "?")
-            title = item.get("title", "(no title)")
-            status = item.get("status", "?")
-            harness_ticket = item.get("harness_ticket") or ""
-            suffix = f" → {harness_ticket}" if harness_ticket else ""
-            lines.append(f"    {sr_id} ({severity}) — {title} [{status}{suffix}]")
+    lines: list[str] = []
+    if by_workspace:
+        lines.extend(["Pending raised concerns:", ""])
+        for slug, items in by_workspace.items():
+            lines.append(f"  {slug}:")
+            for item in items:
+                sr_id = item.get("id", "SR-???")
+                severity = item.get("severity", "?")
+                title = item.get("title", "(no title)")
+                status = item.get("status", "?")
+                harness_ticket = item.get("harness_ticket") or ""
+                suffix = f" → {harness_ticket}" if harness_ticket else ""
+                lines.append(f"    {sr_id} ({severity}) — {title} [{status}{suffix}]")
+            lines.append("")
+
+    if unparseable:
+        lines.append("Pending raised concerns (unparseable — review manually):")
+        lines.append("")
+        for p in unparseable:
+            lines.append(f"  {p}")
         lines.append("")
 
-    lines.append("Triage:")
-    lines.append("  promote: python scripts/tools/promote_raised_concern.py <slug>/SR-NNN")
-    lines.append("  reject:  python scripts/tools/reject_raised_concern.py <slug>/SR-NNN --reason \"...\"")
+    if by_workspace:
+        lines.append("Triage:")
+        lines.append("  promote: python scripts/tools/promote_raised_concern.py <slug>/SR-NNN")
+        lines.append("  reject:  python scripts/tools/reject_raised_concern.py <slug>/SR-NNN --reason \"...\"")
 
     print("\n".join(lines))
 
