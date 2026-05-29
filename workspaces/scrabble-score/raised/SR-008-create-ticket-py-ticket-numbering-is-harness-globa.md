@@ -56,6 +56,32 @@ T-number consumer share the same global-scan assumption and need the same fix.
 Verification after change: `create_ticket.py --workspace scrabble-score <title>`
 should yield T019 (next after T018), not a harness-global number.
 
+### Sibling fix: `generate_ticket_index.py` is workspace-blind in the same way
+
+Surfaced in the same session while regenerating the workspace INDEX after the
+T135 → T019 rename. `generate_ticket_index.py` accepts `--tickets-dir`,
+`--output`, and `--sessions-file` as three independent path flags but has **no
+`--workspace SLUG` shortcut**. The workspace-internal regen therefore requires
+three absolute paths constructed by hand:
+
+```
+python scripts/tools/generate_ticket_index.py \
+  --tickets-dir <ws-internal>/tickets \
+  --output     <ws-internal>/tickets/INDEX.md \
+  --sessions-file <ws-internal>/sessions.md
+```
+
+Proposed: add `--workspace SLUG` to `generate_ticket_index.py` mirroring the
+`create_ticket.py` fix above. When `--workspace` is given, the three paths
+resolve from `workspace_internal_path.py` and the other three flags become
+optional overrides. This is a one-flag UX change in the same script family;
+ideally lands in the same harness ticket promoted from this SR so the
+"workspace-blind tooling" sweep is coherent.
+
+Note for harness disposition: a `regenerate_ticket_index.py` hook already
+exists in `scripts/hooks/` — check whether it is also workspace-blind (it
+likely is) and fix it in the same pass.
+
 ## Harness disposition
 
 (Filled by harness on promotion or rejection.)

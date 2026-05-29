@@ -83,3 +83,12 @@ scale.
 
 Example: S9 / T018 — workspace CLAUDE.md edit committed to harness as
 `5f36dbc`, archive move committed to scrabble as `3c24ca5`.
+
+The same pattern applies when a workspace ticket-close also **raises a new
+SR** in `workspaces/<slug>/raised/`. The SR file lives in the harness repo,
+so it needs its own commit there before `close_ticket.py` runs in the
+workspace repo — `close_ticket.py --files` will not stage it. Without this,
+the SR sits dangling and untracked until the next harness-root session.
+
+Example: S11 / T019 — SR-008 committed to harness as `0392ea6`, ticket
+archive move + code/test changes committed to scrabble as `35e6a89`.
