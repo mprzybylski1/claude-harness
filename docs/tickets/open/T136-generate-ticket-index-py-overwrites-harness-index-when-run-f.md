@@ -54,12 +54,23 @@ or `None`, rather than each script re-deriving (or ignoring) workspace scope.
 Part of the workspace-blind tooling sweep (SR-007 family): **T135 (SR-008) →
 T136 (SR-009) → T137 (SR-010)**, triaged S24 as "3 tickets, helper-first".
 
-- **Depends on T135's `workspace_context.py` helper.** Consume the shared
-  resolver rather than re-deriving workspace scope from `.claude/.active_workspace`.
-- **Shares `generate_ticket_index.py` with T135.** T135's SR-008 sibling fix
-  adds `--workspace SLUG` to this same script. Coordinate so only one ticket
-  edits `generate_ticket_index.py` (and the `regenerate_ticket_index.py` hook);
-  the other references that change. Avoid two independent edits to the script.
+- **Shared workspace resolver deferred from T135 to here (S25).** T135 closed
+  without building it — T135 had no consumer (it gets the slug from explicit
+  `--workspace` and reuses `_resolve_internal`). T136 is the first real consumer,
+  so build the `.active_workspace`-based resolver here and design its interface
+  against this ticket's actual need. **Extend `workspace_config.py`** (which
+  already has `active_workspace_dir`/`internal_dir`/`list_active_workspaces`) with
+  an `.active_workspace`-reading resolver — do NOT spawn a parallel
+  `workspace_context.py` module (a second overlapping module is its own divergence,
+  which is the very thing the coordination note wanted to avoid).
+- **`generate_ticket_index.py --workspace SLUG` sibling fix also deferred from
+  T135 to here (S25).** T136 *is* `generate_ticket_index`, so the `--workspace`
+  flag is its natural home. T135 did not touch the script.
+- **The `regenerate_ticket_index.py` hook is NOT workspace-blind** (S25 finding):
+  it already routes by the written file's path via `_detect_workspace_from_path`
+  and writes the correct workspace/harness INDEX. The SR's guess that the hook
+  "likely is" workspace-blind is wrong — don't re-investigate that. (The hook's
+  *output instability* in the Field-evidence section below is a separate defect.)
 
 ## Field evidence (S24)
 

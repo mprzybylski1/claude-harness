@@ -2,12 +2,12 @@
 id: T135
 title: create_ticket.py: ticket numbering is harness-global, not workspace-local
 severity: medium
-status: open
+status: closed
 phase: 2
 layer: tooling
 # repo: <name from workspace.yaml repos list>
 opened: S24 2026-05-30
-closed:
+closed: S25 2026-05-30
 source: scrabble-score/SR-008
 ---
 
@@ -89,8 +89,8 @@ exists in `scripts/hooks/` — check whether it is also workspace-blind (it
 likely is) and fix it in the same pass.
 ## Acceptance Criteria
 
-- [ ] When `--workspace SLUG` is given, scan **only** that workspace's
-- [ ] When no workspace is given (harness-root ticket), scan **only** the harness
+- [x] When `--workspace SLUG` is given, scan **only** that workspace's tickets/{open,closed} + archive — `_next_id(internal)` scopes the scan to the workspace's own layer. Verified: `--workspace scrabble-score` → T027 (its own next), not a harness-global number.
+- [x] When no workspace is given (harness-root ticket), scan **only** the harness docs/tickets/{open,closed} + docs/archive — `_next_id(None)` → T140.
 
 ## Coordination
 
@@ -110,4 +110,41 @@ T136 (SR-009) → T137 (SR-010)**, triaged S24 as "3 tickets, helper-first".
   tickets edit that script independently.
 
 ## Resolution
-(Fill in on close.)
+Scoped `create_ticket._next_id()` to the target layer. It now takes the resolved
+`internal` dir (None for harness) and scans only that layer:
+- harness: docs/tickets/{open,closed} + docs/archive
+- workspace: <internal>/tickets/{open,closed} + <internal>/archive
+The previous global scan (harness + every workspace, max+1) is gone, so a
+workspace ticket continues its own sequence. Verified against live data:
+`--workspace scrabble-score` → T027 (workspace max T026), harness → T140. The
+scan also now includes the workspace's own tickets/closed/, which the original
+workspace scan omitted (it only looked at open + archive).
+
+Scope decisions (deferred deliberately, with trail — see T136):
+- Shared workspace resolver NOT built here. T135 has no consumer: it gets the
+  slug from explicit --workspace and reuses _resolve_internal, so building a
+  `.active_workspace`-based resolver now would mean designing an interface with
+  no caller to validate it. Deferred to T136 (its first real consumer), and the
+  resolver should EXTEND workspace_config.py rather than spawn a parallel
+  workspace_context.py module (a second overlapping module is its own divergence).
+  Noted in T136.
+- `generate_ticket_index.py --workspace SLUG` sibling fix NOT done here. It is
+  prose in this SR, not a T135 AC, and T136 *is* generate_ticket_index — its
+  natural home. Deferred to T136. (The coordination note's "check whether the
+  regenerate_ticket_index.py hook is also workspace-blind" — it is NOT: the hook
+  already routes by the written file's path via _detect_workspace_from_path.
+  Recorded so T136 doesn't re-investigate.)
+
+Cross-layer ID collision (now reachable for new tickets, e.g. a future workspace
+starting at T001 vs harness legacy T001): close_ticket.py fails closed — _find_ticket
+collects all matches across layers and exits demanding --workspace when >1 OPEN
+ticket shares a bare ID. It does not silently grab the wrong layer. The --workspace
+disambiguator is real and functional. Not a regression; the duplication already
+exists historically (scrabble T001-T026 mirror harness T001-T026) — this fix only
+makes numbering consistent with that per-layer reality.
+
+Files: scripts/tools/create_ticket.py, tests/test_create_ticket.py (+3 tests:
+both isolation directions + workspace closed-dir inclusion). 15 create_ticket
+tests + 472 suite tests pass.
+
+Closed S25 2026-05-30.

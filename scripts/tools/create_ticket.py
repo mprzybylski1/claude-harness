@@ -7,8 +7,9 @@ Usage:
     create_ticket.py "Title here" --severity medium --ac "AC one" --ac "AC two"
     create_ticket.py "Title here" --workspace scrabble-score
 
-The script auto-picks the next T-number by scanning all open/ and archive/
-directories (harness root + workspaces), writes the file, and regenerates INDEX.md.
+The script auto-picks the next T-number scoped to the target layer (the chosen
+workspace's own sequence, or the harness sequence when no --workspace is given),
+writes the file, and regenerates INDEX.md.
 """
 from __future__ import annotations
 
@@ -39,22 +40,33 @@ def _docs_paths(ws_dir: Path) -> list[Path]:
     return [p] if p.is_dir() else []
 
 
-def _next_id() -> str:
-    """Return the next available T-number by scanning all ticket locations."""
-    max_n = 0
-    scan_dirs: list[Path] = [
-        ROOT / "docs" / "tickets" / "open",
-        ROOT / "docs" / "tickets" / "closed",
-        ROOT / "docs" / "archive",
-    ]
-    ws_base = ROOT / "workspaces"
-    if ws_base.is_dir():
-        for ws_dir in ws_base.iterdir():
-            if not ws_dir.is_dir():
-                continue
-            for internal in [ws_dir / "internal", *_docs_paths(ws_dir)]:
-                scan_dirs += [internal / "tickets" / "open", internal / "archive"]
+def _next_id(internal: Path | None) -> str:
+    """Return the next T-number scoped to the target layer ONLY.
 
+    The counter is per-layer: a workspace ticket continues that workspace's own
+    sequence, and a harness ticket continues the harness sequence — neither sees
+    the other (T135 / SR-008). Mixing them produced harness-global numbers for
+    workspace tickets (e.g. a workspace at T018 getting T135), breaking the
+    "T-number = this layer's Nth ticket" model. This mirrors how
+    current_session.py --sessions PATH scopes the session counter per layer.
+
+    internal=None  → harness layer (docs/tickets/{open,closed} + docs/archive)
+    internal=<dir> → that workspace's layer (tickets/{open,closed} + archive)
+    """
+    if internal is not None:
+        scan_dirs = [
+            internal / "tickets" / "open",
+            internal / "tickets" / "closed",
+            internal / "archive",
+        ]
+    else:
+        scan_dirs = [
+            ROOT / "docs" / "tickets" / "open",
+            ROOT / "docs" / "tickets" / "closed",
+            ROOT / "docs" / "archive",
+        ]
+
+    max_n = 0
     for d in scan_dirs:
         if not d.is_dir():
             continue
@@ -176,7 +188,7 @@ def main() -> None:
 
     _MAX_RETRIES = 10
     for attempt in range(_MAX_RETRIES):
-        ticket_id = _next_id()
+        ticket_id = _next_id(internal)
         dest = open_dir / f"{ticket_id}-{slug}.md"
         content = _TEMPLATE.format(
             ticket_id=ticket_id,

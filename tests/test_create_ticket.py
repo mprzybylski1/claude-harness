@@ -163,3 +163,72 @@ class TestCreateTicket:
         content = Path(result.stdout.strip()).read_text(encoding="utf-8")
         assert "repo: myrepo" not in content
         assert "# repo:" in content
+
+
+def _add_workspace(harness: Path, slug: str = "myws") -> Path:
+    """Create a workspace skeleton under harness. Returns its internal dir."""
+    ws = harness / "workspaces" / slug
+    internal = ws / "internal"
+    (internal / "tickets" / "open").mkdir(parents=True)
+    (internal / "tickets" / "closed").mkdir(parents=True)
+    (internal / "archive").mkdir(parents=True)
+    (internal / "tickets" / "INDEX.md").write_text("# Index\n", encoding="utf-8")
+    (internal / "sessions.md").write_text(
+        "## Session Log\n\nS1 2026-01-01: init\n", encoding="utf-8"
+    )
+    ws.joinpath("workspace.yaml").write_text(f"name: {slug}\n", encoding="utf-8")
+    return internal
+
+
+class TestPerLayerNumbering:
+    """T135: the T-number counter is scoped to the target layer, not global.
+
+    Previously _next_id() scanned harness + every workspace and returned the
+    global max+1, so a workspace whose own tickets were T001-T018 got the next
+    harness number (T135). The --workspace flag routed only the destination dir.
+    """
+
+    def test_workspace_numbering_ignores_harness(self, tmp_path):
+        # harness up to T100; workspace's own max is T005 → workspace yields T006.
+        harness = _setup(tmp_path)
+        (harness / "docs" / "archive" / "T100-harness.md").write_text(
+            "---\nid: T100\n---\n", encoding="utf-8"
+        )
+        internal = _add_workspace(harness)
+        (internal / "tickets" / "open" / "T005-ws.md").write_text(
+            "---\nid: T005\n---\n", encoding="utf-8"
+        )
+        result = _run(harness, "Workspace-scoped number", "--workspace", "myws")
+        assert result.returncode == 0, result.stderr
+        content = Path(result.stdout.strip()).read_text(encoding="utf-8")
+        assert "id: T006" in content, content
+        assert "id: T101" not in content
+
+    def test_harness_numbering_ignores_workspace(self, tmp_path):
+        # workspace has a high T200; harness's own max is T003 → harness yields T004.
+        harness = _setup(tmp_path)
+        (harness / "docs" / "archive" / "T003-harness.md").write_text(
+            "---\nid: T003\n---\n", encoding="utf-8"
+        )
+        internal = _add_workspace(harness)
+        (internal / "archive" / "T200-ws.md").write_text(
+            "---\nid: T200\n---\n", encoding="utf-8"
+        )
+        result = _run(harness, "Harness-scoped number")  # no --workspace
+        assert result.returncode == 0, result.stderr
+        content = Path(result.stdout.strip()).read_text(encoding="utf-8")
+        assert "id: T004" in content, content
+        assert "id: T201" not in content
+
+    def test_workspace_scan_includes_its_closed_dir(self, tmp_path):
+        # The workspace's own tickets/closed/ must count (the original scan
+        # omitted it, scanning only open + archive).
+        harness = _setup(tmp_path)
+        internal = _add_workspace(harness)
+        (internal / "tickets" / "closed" / "T050-ws.md").write_text(
+            "---\nid: T050\n---\n", encoding="utf-8"
+        )
+        result = _run(harness, "After closed ticket", "--workspace", "myws")
+        assert result.returncode == 0, result.stderr
+        content = Path(result.stdout.strip()).read_text(encoding="utf-8")
+        assert "id: T051" in content, content

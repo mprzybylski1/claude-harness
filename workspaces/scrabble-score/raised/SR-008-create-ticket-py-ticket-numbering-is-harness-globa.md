@@ -4,9 +4,9 @@ from: scrabble-score
 raised: S11 2026-05-29
 title: "create_ticket.py: ticket numbering is harness-global, not workspace-local"
 severity: medium
-status: promoted
+status: resolved
 harness_ticket: T135
-resolved_in:
+resolved_in: S25
 ---
 
 ## Context
