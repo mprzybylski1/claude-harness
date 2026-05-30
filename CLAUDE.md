@@ -82,17 +82,26 @@ absolute main-repo paths.
 
 ### Hook paths in `.claude/settings.json`
 
-Hook commands use `$(git rev-parse --show-toplevel)` to locate the harness root at
-runtime, making the config portable across machines:
+Hook commands locate the harness root via `$CLAUDE_PROJECT_DIR` and dispatch through
+`scripts/hooks/run_hook.sh`:
 
 ```
-bash -c 'python3 "$(git rev-parse --show-toplevel)/scripts/hooks/<name>.py"'
+bash -c 'H="$CLAUDE_PROJECT_DIR/scripts/hooks/run_hook.sh"; [ -f "$H" ] && exec bash "$H" <name> || exit 0'
 ```
 
-`$CLAUDE_PROJECT_DIR` was empty in the hook subshell (diagnosed S3 2026-05-26), so we
-avoid it. The `$(...)` is inside single quotes, which prevents the outer shell from
-expanding it; `bash -c` then runs the string in a fresh shell where the substitution
-is evaluated correctly.
+**Do not use `$(git rev-parse --show-toplevel)` here.** That resolves against the
+session cwd, which drifts when a Bash command does `cd` into another git repo (e.g. a
+workspace repo). The old form caused SR-011/T138: a wedged cwd made `git rev-parse`
+find a repo with no harness hooks → `python3: can't open file` → exit 2 → PreToolUse
+fail-closed-blocked *every* tool (hard deadlock). `$CLAUDE_PROJECT_DIR` is set in every
+hook process and stays **fixed for the session** — it does not drift with `cd`.
+(The S3 2026-05-26 note that it was "empty in the hook subshell" is stale; verified
+present and correct on Claude Code 2.1.158, T138.)
+
+`run_hook.sh` re-derives the hooks dir from its own `$0` and **fails open** (exit 0)
+when the named script is missing, so a resolution accident can never deadlock the
+session. `exec` ensures a hook's deliberate `exit 2` (a real block) propagates to
+Claude Code and is not masked by the trailing `|| exit 0`. See T138.
 
 ---
 

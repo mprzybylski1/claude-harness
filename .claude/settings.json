@@ -22,7 +22,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'python3 \"$(git rev-parse --show-toplevel)/scripts/hooks/check_ticket_acs.py\"'"
+            "command": "bash -c 'H=\"$CLAUDE_PROJECT_DIR/scripts/hooks/run_hook.sh\"; [ -f \"$H\" ] && exec bash \"$H\" check_ticket_acs || exit 0'"
           }
         ]
       },
@@ -31,7 +31,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'python3 \"$(git rev-parse --show-toplevel)/scripts/hooks/check_cross_layer_writes.py\"'"
+            "command": "bash -c 'H=\"$CLAUDE_PROJECT_DIR/scripts/hooks/run_hook.sh\"; [ -f \"$H\" ] && exec bash \"$H\" check_cross_layer_writes || exit 0'"
           }
         ]
       },
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'python3 \"$(git rev-parse --show-toplevel)/scripts/hooks/check_fix_commit_has_code.py\"'"
+            "command": "bash -c 'H=\"$CLAUDE_PROJECT_DIR/scripts/hooks/run_hook.sh\"; [ -f \"$H\" ] && exec bash \"$H\" check_fix_commit_has_code || exit 0'"
           }
         ]
       }
@@ -51,11 +51,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'python3 \"$(git rev-parse --show-toplevel)/scripts/hooks/regenerate_ticket_index.py\"'"
+            "command": "bash -c 'H=\"$CLAUDE_PROJECT_DIR/scripts/hooks/run_hook.sh\"; [ -f \"$H\" ] && exec bash \"$H\" regenerate_ticket_index || exit 0'"
           },
           {
             "type": "command",
-            "command": "bash -c 'python3 \"$(git rev-parse --show-toplevel)/scripts/hooks/check_skill_bash_blocks_hook.py\"'"
+            "command": "bash -c 'H=\"$CLAUDE_PROJECT_DIR/scripts/hooks/run_hook.sh\"; [ -f \"$H\" ] && exec bash \"$H\" check_skill_bash_blocks_hook || exit 0'"
           }
         ]
       },
@@ -64,7 +64,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'python3 \"$(git rev-parse --show-toplevel)/scripts/hooks/log_tool_usage.py\"'"
+            "command": "bash -c 'H=\"$CLAUDE_PROJECT_DIR/scripts/hooks/run_hook.sh\"; [ -f \"$H\" ] && exec bash \"$H\" log_tool_usage || exit 0'"
           }
         ]
       }
@@ -74,7 +74,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'python3 \"$(git rev-parse --show-toplevel)/scripts/hooks/check_session_log.py\"'"
+            "command": "bash -c 'H=\"$CLAUDE_PROJECT_DIR/scripts/hooks/run_hook.sh\"; [ -f \"$H\" ] && exec bash \"$H\" check_session_log || exit 0'"
           }
         ]
       }

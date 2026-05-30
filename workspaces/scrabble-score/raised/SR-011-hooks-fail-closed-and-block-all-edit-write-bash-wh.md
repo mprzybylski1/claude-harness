@@ -4,9 +4,9 @@ from: scrabble-score
 raised: S13 2026-05-30
 title: Hooks fail-closed and block ALL Edit/Write/Bash when session cwd moves into a workspace repo
 severity: high
-status: raised
-harness_ticket:
-resolved_in:
+status: resolved
+harness_ticket: T138
+resolved_in: S25
 ---
 
 ## Context
@@ -51,4 +51,13 @@ session, not last-logged+1.
 
 ## Harness disposition
 
-(Filled by harness on promotion or rejection.)
+Promoted → T138 (S25 2026-05-30); fixed same session.
+
+Primary deadlock fixed: hook commands no longer use `$(git rev-parse --show-toplevel)`.
+They resolve the harness root via `$CLAUDE_PROJECT_DIR` (set in every hook process,
+fixed for the session — verified present on Claude Code 2.1.158, contradicting the
+stale S3 note) and dispatch through `scripts/hooks/run_hook.sh`, which fails open
+(exit 0) if a script can't be found. A cwd accident can no longer hard-deadlock the
+session. Goes live next session start (hook config is snapshotted at start).
+
+Secondary (session-stamping last-logged+1, the S13→S14 mis-stamp) → split to T139.
