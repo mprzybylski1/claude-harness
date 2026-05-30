@@ -1,13 +1,19 @@
 ---
-id: SR-008
-from: scrabble-score
-raised: S11 2026-05-29
-title: "create_ticket.py: ticket numbering is harness-global, not workspace-local"
+id: T135
+title: create_ticket.py: ticket numbering is harness-global, not workspace-local
 severity: medium
-status: promoted
-harness_ticket: T135
-resolved_in:
+status: open
+phase: 2
+layer: tooling
+# repo: <name from workspace.yaml repos list>
+opened: S24 2026-05-30
+closed:
+source: scrabble-score/SR-008
 ---
+
+## Problem
+
+Promoted from scrabble-score/SR-008.
 
 ## Context
 
@@ -81,7 +87,27 @@ ideally lands in the same harness ticket promoted from this SR so the
 Note for harness disposition: a `regenerate_ticket_index.py` hook already
 exists in `scripts/hooks/` — check whether it is also workspace-blind (it
 likely is) and fix it in the same pass.
+## Acceptance Criteria
 
-## Harness disposition
+- [ ] When `--workspace SLUG` is given, scan **only** that workspace's
+- [ ] When no workspace is given (harness-root ticket), scan **only** the harness
 
-(Filled by harness on promotion or rejection.)
+## Coordination
+
+Part of the workspace-blind tooling sweep (SR-007 family): **T135 (SR-008) →
+T136 (SR-009) → T137 (SR-010)**, triaged S24 as "3 tickets, helper-first".
+
+- **This ticket is the foundation.** Build the shared `workspace_context.py`
+  helper here — a single resolver returning `(slug, internal_path, sessions_md)`
+  or `None` from `.claude/.active_workspace` — so T136 and T137 consume it rather
+  than each re-deriving workspace scope. All three SRs independently proposed this
+  helper; centralise it in T135.
+- **`generate_ticket_index.py` overlaps with T136.** SR-008's sibling fix (add
+  `--workspace SLUG` to `generate_ticket_index.py`, and check the
+  `regenerate_ticket_index.py` hook) touches the same script T136 makes
+  fail-closed. Do the `generate_ticket_index.py` changes once, in whichever of
+  T135/T136 lands first, and have the other reference it — do not let both
+  tickets edit that script independently.
+
+## Resolution
+(Fill in on close.)
