@@ -11,16 +11,17 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Medium (2)
+## Medium (1)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
-| T136 | generate_ticket_index.py overwrites harness INDEX when run from a workspace session | Ph2 | tooling | 1 session |
 | T137 | Telemetry session-stamping is workspace-blind; analyze_tool_log filter pulls foreign records | Ph2 | tooling | 1 session |
 
-## Low (0)
+## Low (1)
 
-*(none)*
+| ID | Title | Phase | Layer | Age |
+|----|-------|-------|-------|-----|
+| T140 | create_ticket.py routes to harness by default in a workspace session (no .active_workspace awareness) | Ph2 | tooling | this session |
 
 ## Unknown (0)
 

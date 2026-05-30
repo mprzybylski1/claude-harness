@@ -2,12 +2,12 @@
 id: T136
 title: generate_ticket_index.py overwrites harness INDEX when run from a workspace session
 severity: medium
-status: open
+status: closed
 phase: 2
 layer: tooling
 # repo: <name from workspace.yaml repos list>
 opened: S24 2026-05-30
-closed:
+closed: S25 2026-05-30
 source: scrabble-score/SR-009
 ---
 
@@ -47,7 +47,14 @@ ticket/sessions/telemetry script calls to resolve `(slug, internal_path, session
 or `None`, rather than each script re-deriving (or ignoring) workspace scope.
 ## Acceptance Criteria
 
-- [ ] (fill in)
+- [x] Bare `generate_ticket_index.py` (no `--workspace`, no `--tickets-dir`/`--output`) in a declared-**workspace** session fails closed (exit 2) printing the corrected `--workspace SLUG` command, instead of silently overwriting the harness INDEX.
+- [x] **Undeclared** session state (missing/empty `.claude/.active_workspace`) also fails closed (exit 2) — never silently writes the harness INDEX. Mirrors `check_cross_layer_writes.py`'s Invariant-3 posture.
+- [x] **Harness** session (`.active_workspace == __harness__`) keeps current behavior: regenerates the harness INDEX.
+- [x] `--workspace SLUG` resolves tickets/INDEX/sessions paths from that workspace's internal dir (the T135-deferred sibling fix); individual `--tickets-dir`/`--output`/`--sessions-file` still override.
+- [x] Explicit `--tickets-dir`/`--output` bypass all session-state logic (existing callers — regen hook, session-close, close_ticket — pass explicit paths and are unaffected).
+- [x] A shared session-state resolver lives in `workspace_config.py` (reads `.claude/.active_workspace`, cwd-independent), distinct from the CWD-sniffing `active_workspace_dir()`.
+- [x] Guard test: the harness INDEX is NOT written/modified when generate runs in a workspace session.
+- [x] Idempotency test: regenerating twice with identical inputs yields byte-identical output (locks the determinism the S24 field evidence flagged; the stale-stamp case is session-resolution, T139-class, and explicitly out of scope here).
 
 ## Coordination
 
@@ -93,4 +100,53 @@ under harness-root sessions, not only fix workspace routing. Add a test assertin
 idempotency: regenerate twice, assert no diff.
 
 ## Resolution
-(Fill in on close.)
+Made generate_ticket_index.py workspace-aware and fail-closed, and centralised
+the session-state read.
+
+Behaviour (precedence): explicit --workspace > explicit --tickets-dir/--output >
+.active_workspace state.
+- --workspace SLUG resolves tickets/INDEX/sessions from that workspace's internal
+  dir (the T135-deferred sibling fix); individual path flags still override.
+- Bare invocation (no --workspace, no explicit paths) consults
+  .claude/.active_workspace: harness (__harness__) → regenerate harness INDEX
+  (unchanged); workspace slug → FAIL CLOSED (exit 2) printing the corrected
+  `--workspace SLUG` command; undeclared/empty → FAIL CLOSED (exit 2). Never
+  silently overwrites the harness INDEX from a non-harness session — the SR-009
+  bug. Mirrors check_cross_layer_writes.py's Invariant-3 posture (that hook can't
+  catch this write because it's a python open(), not Edit/Write).
+- Explicit --tickets-dir/--output bypass all state logic, so existing callers —
+  the regen hook, session-close, close_ticket._regenerate_index — are unaffected
+  (verified: 480 suite tests pass, incl. close/create ticket integration).
+
+Chose fail-closed over auto-route deliberately: auto-routing would resolve
+workspace context by a different mechanism than create_ticket (explicit
+--workspace), widening that sibling's divergence. Fail-closed + the new
+--workspace flag keeps the family consistent and matches the cross-layer hook.
+
+Shared resolver (T135-deferred): added read_session_state() and workspace_paths()
+to workspace_config.py — reads .claude/.active_workspace, cwd-INDEPENDENT, mirroring
+check_cross_layer_writes' tri-state. Deliberately EXTENDED workspace_config rather
+than spawning a parallel workspace_context.py module. It sits beside (not replacing)
+the CWD-sniffing active_workspace_dir(). A later pass could have the hook import
+these to dedup its private copy — noted, not done (trust-boundary file, out of scope).
+
+Determinism (S24 field evidence): generate output was ALREADY byte-identical on
+identical inputs (verified empirically: two runs + committed INDEX all identical,
+single trailing \n). Locked it with an idempotency test. The case-1 stale-stamp /
+"0 tickets" artifact is NOT reproduced and NOT fixed here — it's session-resolution
+(T139-class) and/or the pre-T138 cwd-drift instability, not output nondeterminism.
+skip-if-unchanged was considered and rejected: identical content writes identical
+bytes (git isn't dirtied anyway), so it would only avoid mtime churn — no real gain.
+
+The regenerate_ticket_index.py hook is NOT workspace-blind (it routes by the written
+file's path via _detect_workspace_from_path) — the SR's guess was wrong; recorded so
+it isn't re-investigated.
+
+Follow-up: create_ticket.py has the same silent-harness-default routing for bare
+(no --workspace) invocations in a workspace session → opened T140 to converge the
+family (reusing read_session_state).
+
+Files: scripts/tools/generate_ticket_index.py, scripts/tools/workspace_config.py,
+tests/test_generate_ticket_index.py (new — 8 tests). 480 suite tests pass.
+
+Closed S25 2026-05-30.

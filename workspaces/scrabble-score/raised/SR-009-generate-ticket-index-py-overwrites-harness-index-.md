@@ -4,9 +4,9 @@ from: scrabble-score
 raised: S12 2026-05-30
 title: generate_ticket_index.py overwrites harness INDEX when run from a workspace session
 severity: medium
-status: promoted
+status: resolved
 harness_ticket: T136
-resolved_in:
+resolved_in: S25
 ---
 
 ## Context

@@ -213,7 +213,59 @@ def main() -> None:
         "--sessions-file", default=None,
         help="Override the sessions.md path (absolute path)",
     )
+    parser.add_argument(
+        "--workspace", default=None, metavar="SLUG",
+        help="Resolve tickets/INDEX/sessions paths from this workspace's internal "
+             "dir. Individual --tickets-dir/--output/--sessions-file still override.",
+    )
     args = parser.parse_args()
+
+    # ── Workspace scoping (T136) ────────────────────────────────────────────────
+    # Resolve the harness root cwd-independently (not os.getcwd(), which drifts).
+    harness_root = Path(os.environ.get("HARNESS_ROOT", str(Path(__file__).resolve().parents[2])))
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import workspace_config as _wc
+
+    _explicit_paths = args.tickets_dir is not None or args.output is not None
+
+    if args.workspace:
+        paths = _wc.workspace_paths(args.workspace, root=harness_root)
+        if paths is None:
+            print(f"ERROR: workspace '{args.workspace}' not found under "
+                  f"{harness_root / 'workspaces'}", file=sys.stderr)
+            sys.exit(1)
+        ws_internal, ws_sessions = paths
+        if args.tickets_dir is None:
+            args.tickets_dir = str(ws_internal / "tickets")
+        if args.output is None:
+            args.output = str(ws_internal / "tickets" / "INDEX.md")
+        if args.sessions_file is None:
+            args.sessions_file = str(ws_sessions)
+    elif not _explicit_paths:
+        # Bare invocation: consult the session-declared layer. Fail closed unless
+        # this is a harness session — never silently overwrite the harness INDEX
+        # from a workspace/undeclared session (SR-009; mirrors check_cross_layer_writes).
+        state, slug = _wc.read_session_state(root=harness_root)
+        if state == _wc.STATE_WORKSPACE:
+            print(
+                f"ERROR (T136): active session is workspace '{slug}', but no output "
+                f"path was given — refusing to overwrite the harness INDEX.\n"
+                f"  Regenerate the workspace index with:\n"
+                f"    python scripts/tools/generate_ticket_index.py --workspace {slug}\n"
+                f"  Or target a specific index with --tickets-dir/--output.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        if state == _wc.STATE_UNDECLARED:
+            print(
+                "ERROR (T136): session type undeclared (.claude/.active_workspace is "
+                "missing or empty) — refusing to write an INDEX by default.\n"
+                "  Run /session-start to declare the session, or pass --workspace SLUG "
+                "/ --tickets-dir / --output explicitly.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        # state == STATE_HARNESS → fall through to harness defaults (current behavior).
 
     project_root = os.getcwd()
     open_dir = args.tickets_dir if args.tickets_dir else os.path.join(project_root, OPEN_DIR)

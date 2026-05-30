@@ -6,6 +6,7 @@ any file outside the harness root — this is the isolation guarantee.
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -121,6 +122,57 @@ def list_active_workspaces() -> list[tuple[str, dict]]:
             continue
         results.append((ws_dir.name, cfg))
     return results
+
+
+# ── Session-declared workspace state (.claude/.active_workspace) ────────────────
+# Reads the session-state file written by /session-start. This is the robust,
+# cwd-INDEPENDENT signal for "what layer is this session" — unlike
+# active_workspace_dir() above, which sniffs CWD (fragile; CWD drifts, see SR-011).
+# Mirrors the tri-state read in scripts/hooks/check_cross_layer_writes.py; a future
+# pass could have the hook import these instead of keeping its own copy (T136 noted).
+
+HARNESS_SENTINEL = "__harness__"
+STATE_HARNESS = "harness"
+STATE_WORKSPACE = "workspace"
+STATE_UNDECLARED = "undeclared"
+
+
+def _harness_root(root: Path | None) -> Path:
+    """Resolve the harness root: explicit arg → $HARNESS_ROOT → module default."""
+    if root is not None:
+        return root
+    return Path(os.environ.get("HARNESS_ROOT", str(_ROOT)))
+
+
+def read_session_state(root: Path | None = None) -> tuple[str, str | None]:
+    """Return (state, slug) from <root>/.claude/.active_workspace.
+
+    state is STATE_HARNESS / STATE_WORKSPACE / STATE_UNDECLARED. slug is the
+    workspace slug only when state == STATE_WORKSPACE. Missing or empty file →
+    STATE_UNDECLARED (callers decide whether to fail closed).
+    """
+    state_file = _harness_root(root) / ".claude" / ".active_workspace"
+    try:
+        content = state_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        return (STATE_UNDECLARED, None)
+    if not content:
+        return (STATE_UNDECLARED, None)
+    if content == HARNESS_SENTINEL:
+        return (STATE_HARNESS, None)
+    return (STATE_WORKSPACE, content)
+
+
+def workspace_paths(slug: str, root: Path | None = None) -> tuple[Path, Path] | None:
+    """Return (internal_dir, sessions_md) for the given slug, or None when the
+    workspace directory does not exist. Honors a docs_path override via
+    internal_dir()."""
+    ws_dir = _harness_root(root) / "workspaces" / slug
+    if not ws_dir.is_dir():
+        return None
+    cfg = load_workspace(ws_dir)
+    internal = internal_dir(ws_dir, cfg)
+    return (internal, internal / "sessions.md")
 
 
 # ── Repo accessors ────────────────────────────────────────────────────────────
