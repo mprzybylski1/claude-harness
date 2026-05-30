@@ -15,6 +15,29 @@ source: scrabble-score/SR-010
 
 Promoted from scrabble-score/SR-010.
 
+## Decision required (before implementing)
+
+**Fix the custom logger vs. replace it with native telemetry.** `log_tool_usage.py`
+re-implements what Claude Code already emits natively: OpenTelemetry tool-use
+events plus the JSONL session transcript under `~/.claude/projects/.../`. This
+ticket as written ("fix the workspace stamping") assumes we keep the custom
+logger — but that may be the wrong fix. Decide first:
+
+- **Option A — fix custom (this ticket as scoped).** Add workspace-aware stamping
+  to `log_tool_usage.py` + `--workspace` to `analyze_tool_log.py`. Keeps
+  `analyze_tool_log.py`'s **in-session workflow report**, which native telemetry
+  does not give cheaply (native OTel needs an external backend like
+  CloudWatch/Datadog; native transcripts carry no per-tool token counts).
+- **Option B — replace with native.** Delete `log_tool_usage.py` (and the
+  PostToolUse `.*` hook wiring) and read native OTel/transcripts instead. Removes
+  a reinvented layer and sidesteps this entire workspace-blind bug class — but
+  loses the on-demand in-session analysis unless re-derived from transcripts.
+
+Do not implement until this is chosen. See `docs/native_vs_custom.md` for the
+full native-vs-custom analysis (T137 is the one open ticket where this fork is
+live). If Option B wins, this ticket's scope changes from "fix" to "remove +
+migrate", and the AC list below must be rewritten.
+
 ## Context
 
 Surfaced in scrabble-score S12 during `/workflow-review`. `log_tool_usage.py` stamps
