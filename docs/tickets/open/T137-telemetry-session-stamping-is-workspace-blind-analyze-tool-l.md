@@ -1,13 +1,19 @@
 ---
-id: SR-010
-from: scrabble-score
-raised: S12 2026-05-30
+id: T137
 title: Telemetry session-stamping is workspace-blind; analyze_tool_log filter pulls foreign records
 severity: medium
-status: promoted
-harness_ticket: T137
-resolved_in:
+status: open
+phase: 2
+layer: tooling
+# repo: <name from workspace.yaml repos list>
+opened: S24 2026-05-30
+closed:
+source: scrabble-score/SR-010
 ---
+
+## Problem
+
+Promoted from scrabble-score/SR-010.
 
 ## Context
 
@@ -36,7 +42,22 @@ confirmed as a layer collision rather than a count bug. Not blocking.
 
 Shares the SR-008/009 root cause — a `workspace_context.py` helper resolving
 `(slug, internal_path, sessions_md)` would let the hook and analyzer agree on scope.
+## Acceptance Criteria
 
-## Harness disposition
+- [ ] `log_tool_usage.py` records the active workspace (from `.claude/.active_workspace`)
+- [ ] `analyze_tool_log.py` accepts `--workspace SLUG` and filters on the
+- [ ] Test covers the workspace-filtered path; harness-root behaviour unchanged.
 
-(Filled by harness on promotion or rejection.)
+## Coordination
+
+Part of the workspace-blind tooling sweep (SR-007 family): **T135 (SR-008) →
+T136 (SR-009) → T137 (SR-010)**, triaged S24 as "3 tickets, helper-first".
+
+- **Depends on T135's `workspace_context.py` helper.** Consume the shared
+  resolver so `log_tool_usage.py` and `analyze_tool_log.py` agree on workspace
+  scope with the rest of the harness tooling, rather than re-deriving it.
+- No file overlap with T135/T136 (telemetry scripts are independent of the
+  ticket-tooling scripts), so this ticket can land any time after the helper exists.
+
+## Resolution
+(Fill in on close.)

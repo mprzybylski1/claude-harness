@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S23 2026-05-28. 0 open tickets.
+Generated S24 2026-05-30. 3 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -11,9 +11,13 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Medium (0)
+## Medium (3)
 
-*(none)*
+| ID | Title | Phase | Layer | Age |
+|----|-------|-------|-------|-----|
+| T135 | create_ticket.py: ticket numbering is harness-global, not workspace-local | Ph2 | tooling | this session |
+| T136 | generate_ticket_index.py overwrites harness INDEX when run from a workspace session | Ph2 | tooling | this session |
+| T137 | Telemetry session-stamping is workspace-blind; analyze_tool_log filter pulls foreign records | Ph2 | tooling | this session |
 
 ## Low (0)
 
