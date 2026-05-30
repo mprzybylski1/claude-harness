@@ -1,6 +1,6 @@
 # System State
 
-_Last updated: S23 2026-05-29_
+_Last updated: S24 2026-05-30_
 
 ---
 
@@ -23,7 +23,13 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Open Tickets
 
-_No open tickets._
+**3 open tickets**
+
+| ID | Title | Phase | Age |
+|----|-------|-------|-----|
+| T135 | create_ticket.py: ticket numbering is harness-global, not workspace-local | Ph2 | tooling | this session |
+| T136 | generate_ticket_index.py overwrites harness INDEX when run from a workspace session | Ph2 | tooling | this session |
+| T137 | Telemetry session-stamping is workspace-blind; analyze_tool_log filter pulls foreign records | Ph2 | tooling | this session |
 
 ---
 

@@ -19,32 +19,20 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Active Work
 
-**S23 — closed T127–T134 (8 tickets): all Opus S22 suggestions + workflow-review backlog (T127–T131) + impl-review fixes + new T132–T134 (fail-closed + invariants + Active Work hook).**
+**S24 — triaged SR-008/009/010 → T135/T136/T137; produced native-vs-custom analysis; added T137 fix-vs-replace decision gate; recorded T136 regen-hook flakiness field evidence.**
 
 Files changed:
-- `scripts/tools/raise_for_harness.py` — T132: _current_session fail-closed exit 2 when sessions_md is None (refuses harness-session fallback into workspace SR `raised:` frontmatter); T128: refactored to session_lookup primitives; impl-review: import moved top-of-file
-- `tests/test_raise_for_harness.py` — T132: inverted broken-fallback test → test_refuses_to_fall_back; _setup() now seeds workspace sessions.md by default
-- `docs/architecture_invariants.md` — T131: replaced placeholder Invariants 1–3 with grep-anchored rules (workspace↔harness session-number separation, session-type declaration required, fail-closed on workspace boundary); renumbered workspace isolation 5→4; impl-review: Inv 3 verification scope narrowed to tools that write tracked state
-- `scripts/hooks/check_cross_layer_writes.py`, `scripts/tools/prepare_opus_context.py`, `tests/test_check_cross_layer_writes.py` — T131 follow-up: live "Invariant 5" by-number references replaced with "Workspace Isolation" name anchor (renumber-resilient)
-- `scripts/tools/prepare_opus_context.py` — T129: stale test/test_prepare_opus_context.py references updated to _workspace + _large_assets test files
-- `scripts/tools/list_raised_concerns.py` — T130: _parse_frontmatter now returns dict|None (None signals YAMLError or OSError); main() buckets None into "Pending raised concerns (unparseable — review manually):" section; triage instructions only print when parseable items pending; impl-review: OSError branch surfaces instead of dropping silently
-- `tests/test_list_raised_concerns.py` — T130: TestUnparseableSurface (3 tests + 1 OSError test)
-- `scripts/tools/promote_raised_concern.py` — T127: _extract_proposed_change_acs parses bullet/numbered list items from SR ## Proposed change → --ac flags; impl-review: fenced code block guard; dead "### " condition dropped
-- `tests/test_promote_raised_concern.py` — T127: TestProposedChangeACs (4 tests + 1 fenced-block test)
-- `scripts/tools/session_lookup.py` — T128 (new, 47 lines): resolve_workspace_sessions_md + call_current_session primitives; two-thin-functions design preserves per-caller None/error policy
-- `scripts/tools/surface_workspace_concerns.py`, `scripts/tools/reject_raised_concern.py`, `scripts/tools/create_ticket.py`, `scripts/tools/close_ticket.py` — T128: refactored to call session_lookup; impl-review: imports moved top-of-file
-- `tests/test_session_lookup.py` — impl-review (new, 7 tests): direct coverage for both primitives + all warning branches
-- `.claude/skills/session-close/SKILL.md` — T133: Step 1 Active Work now explicitly says "Replace everything between ## Active Work and the next ---. Do not prepend"; verification line points at extract_session_brief warning
-- `docs/sessions.md` — T133: removed orphan S21 ticket-list block from S22's Active Work
-- `scripts/hooks/check_session_log.py` — T134: new Check 1b (run_active_work_check + _extract_active_work_section); blocks session-end if Active Work has ≠1 S<N> header or multiple ticket-closed lines
-- `tests/test_hooks_workspace_scoping.py` — T134: TestActiveWorkIntegrity (7 tests including S22→S23 regression case)
+- `docs/tickets/open/T135-*.md` — promoted SR-008; workspace_context.py helper owner; coordination notes for T136/T137
+- `docs/tickets/open/T136-*.md` — promoted SR-009; coordination notes; S24 field evidence: regen hook produces stale stamp + whitespace churn on harness-root edits (idempotency test required)
+- `docs/tickets/open/T137-*.md` — promoted SR-010; decision-required gate: fix custom telemetry logger vs. replace with native OTel/transcripts
+- `workspaces/scrabble-score/raised/SR-008-*.md` — status: promoted, harness_ticket: T135
+- `workspaces/scrabble-score/raised/SR-009-*.md` — status: promoted, harness_ticket: T136
+- `workspaces/scrabble-score/raised/SR-010-*.md` — status: promoted, harness_ticket: T137
+- `docs/native_vs_custom.md` — new: verdict table (keep-custom / reinventing-native / hybrid), three buckets, portfolio take, native-feature caveat
+- `docs/tickets/INDEX.md` — regenerated (3 open, all Medium: T135/T136/T137)
 
-Tickets closed: T127–T134 (8 tickets, all in-session)
-Tickets opened: T132 (this session, from Opus S22 Concern #1), T133 + T134 (from this session's workflow-review)
-Impl review: 6 findings fixed inline (Inv 3 grep scope, OSError surface, code-fence guard, dead-condition removal, import-placement cleanup, dedicated session_lookup test file)
-Workflow review: 2 tickets opened + closed (T133, T134)
-Opus S22 correction: Concern #2 (`__harness__` slug collision) reinvestigated — `_slug_valid` regex `^[a-z0-9][a-z0-9-]*$` already rejects `__harness__` (first char `_` excluded). No code change. Carry-forward retired by this entry.
-Tests: 455 passing (up from 440 at session start; +15 net new across T127, T130, T132, T134, session_lookup)
+Tickets opened: T135, T136, T137 (promoted from SR-008/009/010; all in workspace-blind tooling sweep)
+Tickets closed: none
 
 ---
 
@@ -76,3 +64,4 @@ S20 2026-05-27: closed T104-T112 (9 tickets: SR-001 workspace↔harness separati
 S21 2026-05-28: closed T113-T122 (10 tickets: SR-002/SR-003 + Opus S20 backlog + trading-app hygiene); impl-review 2 inline fixes; 0 open at close
 S22 2026-05-28: closed T123-T126 (4 tickets: SR triage + YAML-quoting + cross-repo close guard + large-asset diff exclusion + auto-commit archives); impl-review 5 inline fixes; workflow-review opened T127-T131
 S23 2026-05-28: closed T127-T134 (8 tickets: Opus S22 backlog + workflow-review T133/T134 — fail-closed session-lookup consolidation, invariants reconcile, unparseable SR surface, SR→AC bullet parser, session-close Active Work replace semantics + Stop-hook validation); impl-review 6 inline fixes; Opus S22 Concern #2 retired (regex already rejects __harness__)
+S24 2026-05-30: triaged SR-008/009/010 → T135/T136/T137 (workspace-blind tooling sweep); produced docs/native_vs_custom.md; T137 decision gate (fix vs. native OTel); T136 regen-hook flakiness evidence recorded; 3 open at close

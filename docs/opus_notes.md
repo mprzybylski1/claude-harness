@@ -1,33 +1,3 @@
-# Opus Review — S22 2026-05-28
-
-## Invariant Violations
-
-None. Invariant 4 (fail-closed) is strengthened by T125 (`_check_cross_repo_files` refuses cross-repo `--files` rather than silent split-staging) and T124 (large-asset stripping prevents Opus context from silently truncating signal). Invariant 5 unchanged from S21 — workspace-isolation enforcement holds.
-
-The `docs/architecture_invariants.md` placeholder is now 5 consecutive review acknowledgments (S18–S22); T131 was opened this session to address it. Treating as tracked, not carry-forward.
-
-## Architectural Concerns
-
-1. **Divergent twins: `_workspace_sessions_md` + `_current_session` now exist in both `scripts/tools/surface_workspace_concerns.py:32-98` and `scripts/tools/raise_for_harness.py:35-95` with opposite failure semantics.** [High impact, regression of S21 Concern #1] T126 introduced the pair in `surface_workspace_concerns.py` and the new `_current_session(sessions_md)` *intentionally does not* fall back to harness session when `sessions_md is None` (returns `None`, archive commit omits session ID). The pre-existing pair in `raise_for_harness.py` (T116) *does* silently fall back to harness session number when `internal/sessions.md` is missing — exactly the audit-trail-lying behaviour S21 Concern #1 flagged. After S22 the codebase ships two same-named helpers with contradictory safety stances. Until T128 consolidates them into `session_lookup`, the next caller can't tell which behavior they're getting from the name. Fix order: (a) make `raise_for_harness._current_session` fail-closed too (warn-and-omit or warn-and-error), (b) then consolidate via T128. Doing T128 first locks in whichever semantics the consolidator picks without an explicit decision.
-
-2. **`scripts/hooks/check_cross_layer_writes.py` `__harness__` sentinel collision still unaddressed (S21 Concern #2, 2-session carry-forward).** No diff in S22 touches `workspace.py` create-validation; a workspace slug `__harness__` would still be accepted, and the hook would treat that workspace's session as harness-root, permitting writes to any `workspaces/*/internal/` including its own. Trivial fix (reserved-slug list in `workspace.py`); the cost grows with every session that ships the sentinel pattern without a guard.
-
-3. **`scripts/tools/close_ticket.py:556-616` `_check_cross_repo_files` silently skips paths that aren't inside any git repo.** [Diff confirms; low-moderate impact] The check is `if ef_root is not None and ef_root != ticket_root` — a `--files` path outside all git repos (typo, accidentally absolute path to `/tmp`, a deleted file's stale path) bypasses the cross-repo guard entirely. Downstream `_git_stage` will fail with a "not in a repo" error, but only *after* other cross-repo siblings have already been rejected, producing confusing partial-validation output. Either treat `ef_root is None` as its own explicit error class with a clear "path not in any git repo" message, or fold the check into `_git_stage` so the validation is single-pass. Less urgent than #1 but the new guard widens the surface where this matters.
-
-4. **`scripts/tools/surface_workspace_concerns.py:262-282` auto-commit prints the SAME warning to stdout AND stderr on failure.** [Diff confirms; cosmetic but real] The `print(warning); print(warning, file=sys.stderr)` pattern intentionally duplicates the message — comment says "stdout — visible in session-start briefing." This means in a normal terminal run the operator sees the multi-line warning twice in a row (stdout and stderr interleave on most terminals), which is confusing UX and looks like a script bug. Pick one: if session-start truly only reads stdout, send only there; if both are read, gate on `sys.stdout.isatty()` to avoid duplication when they merge. The duplication was an impl-review fix per the session log, so this is a known trade-off — but worth revisiting once the session-start consumer behavior is documented.
-
-5. **`scripts/tools/prepare_opus_context.py:55-58` `_LARGE_ASSET_EXTS` includes `.json` and `.yaml` — risk of stripping legitimate config diffs.** [Diff suggests; low impact] T124 lists `.txt, .json, .csv, .plist, .xml, .yaml, .yml, .lock` and triggers at 1000 lines. A monster `tsconfig.json`, `package.json` lockfile, or a workspace `workspace.yaml` schema migration could legitimately exceed 1000 lines and *should* appear in the Opus review. Threshold + extension is a coarse filter; a path-based allowlist (e.g. only strip data files in `data/`, `resources/`, `fixtures/`, plus `*-lock.{json,yaml}`) would catch the actual sowpods.txt failure mode without risking stripped governance configs. Mitigation: stat section still names the file, so Opus knows it changed; this is about *content review* getting silently skipped.
-
-6. **`scripts/tools/raise_for_harness.py:97-114` `_yaml_scalar` enumerates an incomplete set of YAML-unsafe constructs.** [Diff confirms; low impact] The helper quotes when title contains `": "`, trailing `:`, `" #"`, or starts with a YAML-reserved char. Misses: titles that parse as YAML booleans/null (`"yes"`, `"no"`, `"on"`, `"off"`, `"null"`), numeric-looking strings (`"1.0"`, `"0x10"`), and strings starting with whitespace inside a value (caught by `!= value.strip()`, OK). Production risk is small — titles are descriptive prose, not the literal string "yes" — but the safer shape is to always quote (defensive) or to delegate to a real YAML emitter (`yaml.dump({"title": value})` and lift the line). The bug that motivated T123 was "didn't quote at all"; the fix narrows that to "quotes most cases." The cheap robust fix is "always quote."
-
-## Suggested Next Session Focus
-
-1. **Resolve the divergent-twins safety asymmetry before T128 consolidates them (Concern #1).** ~10 LoC + 1 test. Make `raise_for_harness._current_session` fail-closed (warn-and-omit, matching `surface_workspace_concerns.py`) before T128 picks a consolidator. Otherwise T128 silently locks in whichever semantics the consolidator chooses without an explicit decision. The audit-trail-lying mode S21 Concern #1 flagged is still live in `raise_for_harness.py`.
-
-2. **T131: reconcile `architecture_invariants.md` (5-session carry-forward).** This is the longest-running unresolved Opus finding in the project. With T115 (Invariant 5 enforcement at hook) and T120 (fail-closed close-the-loop) now shipped, the doc has concrete enforcement to reference. Either fill in Invariants 1–2 with real harness rules or delete the placeholder and point Opus reviews at a different schema-of-record. Currently the "Invariant Violations" section of every review is half-empty by construction.
-
-3. **Reject `__harness__` as a workspace slug (S21 Concern #2, 2-session carry-forward).** ~5 LoC + 1 test in `scripts/tools/workspace.py`. Cheap to fix now, expensive to fix after a workspace named `__harness__` exists in the wild.
-
 # Opus Review — S23 2026-05-28
 
 Scope: closed T127–T134 (8 tickets) — full Opus S22 backlog plus T132–T134 opened and closed in-session. Net: new `session_lookup.py` consolidator (T128) absorbs 5 callers; `raise_for_harness._current_session` now fail-closes on missing workspace `sessions.md` (T132); `architecture_invariants.md` finally rewritten with grep-anchored rules and renumbered (Invariant 5 → 4) with name-anchor replacement everywhere live code references the old number (T131); `_extract_proposed_change_acs` carries SR bullets into ticket ACs (T127); `list_raised_concerns.py` buckets unparseable SRs into a dedicated section (T130); Stop hook gains `run_active_work_check` to catch the session-close prepend regression (T134, opened from the workflow-review that found S22→S23 produced an orphan in the Active Work section); session-close skill rewritten to specify REPLACE semantics for Active Work (T133). ~480 LoC production + ~310 LoC tests; 455 passing (+15 net). Strong follow-through — every S22 suggested item landed plus two self-found tickets. A small set of brittleness edges remain in T134's check and T127's section detection.
@@ -69,3 +39,18 @@ The placeholder-invariants carry-forward (S18–S22, 5 reviews) is also retired 
 3. **Lock the docs_path-aware error message in `raise_for_harness._current_session` (Concern #6).** ~5 LoC. If we're going to fail closed and tell the user which file to create, name the actual file. Currently misleads when `docs_path` is in play. Low priority but easy.
 
 No multi-session carry-forwards remain after S23. Both the placeholder-invariants and the `__harness__` slug carry-forwards retired this session — first time in 6 reviews the carry-forward list is empty.
+
+---
+
+# Static Analysis — S24 2026-05-30
+
+Docs-only session (SR triage + analysis). No code changed; full Opus review skipped per protocol.
+
+```
+PASS  30 test files compile cleanly (no SyntaxError)
+PASS  no datetime.utcnow() in production code
+PASS  9/9 bash blocks in SKILL.md files syntax-valid
+All 3 checks PASS.
+```
+
+No new findings. S23 Opus carry-forwards remain as the Suggested Next Session Focus above.
