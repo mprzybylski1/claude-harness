@@ -1,13 +1,19 @@
 ---
-id: SR-009
-from: scrabble-score
-raised: S12 2026-05-30
+id: T136
 title: generate_ticket_index.py overwrites harness INDEX when run from a workspace session
 severity: medium
-status: promoted
-harness_ticket: T136
-resolved_in:
+status: open
+phase: 2
+layer: tooling
+# repo: <name from workspace.yaml repos list>
+opened: S24 2026-05-30
+closed:
+source: scrabble-score/SR-009
 ---
+
+## Problem
+
+Promoted from scrabble-score/SR-009.
 
 ## Context
 
@@ -39,7 +45,21 @@ the correct command line — mirroring the fail-closed posture of
 Cleanest end state: SR-008/009/010 share a `workspace_context.py` helper that every
 ticket/sessions/telemetry script calls to resolve `(slug, internal_path, sessions_md)`
 or `None`, rather than each script re-deriving (or ignoring) workspace scope.
+## Acceptance Criteria
 
-## Harness disposition
+- [ ] (fill in)
 
-(Filled by harness on promotion or rejection.)
+## Coordination
+
+Part of the workspace-blind tooling sweep (SR-007 family): **T135 (SR-008) →
+T136 (SR-009) → T137 (SR-010)**, triaged S24 as "3 tickets, helper-first".
+
+- **Depends on T135's `workspace_context.py` helper.** Consume the shared
+  resolver rather than re-deriving workspace scope from `.claude/.active_workspace`.
+- **Shares `generate_ticket_index.py` with T135.** T135's SR-008 sibling fix
+  adds `--workspace SLUG` to this same script. Coordinate so only one ticket
+  edits `generate_ticket_index.py` (and the `regenerate_ticket_index.py` hook);
+  the other references that change. Avoid two independent edits to the script.
+
+## Resolution
+(Fill in on close.)
