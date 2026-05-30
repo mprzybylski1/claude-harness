@@ -61,5 +61,25 @@ T136 (SR-009) → T137 (SR-010)**, triaged S24 as "3 tickets, helper-first".
   edits `generate_ticket_index.py` (and the `regenerate_ticket_index.py` hook);
   the other references that change. Avoid two independent edits to the script.
 
+## Field evidence (S24)
+
+The `regenerate_ticket_index.py` PostToolUse hook (wired in `.claude/settings.json`
+on `Edit|Write`) misbehaved **twice** in S24 during routine ticket edits, beyond
+the workspace-blind default this ticket describes:
+
+1. After committing the SR-008/009/010 promotions, the hook left the worktree
+   `docs/tickets/INDEX.md` reverted to a stale `S23 / 0 tickets` state — had to
+   re-run `generate_ticket_index.py` to reconcile it back to `S24 / 3 tickets`.
+2. After a later edit to T137, the hook rewrote INDEX to a **content-identical**
+   file that `git` still flagged as modified (0 real diff lines — whitespace /
+   trailing-newline instability). Had to `git checkout HEAD -- docs/tickets/INDEX.md`.
+
+So the regen path has two defects, not one: (a) the workspace-blind scoping in the
+title, and (b) **unstable/incorrect output on harness-root edits** — stale session
+stamp in case 1, whitespace churn in case 2. Whatever fix lands here should make
+the regen output **deterministic** (same inputs → byte-identical file) and correct
+under harness-root sessions, not only fix workspace routing. Add a test asserting
+idempotency: regenerate twice, assert no diff.
+
 ## Resolution
 (Fill in on close.)
