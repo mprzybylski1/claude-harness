@@ -90,5 +90,10 @@ so it needs its own commit there before `close_ticket.py` runs in the
 workspace repo — `close_ticket.py --files` will not stage it. Without this,
 the SR sits dangling and untracked until the next harness-root session.
 
+When you raise the SR during close, pass `--session S[CURRENT_SESSION]` to
+`raise_for_harness.py` (the value recorded at close Step 0, before the Session
+Log line is appended). Without it the SR is mis-stamped one session too high,
+because the running session's log line already exists by close time (T139).
+
 Example: S11 / T019 — SR-008 committed to harness as `0392ea6`, ticket
 archive move + code/test changes committed to scrabble as `35e6a89`.

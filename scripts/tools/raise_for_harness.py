@@ -148,6 +148,15 @@ def main() -> None:
         metavar="SLUG",
         help="Workspace slug (auto-detected from CWD if omitted)",
     )
+    parser.add_argument(
+        "--session",
+        metavar="SID",
+        help="Running session ID (e.g. S13) to stamp verbatim. Pass this from "
+        "the session-close protocol, which captures the running session at Step "
+        "0 BEFORE the Session Log line is appended. Without it, the session is "
+        "derived as last-logged+1, which over-counts once that line exists "
+        "(the SR-011 / T139 raise-during-close off-by-one).",
+    )
     args = parser.parse_args()
 
     if args.workspace:
@@ -172,7 +181,20 @@ def main() -> None:
     raised_dir.mkdir(parents=True, exist_ok=True)
     (raised_dir / "archive").mkdir(exist_ok=True)
 
-    session = _current_session(session_lookup.resolve_workspace_sessions_md(slug, ROOT), slug)
+    if args.session is not None:
+        # Explicit declared value — not a silent default, so the Invariant-3
+        # fail-closed lookup is intentionally skipped. Validate the shape so a
+        # malformed value cannot land in the tracked `raised:` field.
+        if not re.fullmatch(r"S\d+", args.session):
+            print(
+                f"ERROR: --session must look like 'S<number>' (e.g. S13), "
+                f"got {args.session!r}.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        session = args.session
+    else:
+        session = _current_session(session_lookup.resolve_workspace_sessions_md(slug, ROOT), slug)
     today = date.today().isoformat()
     slug_part = _slugify(args.title)
 

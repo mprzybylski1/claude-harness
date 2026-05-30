@@ -281,3 +281,58 @@ class TestTitleQuoting:
         assert result.returncode == 0, result.stderr
         data = self._frontmatter(Path(result.stdout.strip()))
         assert data["title"] == title
+
+
+class TestExplicitSession:
+    """T139: --session stamps the running session verbatim.
+
+    current_session.py returns last-logged+1, which is correct mid-session (the
+    running session's log line is not yet written) but over-counts once the close
+    protocol appends that line. SR-011 was raised during the S13 close, after the
+    S13 Session Log line existed, so it was mis-stamped S14. The close skill knows
+    the running session (captured at Step 0, pre-append) and passes it via
+    --session, which is correct regardless of close-flow append ordering.
+    """
+
+    def test_explicit_session_overrides_lookup(self, tmp_path):
+        # sessions.md last line is S99 — deliberately ≠ the --session value so the
+        # test fails if --session were ignored and the lookup path were taken.
+        # This is the raise-during-close case: the running session's log line is
+        # already appended, so only the explicit value is correct.
+        harness, ws_dir = _setup(tmp_path)
+        _add_workspace_sessions_md(ws_dir, "S99 2026-05-30: close in progress")
+        result = _run(harness, "Raised during close", "--workspace", "myws",
+                      "--session", "S13")
+        assert result.returncode == 0, result.stderr
+        content = Path(result.stdout.strip()).read_text(encoding="utf-8")
+        assert "raised: S13" in content, content
+        assert "raised: S99" not in content
+        assert "raised: S14" not in content
+
+    def test_explicit_session_bypasses_missing_sessions_md(self, tmp_path):
+        # An explicit value is a declared input, not a silent default, so it is
+        # NOT an Invariant-3 violation and does not require sessions.md to exist.
+        harness, _ = _setup(tmp_path, with_ws_sessions=False)
+        result = _run(harness, "Explicit despite no sessions.md",
+                      "--workspace", "myws", "--session", "S4")
+        assert result.returncode == 0, result.stderr
+        content = Path(result.stdout.strip()).read_text(encoding="utf-8")
+        assert "raised: S4" in content
+
+    def test_invalid_session_rejected(self, tmp_path):
+        # Malformed declared value fails closed (exit 2), creates no SR file.
+        harness, _ = _setup(tmp_path)
+        result = _run(harness, "Bad session", "--workspace", "myws",
+                      "--session", "13")
+        assert result.returncode == 2, (result.returncode, result.stderr)
+        sr_files = list((tmp_path / "workspaces" / "myws" / "raised").glob("SR-*.md"))
+        assert sr_files == [], sr_files
+
+    def test_no_session_flag_preserves_lookup(self, tmp_path):
+        # Without --session the sessions.md lookup path is unchanged.
+        harness, ws_dir = _setup(tmp_path)
+        _add_workspace_sessions_md(ws_dir, "S6 2026-05-30: ws")
+        result = _run(harness, "No flag", "--workspace", "myws")
+        assert result.returncode == 0, result.stderr
+        content = Path(result.stdout.strip()).read_text(encoding="utf-8")
+        assert "raised: S6" in content

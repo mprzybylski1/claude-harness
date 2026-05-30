@@ -321,9 +321,16 @@ Use this path when the workspace session cannot close cleanly. Do **not** run St
 
 2. **Raise a harness concern** so the blocker gets scheduled for a harness-root session:
    ```text
-   python scripts/tools/raise_for_harness.py "Description of blocker" --severity high --workspace <WORKSPACE_SLUG>
+   python scripts/tools/raise_for_harness.py "Description of blocker" --severity high --workspace <WORKSPACE_SLUG> --session S[CURRENT_SESSION]
    ```
    Fill in the `## Context` and `## Proposed change` sections in the created SR file.
+
+   **Always pass `--session S[CURRENT_SESSION]`** (the value recorded in Step 0,
+   captured *before* the Session Log line is appended). Any `raise_for_harness.py`
+   call made during close — abandoned flow or a normal-close raise — must pass it.
+   Without `--session`, the session is derived as last-logged+1, which over-counts
+   by one once the running session's Session Log line exists, mis-stamping the SR
+   (the S13→S14 error observed in SR-011 / T139).
 
 3. **Append an abandoned-session entry** to `<INTERNAL>/sessions.md` Session Log:
    ```
