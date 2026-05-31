@@ -285,6 +285,71 @@ def _refuse_multi_root_commit(roots: set[str], ticket_id: str, message: str) -> 
     sys.exit(2)
 
 
+def _check_index_clean(git_root: str, expected_paths: list[Path], ticket_path: Path) -> None:
+    """Exit 2 if the index contains staged changes beyond what close_ticket staged.
+
+    A bare `git commit` commits the entire index — any pre-existing staged change in
+    the repo would be silently folded into the ticket commit. This guard verifies the
+    index contains only the paths we just staged (the archive dest, INDEX.md, extra
+    --files, SR resolution, plus the ticket deletion), and refuses --commit otherwise.
+
+    Uses `git status --porcelain` (XY PATH form): column 0 is the index state.
+    'D' = staged delete, 'A'/'M'/'R' = staged add/modify/rename, ' ' = unstaged.
+    We collect every path where column-0 is non-space (anything staged).
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", git_root, "status", "--porcelain"],
+            capture_output=True, text=True,
+        )
+    except (FileNotFoundError, OSError, subprocess.SubprocessError) as exc:
+        print(f"ERROR: could not run 'git status' before --commit: {exc}", file=sys.stderr)
+        sys.exit(2)
+    if result.returncode != 0:
+        print(
+            f"ERROR: 'git status' failed (exit {result.returncode}) — cannot verify index "
+            f"before --commit:\n  {result.stderr.strip()}",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    # Build the set of absolute paths we expect to be staged.
+    expected: set[str] = set()
+    for p in expected_paths:
+        expected.add(str(p.resolve()))
+    expected.add(str(ticket_path.resolve()))
+
+    # Parse XY PATH lines; column 0 is index state.
+    unexpected: list[str] = []
+    for line in result.stdout.splitlines():
+        if len(line) < 4:
+            continue
+        index_col = line[0]
+        if index_col == " " or index_col == "?":
+            continue  # unstaged or untracked — fine
+        raw_path = line[3:].strip()
+        # Handle rename format "old -> new" — both sides appear in one line.
+        if " -> " in raw_path:
+            parts = raw_path.split(" -> ")
+        else:
+            parts = [raw_path]
+        for part in parts:
+            abs_part = str((Path(git_root) / part).resolve())
+            if abs_part not in expected:
+                unexpected.append(line.rstrip())
+                break
+
+    if unexpected:
+        print(
+            "ERROR: --commit refused — the index contains staged changes beyond what "
+            f"close_ticket staged for {ticket_path.name.split('-')[0]}.\n"
+            "  Either commit or unstage these first, then re-run with --commit:\n"
+            + "\n".join(f"  {u}" for u in unexpected),
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+
 def _atomic_move(ticket_path: Path, dest: Path, content: str) -> None:
     """Write content to dest atomically via os.replace, then remove ticket_path.
 
@@ -807,6 +872,7 @@ def main() -> None:
         if git_root is None:
             print("ERROR: --commit but no staged files are in a git repo", file=sys.stderr)
             sys.exit(2)
+        _check_index_clean(git_root, staged_paths, ticket_path)
         try:
             subprocess.check_call(["git", "-C", git_root, "commit", "-m", commit_msg])
             print(f"Committed: {commit_msg}")

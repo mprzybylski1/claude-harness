@@ -47,3 +47,11 @@ class TestProblemInTemplate:
         assert "(fill in)" not in result
         assert "Real problem text." in result
         assert "- [ ] First AC" in result
+
+    def test_missing_placeholder_exits_not_silently_discarded(self, capsys):
+        content = "## Problem\n\nAlready filled in.\n## Resolution\n(Fill in on close.)\n"
+        with pytest.raises(SystemExit) as exc:
+            create_ticket._apply_problem(content, "New problem text.")
+        assert exc.value.code == 1
+        err = capsys.readouterr().err
+        assert "placeholder" in err.lower() or "not found" in err.lower()

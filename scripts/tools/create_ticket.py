@@ -173,9 +173,20 @@ def _regenerate_index(internal: Path | None) -> None:
         print(f"WARNING: generate_ticket_index.py failed: {exc}", file=sys.stderr)
 
 
+_PROBLEM_PLACEHOLDER = "(Describe the problem here.)"
+
+
 def _apply_problem(content: str, problem_text: str) -> str:
     """Replace the '(Describe the problem here.)' placeholder in ## Problem."""
-    return content.replace("(Describe the problem here.)", problem_text)
+    if _PROBLEM_PLACEHOLDER not in content:
+        print(
+            f"ERROR: --problem passed but the template placeholder "
+            f"'{_PROBLEM_PLACEHOLDER}' was not found in the ticket body — "
+            "problem text was not applied",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return content.replace(_PROBLEM_PLACEHOLDER, problem_text)
 
 
 _LAYER_VALUES = ("backend", "frontend", "fullstack", "infra", "process", "tooling")
