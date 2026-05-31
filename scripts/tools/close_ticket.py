@@ -172,12 +172,20 @@ def _append_resolution(content: str, resolution: str) -> str:
               file=sys.stderr)
         sys.exit(2)
     header, section, rest = parsed
-    body = section.strip()
-    if not body or re.fullmatch(r"\(Fill in on close[^)]*\)", body):
+    # "Nothing to preserve" = only boilerplate: the optional '> **Client-visible:**'
+    # blockquote (present in TEMPLATE.md) and/or the '(Fill in on close.)' placeholder.
+    # Strip both before the emptiness check — a bare-placeholder match misses the
+    # template shape that leads with the client-visible block (Opus S26 Concern #1).
+    boilerplate = re.compile(
+        r"> \*\*Client-visible:\*\*.*?\n(?:> .*\n)*"  # client-visible blockquote
+        r"|\(Fill in on close[^)]*\)",                # close placeholder
+        re.DOTALL,
+    )
+    if not boilerplate.sub("", section).strip():
         print(
             "ERROR: --append needs existing Resolution content to preserve, but this "
-            "section is empty or only the placeholder. Drop --append and use "
-            "--resolution alone to fill the placeholder.",
+            "section is empty or only boilerplate (placeholder / client-visible block). "
+            "Drop --append and use --resolution alone to fill the placeholder.",
             file=sys.stderr,
         )
         sys.exit(2)

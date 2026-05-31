@@ -76,6 +76,35 @@ class TestAppendMode:
         err = capsys.readouterr().err
         assert "--append" in err  # tells the operator to drop --append
 
+    def test_append_errors_when_only_client_block_and_placeholder(self, capsys):
+        # A fresh ticket made from TEMPLATE.md leads the section with the
+        # '> **Client-visible:**' blockquote before the placeholder. The guard must
+        # still recognise "nothing to preserve" — the bare-placeholder fullmatch did
+        # not (it never fired on the real shape). [Opus S26 Concern #1]
+        body = (
+            "> **Client-visible:** The first sentence is copied to client/progress.md.\n"
+            "> Write it as a user-facing statement.\n"
+            "\n"
+            "(Fill in on close: what was done.)"
+        )
+        with pytest.raises(SystemExit) as exc:
+            _R(_ticket(body), "summary", append=True)
+        assert exc.value.code == 2
+        assert "--append" in capsys.readouterr().err
+
+    def test_append_preserves_real_content_alongside_client_block(self):
+        # When real authored prose accompanies the client block, there IS content to
+        # preserve — append must proceed and keep both.
+        body = (
+            "> **Client-visible:** A user-facing line.\n"
+            "\n"
+            "Real authored resolution prose."
+        )
+        out = _R(_ticket(body), "summary", append=True)
+        assert "Real authored resolution prose." in out
+        assert "summary" in out
+        assert out.index("Real authored resolution prose.") < out.index("summary")
+
     def test_append_errors_when_section_empty(self, capsys):
         with pytest.raises(SystemExit) as exc:
             _R(_ticket(""), "summary", append=True)
