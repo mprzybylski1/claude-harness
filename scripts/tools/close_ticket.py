@@ -151,6 +151,13 @@ def _resolution_section(content: str):
     if not header:
         return None
     after = content[header.end():]
+    # ASSUMPTION: the `\n##\s` terminator is NOT fence-aware — a `## ` line inside a
+    # fenced code block in the Resolution body would be mis-read as the section end.
+    # Safe in practice only because Resolution is the LAST `##` section in the ticket
+    # template (nxt is then None → the whole tail is the section). Do NOT copy this
+    # pattern to a section that can be followed by another `##` and contain fenced
+    # `## ` lines without making it fence-aware first. (Recurring shape: S23 Concern
+    # #2 in _extract_active_work_section, Opus S26 Concern #2 here.)
     nxt = re.search(r"\n##\s", after)
     section = after[: nxt.start()] if nxt else after
     rest = after[nxt.start():] if nxt else ""
