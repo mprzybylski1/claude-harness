@@ -20,7 +20,7 @@ sessions are unaffected.
 | `archive_session_log.py` | `--sessions PATH`, `--archive PATH` | Moves old session log entries to archive |
 | `rotate_opus_notes.py` | `--opus PATH`, `--archive PATH` | Archives old Opus review sections |
 | `classify_session.py` | `--repo PATH` | Git ops run in `--repo`; code paths and session-close prefix loaded from `<repo>/harness.yaml` (falls back to harness root). SKILL passes `--repo <primary-repo-path>` for workspace sessions. |
-| `generate_ticket_index.py` | `--sessions-file PATH` | Used by `regenerate_ticket_index.py` hook |
+| `generate_ticket_index.py` | `--workspace SLUG`, `--tickets-dir`, `--output`, `--sessions-file PATH` | Used by `regenerate_ticket_index.py` hook. Bare run in a workspace/undeclared session fails closed (T136) — pass `--workspace` for workspace indexes. |
 
 ## Workspace-compatible scripts (no special flags needed)
 
@@ -45,7 +45,7 @@ sessions are unaffected.
 | `surface_stale_tickets.py` | Reads harness-root `docs/tickets/INDEX.md`; needs workspace flag if workspace tickets are separate |
 | `repo_hygiene.py` | Harness-root hygiene checks |
 | `harness_config.py` | Library; loads `harness.yaml`; `load_for_repo(path)` for per-workspace config |
-| `analyze_tool_log.py` | Reads `.git/session_tool_log.jsonl`; produces workflow efficiency report; `--log`, `--session` flags; opt-in via `workflow_telemetry: true` in `harness.yaml` |
+| `analyze_tool_log.py` | Reads `.git/session_tool_log.jsonl`; produces workflow efficiency report; `--log`, `--session`, `--workspace` flags (with `--session` + default log, auto-detects the active workspace so the filter does not collide across layers — T137); opt-in via `workflow_telemetry: true` in `harness.yaml` |
 
 ## Adding a new script
 
