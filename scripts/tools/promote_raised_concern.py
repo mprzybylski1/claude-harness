@@ -229,6 +229,7 @@ def main() -> None:
         sys.executable,
         str(_SCRIPTS_DIR / "create_ticket.py"),
         title,
+        "--harness",  # promotion always creates a harness ticket; assert it explicitly
         "--severity", severity,
         "--layer", args.layer,
     ]

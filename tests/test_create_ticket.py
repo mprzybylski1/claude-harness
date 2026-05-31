@@ -10,12 +10,21 @@ CREATE = ROOT / "scripts" / "tools" / "create_ticket.py"
 
 
 def _setup(tmp_path: Path) -> Path:
-    """Minimal harness skeleton. Returns harness root."""
+    """Minimal harness skeleton. Returns harness root.
+
+    Declares a harness session (.claude/.active_workspace == "__harness__") so a
+    bare invocation routes to the harness layer (T140). Tests that want a workspace
+    or undeclared session overwrite/remove the state file after _setup returns.
+    """
     (tmp_path / "docs" / "tickets" / "open").mkdir(parents=True)
     (tmp_path / "docs" / "archive").mkdir(parents=True)
     (tmp_path / "docs" / "tickets" / "INDEX.md").write_text("# Index\n", encoding="utf-8")
     (tmp_path / "docs" / "sessions.md").write_text(
         "## Session Log\n\nS1 2026-01-01: init\n", encoding="utf-8"
+    )
+    (tmp_path / ".claude").mkdir()
+    (tmp_path / ".claude" / ".active_workspace").write_text(
+        "__harness__", encoding="utf-8"
     )
     tools = tmp_path / "scripts" / "tools"
     tools.mkdir(parents=True)
@@ -178,6 +187,98 @@ def _add_workspace(harness: Path, slug: str = "myws") -> Path:
     )
     ws.joinpath("workspace.yaml").write_text(f"name: {slug}\n", encoding="utf-8")
     return internal
+
+
+class TestSessionAwareRouting:
+    """T140: a bare invocation (no --workspace) must consult .claude/.active_workspace
+    and never silently create a HARNESS ticket from a workspace/undeclared session.
+    Mirrors generate_ticket_index.py (T136): harness session → harness layer; workspace
+    or undeclared session → fail closed; explicit --workspace always wins.
+    """
+
+    def _state(self, harness: Path, value: str | None) -> None:
+        state_file = harness / ".claude" / ".active_workspace"
+        if value is None:
+            state_file.unlink()
+        else:
+            state_file.write_text(value, encoding="utf-8")
+
+    def test_bare_in_harness_session_creates_harness_ticket(self, tmp_path):
+        harness = _setup(tmp_path)  # __harness__ declared by _setup
+        result = _run(harness, "Harness bare ticket")
+        assert result.returncode == 0, result.stderr
+        created = Path(result.stdout.strip())
+        assert created.exists()
+        assert "docs/tickets/open" in str(created), created
+
+    def test_bare_in_workspace_session_fails_closed(self, tmp_path):
+        harness = _setup(tmp_path)
+        _add_workspace(harness, "scrabble-score")
+        self._state(harness, "scrabble-score")
+        result = _run(harness, "Should not become a harness ticket")
+        assert result.returncode == 2, (result.returncode, result.stdout, result.stderr)
+        # Error must name the active slug and hand over the exact recovery command.
+        assert "scrabble-score" in result.stderr
+        assert "--workspace scrabble-score" in result.stderr
+        # And nothing was written to the harness layer.
+        assert not list((harness / "docs" / "tickets" / "open").glob("T*.md"))
+
+    def test_bare_undeclared_session_fails_closed(self, tmp_path):
+        harness = _setup(tmp_path)
+        self._state(harness, None)  # remove the state file → undeclared
+        result = _run(harness, "Undeclared bare ticket")
+        assert result.returncode == 2, (result.returncode, result.stdout, result.stderr)
+        assert "session-start" in result.stderr
+        assert not list((harness / "docs" / "tickets" / "open").glob("T*.md"))
+
+    def test_bare_empty_state_fails_closed(self, tmp_path):
+        harness = _setup(tmp_path)
+        self._state(harness, "")  # empty → undeclared
+        result = _run(harness, "Empty state bare ticket")
+        assert result.returncode == 2, (result.returncode, result.stdout, result.stderr)
+
+    def test_explicit_workspace_wins_over_workspace_session(self, tmp_path):
+        # --workspace always wins, even when a (different) workspace session is declared.
+        harness = _setup(tmp_path)
+        _add_workspace(harness, "target-ws")
+        self._state(harness, "other-ws")
+        result = _run(harness, "Explicit routes regardless of state",
+                      "--workspace", "target-ws")
+        assert result.returncode == 0, result.stderr
+        created = Path(result.stdout.strip())
+        assert "target-ws" in str(created), created
+
+    def test_explicit_workspace_wins_in_harness_session(self, tmp_path):
+        harness = _setup(tmp_path)  # __harness__ declared
+        _add_workspace(harness, "target-ws")
+        result = _run(harness, "Explicit workspace from harness session",
+                      "--workspace", "target-ws")
+        assert result.returncode == 0, result.stderr
+        assert "target-ws" in str(Path(result.stdout.strip()))
+
+    def test_harness_flag_bypasses_session_check(self, tmp_path):
+        # --harness asserts harness intent for programmatic callers
+        # (promote_raised_concern.py) regardless of ambient session state.
+        harness = _setup(tmp_path)
+        self._state(harness, "some-workspace")  # would otherwise fail closed
+        result = _run(harness, "Programmatic harness ticket", "--harness")
+        assert result.returncode == 0, result.stderr
+        created = Path(result.stdout.strip())
+        assert "docs/tickets/open" in str(created), created
+
+    def test_harness_flag_works_when_undeclared(self, tmp_path):
+        harness = _setup(tmp_path)
+        self._state(harness, None)  # undeclared
+        result = _run(harness, "Harness flag undeclared", "--harness")
+        assert result.returncode == 0, result.stderr
+        assert "docs/tickets/open" in str(Path(result.stdout.strip()))
+
+    def test_harness_and_workspace_mutually_exclusive(self, tmp_path):
+        harness = _setup(tmp_path)
+        _add_workspace(harness, "myws")
+        result = _run(harness, "Conflicting flags", "--harness", "--workspace", "myws")
+        assert result.returncode != 0
+        assert "not allowed with" in result.stderr or "mutually exclusive" in result.stderr.lower()
 
 
 class TestPerLayerNumbering:

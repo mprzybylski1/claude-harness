@@ -7,9 +7,16 @@ Usage:
     create_ticket.py "Title here" --severity medium --ac "AC one" --ac "AC two"
     create_ticket.py "Title here" --workspace scrabble-score
 
+Layer selection (T140):
+    --workspace SLUG  → that workspace's layer (explicit)
+    --harness         → harness layer (explicit; for programmatic callers)
+    (neither)         → consult .claude/.active_workspace: harness session uses the
+                        harness layer; a workspace or undeclared session fails closed
+                        (never silently creates a harness ticket from a workspace session)
+
 The script auto-picks the next T-number scoped to the target layer (the chosen
-workspace's own sequence, or the harness sequence when no --workspace is given),
-writes the file, and regenerates INDEX.md.
+workspace's own sequence, or the harness sequence otherwise), writes the file,
+and regenerates INDEX.md.
 """
 from __future__ import annotations
 
@@ -26,7 +33,13 @@ ROOT = Path(os.environ.get("HARNESS_ROOT", str(_default_root)))
 
 sys.path.insert(0, str(ROOT / "scripts" / "tools"))
 import session_lookup
-from workspace_config import load_workspace
+from workspace_config import (
+    STATE_HARNESS,
+    STATE_UNDECLARED,
+    STATE_WORKSPACE,
+    load_workspace,
+    read_session_state,
+)
 
 
 def _docs_paths(ws_dir: Path) -> list[Path]:
@@ -101,6 +114,41 @@ def _resolve_internal(workspace_slug: str) -> Path:
     return internal
 
 
+def _resolve_bare_layer() -> None:
+    """Decide the target layer for a bare invocation (no --workspace).
+
+    Consults the session-declared layer in .claude/.active_workspace and fails
+    closed unless this is a harness session — a bare invocation must never silently
+    create a HARNESS ticket from a workspace or undeclared session (T140; mirrors
+    generate_ticket_index.py's T136 behavior and check_cross_layer_writes). Returns
+    None (the harness layer) only for a declared harness session; otherwise exits 2.
+
+    create_ticket writes via plain `open()`, so the PreToolUse cross-layer hook —
+    which fires on Edit/Write only — cannot catch a misrouted ticket here; the tool
+    itself has to be session-aware.
+    """
+    state, slug = read_session_state(ROOT)
+    if state == STATE_WORKSPACE:
+        print(
+            f"ERROR (T140): active session is workspace '{slug}', but no --workspace "
+            f"was given — refusing to create a harness ticket from a workspace session.\n"
+            f"  Create the ticket in your workspace with:\n"
+            f"    python scripts/tools/create_ticket.py \"<title>\" --workspace {slug}",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    if state == STATE_UNDECLARED:
+        print(
+            "ERROR (T140): session type undeclared (.claude/.active_workspace is "
+            "missing or empty) — refusing to create a ticket by default.\n"
+            "  Run /session-start to declare the session, or pass --workspace SLUG.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    # state == STATE_HARNESS → harness layer (current behavior).
+    return None
+
+
 def _current_session(internal: Path | None) -> str:
     sessions_md = (internal / "sessions.md") if internal is not None else None
     try:
@@ -159,15 +207,25 @@ def main() -> None:
     parser.add_argument("--phase", default="2", help="Phase number (default: 2)")
     parser.add_argument("--ac", dest="acs", metavar="TEXT", action="append",
                         help="Acceptance criterion (repeatable)")
-    parser.add_argument("--workspace", metavar="SLUG",
-                        help="Workspace slug to create ticket in")
+    layer_group = parser.add_mutually_exclusive_group()
+    layer_group.add_argument("--workspace", metavar="SLUG",
+                             help="Workspace slug to create ticket in")
+    layer_group.add_argument("--harness", action="store_true",
+                             help="Force the harness layer, bypassing the session-state "
+                                  "check (for programmatic harness operations like "
+                                  "promote_raised_concern.py — T140)")
     parser.add_argument("--layer", choices=_LAYER_VALUES, default="tooling",
                         help="Layer value for ticket frontmatter (default: tooling)")
     parser.add_argument("--repo", metavar="SLUG",
                         help="Repo slug for workspace ticket frontmatter")
     args = parser.parse_args()
 
-    internal = _resolve_internal(args.workspace) if args.workspace else None
+    if args.workspace:
+        internal = _resolve_internal(args.workspace)  # explicit workspace intent
+    elif args.harness:
+        internal = None  # explicit harness intent — bypass the session check
+    else:
+        internal = _resolve_bare_layer()  # bare → consult the session-declared layer
 
     if internal is not None:
         open_dir = internal / "tickets" / "open"
