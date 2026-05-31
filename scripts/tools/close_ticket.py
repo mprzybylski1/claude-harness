@@ -143,12 +143,59 @@ def _update_frontmatter(content: str, session: str) -> str:
     return content
 
 
-def _replace_resolution(content: str, resolution: str) -> str:
-    """Replace the '(Fill in on close.)' placeholder with resolution text.
+def _resolution_section(content: str):
+    """Return (header_match, section_text, rest) for the ## Resolution section,
+    or None if there is no such header. section_text is the body up to the next
+    `## ` heading (or EOF); rest is everything from that heading onward ("" if EOF)."""
+    header = re.search(r"## Resolution\s*\n", content)
+    if not header:
+        return None
+    after = content[header.end():]
+    nxt = re.search(r"\n##\s", after)
+    section = after[: nxt.start()] if nxt else after
+    rest = after[nxt.start():] if nxt else ""
+    return header, section, rest
 
-    Tries a strict match first (handles optional client-visible block).
-    Falls back to a permissive search within the ## Resolution section, with a warning.
+
+def _append_resolution(content: str, resolution: str) -> str:
+    """Append resolution text to the END of an already-populated ## Resolution
+    section, preserving the content authored during the work (T144).
+
+    The rich content leads (it is the real resolution); the one-line --resolution
+    summary + close stamp trail it. Errors (exit 2) when there is nothing to
+    preserve — an empty section or just the placeholder — since the default
+    replace mode is the right tool there.
     """
+    parsed = _resolution_section(content)
+    if parsed is None:
+        print("ERROR: no '## Resolution' section found — ticket format unexpected",
+              file=sys.stderr)
+        sys.exit(2)
+    header, section, rest = parsed
+    body = section.strip()
+    if not body or re.fullmatch(r"\(Fill in on close[^)]*\)", body):
+        print(
+            "ERROR: --append needs existing Resolution content to preserve, but this "
+            "section is empty or only the placeholder. Drop --append and use "
+            "--resolution alone to fill the placeholder.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    new_section = section.rstrip() + "\n\n" + resolution.rstrip() + "\n"
+    return content[: header.end()] + new_section + rest
+
+
+def _replace_resolution(content: str, resolution: str, append: bool = False) -> str:
+    """Insert resolution text into the ## Resolution section.
+
+    append=False (default): replace the '(Fill in on close.)' placeholder. Tries a
+    strict match first (handles optional client-visible block), then a permissive
+    search within the section, with a warning.
+    append=True: keep existing section content and add the resolution at the end
+    (see _append_resolution).
+    """
+    if append:
+        return _append_resolution(content, resolution)
     strict = re.compile(
         r"(## Resolution\s*\n)"
         r"(?:> \*\*Client-visible:\*\*.*?\n(?:> .*\n)*\n)?"
@@ -182,8 +229,11 @@ def _replace_resolution(content: str, resolution: str) -> str:
             )
 
     print(
-        "ERROR: ## Resolution placeholder '(Fill in on close.)' not found "
-        "— ticket format unexpected",
+        "ERROR: the ## Resolution section has no '(Fill in on close.)' placeholder.\n"
+        "  - If you wrote the resolution into the ticket as the work evolved, pass "
+        "--append to add your --resolution text after that existing content.\n"
+        "  - Otherwise restore the '(Fill in on close.)' placeholder so --resolution "
+        "can replace it.",
         file=sys.stderr,
     )
     sys.exit(2)
@@ -523,6 +573,10 @@ def main() -> None:
                            help="Resolution text (inline)")
     res_group.add_argument("--resolution-file", metavar="PATH",
                            help="Path to a file containing the resolution text")
+    parser.add_argument("--append", action="store_true",
+                        help="Keep the existing ## Resolution content (authored during "
+                             "the work) and add --resolution text at the end, instead of "
+                             "replacing the '(Fill in on close.)' placeholder")
     gate_group = parser.add_mutually_exclusive_group()
     gate_group.add_argument("--force", action="store_true",
                             help="Close even if some ACs are still unchecked")
@@ -635,7 +689,7 @@ def main() -> None:
 
     # Apply changes
     content = _update_frontmatter(content, session)
-    content = _replace_resolution(content, full_resolution)
+    content = _replace_resolution(content, full_resolution, append=args.append)
 
     # Determine archive path
     if internal is not None:
