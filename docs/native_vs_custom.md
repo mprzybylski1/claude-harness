@@ -34,7 +34,7 @@ one of them (telemetry) is the subject of an open ticket — which makes
 | Cross-layer write governance (`check_cross_layer_writes`, AC gate, fix-commit gate) | hook *system* is native; the *rules* are not | **Keep custom — already uses native primitives correctly** |
 | SR boundary-ticketing (workspace→harness `raised/`) | none | **Keep custom** |
 | Opus review (session-close / impl-review) | subagent `model:` override; cloud `/code-review ultra` | **Hybrid — native primitive, custom context-prep** |
-| Telemetry (`log_tool_usage` → `analyze_tool_log`) | native OTel events + JSONL transcripts | **Reinvents native — candidate to replace (see T137)** |
+| Telemetry (`log_tool_usage` → `analyze_tool_log`) | native OTel events + JSONL transcripts | **Keep custom as a thin live-stamped domain index + join key — decided T137, rationale below** |
 | Session-start briefing (manual `/session-start`) | `SessionStart` hook can inject context automatically | **Hybrid — keep the briefing, native-ify the trigger** |
 | Background ticket impl (`implement_ticket.py` state machine) | partial — `Agent` + `run_in_background` | **Hybrid — keep snapshot/revert, native runner** |
 | User memory (`~/.claude/.../memory/MEMORY.md`) | this *is* native auto-memory | **Already native — not custom** |
@@ -59,16 +59,30 @@ That is not reinvention — leave it.
 
 ## Bucket 2 — Reinventing native (candidates to thin)
 
-- **Telemetry (the sharp one).** `log_tool_usage.py` re-implements what Claude
-  Code already emits as OpenTelemetry tool-use events plus the JSONL transcript
-  under `~/.claude/projects/.../`. It is also the exact layer that is broken —
-  **SR-010 / T137 (workspace-blind session stamping)**. Real fork: *fix the
-  custom logger (T137) or delete it and read native OTel/transcripts.* The
-  custom logger's one genuine advantage is **in-session analysis**
-  (`analyze_tool_log.py` produces a workflow report on demand); native OTel needs
-  an external backend (CloudWatch/Datadog) and native transcripts carry no
-  per-tool token counts. Defensible — but it must be a **decision**, not a
-  default. See the decision note on T137.
+- **Telemetry — DECIDED (T137, S25): keep custom, but as a thin live-stamped
+  domain index, not a data store.** The fork (fix the custom logger vs. delete it
+  and read native OTel/transcripts) was resolved in favour of **fix + bridge**,
+  for reasons that survive scrutiny:
+  - **Native has no `S<N>`/workspace concept.** Transcripts are keyed by Claude
+    session UUID (23 files in this project dir; one human "session" spans several
+    via compaction/`bridge-session`). `/workflow-review` reasons in the harness's
+    `(S<N>, workspace)` vocabulary, which only exists in this layer. You cannot
+    get `S<N>`-keyed analysis without custom code **either way** — going fully
+    native would *relocate* custom code into a transcript parser coupled to an
+    undocumented Anthropic-controlled schema, not eliminate it. So "delete it"
+    does not actually remove the reinvention; it moves it somewhere more fragile.
+  - **Domain keying is only cheap live.** The hook knows the active session and
+    workspace at write time (from `.claude/.active_workspace`); reconstructing
+    that post-hoc from a UUID-keyed transcript is fuzzy. So the logger stays a
+    **live-stamped index**: `(ts, tool, path, S<N>, workspace, claude_session_uuid)`.
+  - **It is not a parallel data store.** `claude_session_uuid` == the native
+    transcript filename, so the index **joins** to native telemetry for the richer
+    per-call data (tokens, full I/O) on demand — no duplication. The join itself
+    is deferred until a consumer needs token-level data (its own ticket); nothing
+    today does.
+  This is the "why custom" rationale that the portfolio note below calls for —
+  now on record rather than implied. SR-010's workspace-blind stamping is fixed
+  by switching attribution from per-file-path to active-session.
 - **`/session-start` trigger.** The briefing content is valuable and custom; the
   *manual invocation* is not. A native `SessionStart` hook can inject
   `additionalContext` automatically, so the briefing loads without the user

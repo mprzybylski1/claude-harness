@@ -385,6 +385,75 @@ class TestAnalyzeToolLog:
             f"Legitimately edited file must appear:\n{edited_section}"
 
 
+class TestWorkspaceFilter:
+    """T137: analyze_tool_log --workspace + (workspace, session) filtering."""
+
+    def _records(self) -> list[dict]:
+        ts = time.time()
+        return [
+            {"ts": ts + 0, "tool": "Edit", "path": "a.swift", "session": "S12",
+             "workspace": "scrabble-score"},
+            {"ts": ts + 1, "tool": "Bash", "path": "echo", "session": "S12",
+             "workspace": "scrabble-score"},
+            {"ts": ts + 2, "tool": "Edit", "path": "log_tool_usage.py", "session": "S12",
+             "workspace": ""},
+            {"ts": ts + 3, "tool": "Read", "path": "legacy.py", "session": "S12"},  # no key
+        ]
+
+    def test_workspace_filter_isolates_workspace(self, tmp_path):
+        log = tmp_path / "l.jsonl"
+        _make_log(log, self._records())
+        r = subprocess.run(
+            [sys.executable, str(ANALYZE), "--log", str(log),
+             "--session", "S12", "--workspace", "scrabble-score"],
+            capture_output=True, text=True,
+        )
+        assert r.returncode == 0, r.stderr
+        assert "Records: 2" in r.stdout
+        assert "Workspace: scrabble-score" in r.stdout
+
+    def test_harness_alias_filters_empty_and_legacy(self, tmp_path):
+        # "harness" alias → workspace=="" plus legacy records (missing key → "").
+        log = tmp_path / "l.jsonl"
+        _make_log(log, self._records())
+        r = subprocess.run(
+            [sys.executable, str(ANALYZE), "--log", str(log),
+             "--session", "S12", "--workspace", "harness"],
+            capture_output=True, text=True,
+        )
+        assert r.returncode == 0, r.stderr
+        assert "Records: 2" in r.stdout
+        assert "Workspace: harness" in r.stdout
+
+    def test_explicit_log_does_not_autodetect(self, tmp_path):
+        # --log given → auto-detect suppressed → no workspace filter → all 4.
+        log = tmp_path / "l.jsonl"
+        _make_log(log, self._records())
+        r = subprocess.run(
+            [sys.executable, str(ANALYZE), "--log", str(log), "--session", "S12"],
+            capture_output=True, text=True,
+        )
+        assert r.returncode == 0, r.stderr
+        assert "Records: 4" in r.stdout
+
+    def test_autodetect_workspace_from_active_state(self, tmp_path):
+        # No --log → default log under HARNESS_ROOT; auto-detect reads .active_workspace.
+        import os as _os
+        h = tmp_path / "harness"
+        (h / ".git").mkdir(parents=True)
+        (h / ".claude").mkdir(parents=True)
+        (h / ".claude" / ".active_workspace").write_text("scrabble-score", encoding="utf-8")
+        _make_log(h / ".git" / "session_tool_log.jsonl", self._records())
+        r = subprocess.run(
+            [sys.executable, str(ANALYZE), "--session", "S12"],
+            capture_output=True, text=True,
+            env={**_os.environ, "HARNESS_ROOT": str(h), "PYTHONPATH": str(ROOT)},
+        )
+        assert r.returncode == 0, r.stderr
+        assert "Workspace: scrabble-score" in r.stdout
+        assert "Records: 2" in r.stdout
+
+
 # ── F11: harness_config.load_for_repo fallback ───────────────────────────────
 
 class TestLoadForRepoFallback:
@@ -433,252 +502,136 @@ class TestLoadForRepoFallback:
         assert "ERROR" in result.stderr
 
 
-# ── T057: workspace-aware session stamping ───────────────────────────────────
+# ── T137: active-workspace session stamping (replaces path-based T057) ─────────
 
-class TestWorkspaceAwareStamping:
-    """The hook must derive the session from the right sessions.md based on
-    which workspace the tool call targets — not from a global cache that gets
-    clobbered by mixed harness/workspace callers.
+class TestActiveWorkspaceStamping:
+    """T137: attribution is by the ACTIVE session, read from
+    .claude/.active_workspace (via workspace_config.read_session_state), NOT by
+    the path of the touched file. Every call in a session inherits that session's
+    (workspace, S<N>) + a live claude_session_uuid join key. This replaces the
+    path-based T057 scheme, which under-attributed non-repo-path calls to harness.
     """
 
     @classmethod
     def setup_class(cls):
         sys.path.insert(0, str(ROOT / "scripts" / "hooks"))
+        sys.path.insert(0, str(ROOT / "scripts" / "tools"))
 
-    def _make_workspace(self, tmp_path, *, slug: str, last_session: int,
-                        repo_subdir: str = "repo") -> tuple[Path, dict]:
-        """Build a fake workspace dir with a sessions.md last entry of S<last_session>.
+    def _fake_harness(self, tmp_path, *, state, ws_slug=None,
+                      ws_last=None, harness_last=None):
+        h = tmp_path / "harness"
+        (h / ".claude").mkdir(parents=True)
+        (h / "docs").mkdir(parents=True)
+        if harness_last is not None:
+            (h / "docs" / "sessions.md").write_text(
+                f"S{harness_last} 2026-05-26: latest\n", encoding="utf-8")
+        (h / ".claude" / ".active_workspace").write_text(state, encoding="utf-8")
+        if ws_slug:
+            internal = h / "workspaces" / ws_slug / "internal"
+            internal.mkdir(parents=True)
+            (h / "workspaces" / ws_slug / "workspace.yaml").write_text(
+                f"name: {ws_slug}\n", encoding="utf-8")
+            if ws_last is not None:
+                (internal / "sessions.md").write_text(
+                    f"S{ws_last} 2026-05-26: ws\n", encoding="utf-8")
+        return h
 
-        Returns (workspace_dir, workspace_cfg_dict).
-        """
-        repo_root = tmp_path / slug / repo_subdir
-        repo_root.mkdir(parents=True)
-        internal = tmp_path / slug / "internal"
-        internal.mkdir()
-        (internal / "sessions.md").write_text(
-            f"S{last_session - 1} 2026-05-25: prior\n"
-            f"S{last_session} 2026-05-26: latest\n"
-        )
-        cfg = {
-            "name": slug.title(),
-            "status": "active",
-            "repos": [{"path": str(repo_root), "role": "primary"}],
-            "docs_path": str(internal),
-        }
-        return (tmp_path / slug, cfg)
+    # ── _session_from_sessions_md ──────────────────────────────────────────────
 
-    def test_detect_workspace_from_edit_file_path(self, tmp_path):
+    def test_session_from_sessions_md_last_plus_one(self, tmp_path):
+        import log_tool_usage as ltu
+        sm = tmp_path / "sessions.md"
+        sm.write_text("S6 2026-05-25: a\nS7 2026-05-26: b\n", encoding="utf-8")
+        assert ltu._session_from_sessions_md(sm) == "S8"
+
+    def test_session_from_sessions_md_none_returns_empty(self):
+        import log_tool_usage as ltu
+        assert ltu._session_from_sessions_md(None) == ""
+
+    def test_session_from_sessions_md_missing_returns_empty(self, tmp_path):
+        import log_tool_usage as ltu
+        assert ltu._session_from_sessions_md(tmp_path / "nope.md") == ""
+
+    # ── _active_workspace_and_sessions_md ──────────────────────────────────────
+
+    def test_active_resolves_workspace(self, tmp_path):
         import log_tool_usage as ltu
         import unittest.mock as mock
-        ws_dir, cfg = self._make_workspace(tmp_path, slug="alpha", last_session=4)
-        target = Path(cfg["repos"][0]["path"]) / "foo.py"
-        with mock.patch.object(ltu, "_list_workspaces", return_value=[("alpha", cfg)]):
-            slug, ws_cfg = ltu._detect_workspace("Edit", {"file_path": str(target)})
-        assert slug == "alpha"
-        assert ws_cfg == cfg
+        h = self._fake_harness(tmp_path, state="myws", ws_slug="myws", ws_last=11)
+        with mock.patch.object(ltu, "ROOT", h):
+            ws, sm = ltu._active_workspace_and_sessions_md()
+        assert ws == "myws"
+        assert ltu._session_from_sessions_md(sm) == "S12"
 
-    def test_detect_workspace_from_bash_command_path_argument(self, tmp_path):
+    def test_active_resolves_harness_sentinel(self, tmp_path):
         import log_tool_usage as ltu
         import unittest.mock as mock
-        ws_dir, cfg = self._make_workspace(tmp_path, slug="beta", last_session=2)
-        repo_path = cfg["repos"][0]["path"]
-        cmd = f"python scripts/tools/extract_session_brief.py --sessions {repo_path}/sessions.md"
-        with mock.patch.object(ltu, "_list_workspaces", return_value=[("beta", cfg)]):
-            slug, _ = ltu._detect_workspace("Bash", {"command": cmd})
-        assert slug == "beta"
+        h = self._fake_harness(tmp_path, state="__harness__", harness_last=21)
+        with mock.patch.object(ltu, "ROOT", h):
+            ws, sm = ltu._active_workspace_and_sessions_md()
+        assert ws == ""
+        assert ltu._session_from_sessions_md(sm) == "S22"
 
-    def test_detect_workspace_returns_none_for_harness_root_path(self, tmp_path):
+    def test_active_undeclared_falls_to_harness(self, tmp_path):
         import log_tool_usage as ltu
         import unittest.mock as mock
-        _, cfg = self._make_workspace(tmp_path, slug="gamma", last_session=1)
-        with mock.patch.object(ltu, "_list_workspaces", return_value=[("gamma", cfg)]):
-            slug, ws_cfg = ltu._detect_workspace(
-                "Edit", {"file_path": str(tmp_path / "elsewhere" / "x.py")}
-            )
-        assert slug == ""
-        assert ws_cfg is None
+        h = self._fake_harness(tmp_path, state="", harness_last=3)
+        with mock.patch.object(ltu, "ROOT", h):
+            ws, sm = ltu._active_workspace_and_sessions_md()
+        assert ws == ""
+        assert ltu._session_from_sessions_md(sm) == "S4"
 
-    def test_detect_workspace_handles_missing_path(self, tmp_path):
+    # ── end-to-end record shape ────────────────────────────────────────────────
+
+    def test_bare_bash_in_workspace_attributes_to_active_workspace(self, tmp_path):
+        """The fix: a path-less call (bare Bash) during a workspace session is
+        stamped with the active workspace + its session — path-based T057 wrongly
+        stamped workspace='' harness for these."""
         import log_tool_usage as ltu
         import unittest.mock as mock
-        _, cfg = self._make_workspace(tmp_path, slug="delta", last_session=1)
-        with mock.patch.object(ltu, "_list_workspaces", return_value=[("delta", cfg)]):
-            slug, _ = ltu._detect_workspace("Edit", {})
-        assert slug == ""
-
-    def test_session_for_workspace_reads_workspace_sessions_md(self, tmp_path):
-        """When a workspace is detected, session is computed from its sessions.md
-        — NOT from the harness-root cache.
-        """
-        import log_tool_usage as ltu
-        ws_dir, cfg = self._make_workspace(tmp_path, slug="epsilon", last_session=7)
-        sid = ltu._session_for_workspace(ws_dir, cfg)
-        assert sid == "S8"
-
-    def test_session_for_harness_root_falls_back_to_docs_sessions_md(
-        self, tmp_path, monkeypatch
-    ):
-        """When no workspace matches, session derives from harness-root sessions.md."""
-        import log_tool_usage as ltu
-        import unittest.mock as mock
-        (tmp_path / "docs").mkdir()
-        (tmp_path / "docs" / "sessions.md").write_text(
-            "S40 2026-05-25: prior\nS41 2026-05-26: latest\n"
-        )
-        with mock.patch.object(ltu, "ROOT", tmp_path):
-            sid = ltu._session_for_workspace(None, None)
-        assert sid == "S42"
-
-    def test_session_independent_of_cache_file(self, tmp_path):
-        """A bogus value in .git/CLAUDE_SESSION_ID must not affect the stamp."""
-        import log_tool_usage as ltu
-        ws_dir, cfg = self._make_workspace(tmp_path, slug="zeta", last_session=3)
-        # Drop a stale cache file in the workspace area — function must ignore it
-        (tmp_path / ".git").mkdir(exist_ok=True)
-        (tmp_path / ".git" / "CLAUDE_SESSION_ID").write_text("999")
-        sid = ltu._session_for_workspace(ws_dir, cfg)
-        assert sid == "S4"
-
-    def test_session_for_workspace_without_docs_path_uses_ws_dir_internal(self, tmp_path):
-        """When docs_path absent, ws_dir/internal/sessions.md is used."""
-        import log_tool_usage as ltu
-        ws_dir = tmp_path / "ws_no_docs"
-        internal = ws_dir / "internal"
-        internal.mkdir(parents=True)
-        (internal / "sessions.md").write_text(
-            "S8 2026-05-25: prior\nS9 2026-05-26: latest\n"
-        )
-        cfg = {"name": "Nodocs", "repos": [{"path": str(tmp_path / "repo"), "role": "primary"}]}
-        sid = ltu._session_for_workspace(ws_dir, cfg)
-        assert sid == "S10"
-
-    def test_session_for_workspace_none_ws_dir_no_docs_path_logs_error(self, tmp_path):
-        """ws_dir=None with no docs_path in cfg returns '' and logs an error."""
-        import log_tool_usage as ltu
-        import unittest.mock as mock
-        cfg = {"name": "Broken", "repos": []}
-        err_path = tmp_path / "errors"
-        with mock.patch.object(ltu, "_ERR_PATH", err_path):
-            sid = ltu._session_for_workspace(None, cfg)
-        assert sid == ""
-        assert err_path.exists(), "expected error to be logged"
-        assert "ws_dir is None" in err_path.read_text()
-
-    def test_candidate_paths_bash_quoted_path_with_spaces(self):
-        """shlex.split handles a shell-quoted path containing spaces."""
-        import log_tool_usage as ltu
-        cmd = 'python foo.py --sessions "/Users/foo/My Project/sessions.md"'
-        paths = ltu._candidate_paths("Bash", {"command": cmd})
-        assert any("My Project" in p for p in paths), f"Expected quoted path in {paths}"
-
-    def test_record_includes_workspace_field(self, tmp_path):
-        """End-to-end: payload for a workspace file produces a record with
-        the correct workspace slug and session.
-        """
-        import log_tool_usage as ltu
-        import unittest.mock as mock
-        ws_dir, cfg = self._make_workspace(tmp_path, slug="eta", last_session=11)
-        target = Path(cfg["repos"][0]["path"]) / "model.swift"
-        log_path = tmp_path / "log.jsonl"
-        sentinel = tmp_path / ".git" / "workflow_telemetry_on"
-        sentinel.parent.mkdir(exist_ok=True)
+        h = self._fake_harness(tmp_path, state="myws", ws_slug="myws", ws_last=11)
+        log_path = h / ".git" / "session_tool_log.jsonl"
+        sentinel = h / ".git" / "workflow_telemetry_on"
+        sentinel.parent.mkdir(parents=True)
         sentinel.touch()
-
-        payload = json.dumps({"tool_name": "Edit", "tool_input": {"file_path": str(target)}})
-        with mock.patch.object(ltu, "ROOT", tmp_path), \
+        payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": "echo hi"}})
+        with mock.patch.object(ltu, "ROOT", h), \
              mock.patch.object(ltu, "_LOG_PATH", log_path), \
              mock.patch.object(ltu, "_SENTINEL", sentinel), \
-             mock.patch.object(ltu, "_list_workspaces", return_value=[("eta", cfg)]), \
+             mock.patch.dict("os.environ", {"CLAUDE_CODE_SESSION_ID": "uuid-123"}), \
              mock.patch("sys.stdin.read", return_value=payload):
             try:
                 ltu.main()
             except SystemExit:
                 pass
-
-        lines = log_path.read_text().splitlines()
-        assert len(lines) == 1, f"Expected 1 record, got {len(lines)}"
-        rec = json.loads(lines[0])
-        assert rec["workspace"] == "eta"
+        rec = json.loads(log_path.read_text().splitlines()[0])
+        assert rec["workspace"] == "myws"
         assert rec["session"] == "S12"
-        assert rec["tool"] == "Edit"
+        assert rec["claude_session_uuid"] == "uuid-123"
+        assert rec["tool"] == "Bash"
 
-    def test_record_includes_workspace_field_harness_root_case(self, tmp_path):
-        """End-to-end: payload for a harness-root file produces workspace=''."""
+    def test_harness_session_record_has_empty_workspace(self, tmp_path):
         import log_tool_usage as ltu
         import unittest.mock as mock
-        ws_dir, cfg = self._make_workspace(tmp_path, slug="theta", last_session=5)
-        (tmp_path / "docs").mkdir()
-        (tmp_path / "docs" / "sessions.md").write_text(
-            "S20 2026-05-25: prior\nS21 2026-05-26: latest\n"
-        )
-        log_path = tmp_path / "log.jsonl"
-        sentinel = tmp_path / ".git" / "workflow_telemetry_on"
-        sentinel.parent.mkdir(exist_ok=True)
+        h = self._fake_harness(tmp_path, state="__harness__", harness_last=20)
+        log_path = h / ".git" / "session_tool_log.jsonl"
+        sentinel = h / ".git" / "workflow_telemetry_on"
+        sentinel.parent.mkdir(parents=True)
         sentinel.touch()
-        target = tmp_path / "harness_file.py"
-        target.write_text("")
-
-        payload = json.dumps({"tool_name": "Edit", "tool_input": {"file_path": str(target)}})
-        with mock.patch.object(ltu, "ROOT", tmp_path), \
+        payload = json.dumps({"tool_name": "Edit", "tool_input": {"file_path": "scripts/x.py"}})
+        with mock.patch.object(ltu, "ROOT", h), \
              mock.patch.object(ltu, "_LOG_PATH", log_path), \
              mock.patch.object(ltu, "_SENTINEL", sentinel), \
-             mock.patch.object(ltu, "_list_workspaces", return_value=[("theta", cfg)]), \
+             mock.patch.dict("os.environ", {"CLAUDE_CODE_SESSION_ID": "uuid-h"}), \
              mock.patch("sys.stdin.read", return_value=payload):
             try:
                 ltu.main()
             except SystemExit:
                 pass
-
-        lines = log_path.read_text().splitlines()
-        assert len(lines) == 1
-        rec = json.loads(lines[0])
+        rec = json.loads(log_path.read_text().splitlines()[0])
         assert rec["workspace"] == ""
-        assert rec["session"] == "S22"
-
-    def test_candidate_paths_tilde_expansion(self, tmp_path):
-        """~/path tokens are expanded to absolute before workspace matching."""
-        import log_tool_usage as ltu
-        import unittest.mock as mock
-        home = Path.home()
-        repo_root = home / "fake_ws_repo_for_test"
-        cfg = {
-            "name": "TildeWS",
-            "repos": [{"path": str(repo_root), "role": "primary"}],
-            "docs_path": str(tmp_path / "internal"),
-        }
-        cmd = f"cat ~/fake_ws_repo_for_test/some_file.md"
-        with mock.patch.object(ltu, "_list_workspaces", return_value=[("tildews", cfg)]):
-            slug, _ = ltu._detect_workspace("Bash", {"command": cmd})
-        assert slug == "tildews", f"Expected tildews, got '{slug}' — tilde not expanded"
-
-    def test_candidate_paths_chained_equals_extracts_path(self):
-        """KEY=val=/path yields /path, not the intermediate val=/path."""
-        import log_tool_usage as ltu
-        cmd = "python foo.py --sessions=/tmp/some/sessions.md KEY=val=/other/path"
-        paths = ltu._candidate_paths("Bash", {"command": cmd})
-        assert "/tmp/some/sessions.md" in paths
-        assert "/other/path" in paths
-
-    def test_detect_workspace_inner_except_logs_error(self, tmp_path):
-        """When is_within_workspace raises, the error is logged rather than swallowed."""
-        import log_tool_usage as ltu
-        import unittest.mock as mock
-
-        cfg = {"name": "Broken", "repos": [{"path": "/some/repo", "role": "primary"}]}
-        err_path = tmp_path / "errors"
-
-        def _raise(path, cfg):
-            raise RuntimeError("simulated cfg error")
-
-        with mock.patch.object(ltu, "_list_workspaces", return_value=[("broken", cfg)]), \
-             mock.patch("workspace_config.is_within_workspace", _raise), \
-             mock.patch.object(ltu, "_ERR_PATH", err_path):
-            ltu._ERR_COUNT = 0
-            ltu._ERR_WINDOW_START = 0.0
-            ltu._detect_workspace("Edit", {"file_path": "/some/repo/x.py"})
-
-        assert err_path.exists(), "Expected error to be logged"
-        assert "workspace match failed" in err_path.read_text()
+        assert rec["session"] == "S21"
+        assert rec["claude_session_uuid"] == "uuid-h"
 
 
 # ── T059: _log_error rate-limit ───────────────────────────────────────────────

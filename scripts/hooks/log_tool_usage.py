@@ -8,13 +8,21 @@ Toggle via: python scripts/tools/toggle_telemetry.py on|off|status
 
 Log format (one JSON object per line):
     {"ts": 1700000000.0, "tool": "Edit", "path": "scripts/...",
-     "session": "S6", "workspace": "scrabble-score"}
+     "session": "S6", "workspace": "scrabble-score",
+     "claude_session_uuid": "e693d4fb-..."}
 
-Session/workspace stamping (T057):
-  - The tool call's target path(s) are matched against every active workspace's
-    declared repos. If the path lies inside a workspace, that workspace's
-    sessions.md is read directly to derive S<N>. If no workspace matches,
-    harness-root docs/sessions.md is used and "workspace" is "".
+Session/workspace stamping (T137, was T057):
+  - Attribution is by the ACTIVE session, read from .claude/.active_workspace via
+    workspace_config.read_session_state (cwd-independent), NOT by the path of the
+    touched file. A workspace session stamps (slug, that workspace's S<N>); a
+    harness/undeclared session stamps ("", harness S<N>). Every call in a session
+    therefore carries that session's (workspace, S<N>), so analyze_tool_log's
+    (workspace, session) filter never collides across layers (SR-010). The prior
+    path-based scheme (T057) under-attributed any call that didn't touch a declared
+    repo file (bare Bash, harness-file reads) to the harness layer.
+  - claude_session_uuid = $CLAUDE_CODE_SESSION_ID, which IS the native JSONL
+    transcript filename — a live join key to richer per-call data (tokens, full
+    I/O) without a parallel logger. The join itself is deferred (see T137 ticket).
   - The hook does NOT read .git/CLAUDE_SESSION_ID. That cache is written by
     current_session.py and gets clobbered by mixed harness/workspace callers,
     so it cannot be trusted for per-call stamping.
@@ -61,100 +69,61 @@ def _max_lines(harness: dict) -> int:
     return int(harness.get("workflow_telemetry_max_lines", _DEFAULT_MAX_LINES))
 
 
-def _list_workspaces() -> list[tuple[str, dict]]:
-    """Return [(slug, cfg), ...] for active workspaces. Wrapped so tests can mock.
+def _active_workspace_and_sessions_md() -> tuple[str, Path | None]:
+    """Resolve (workspace, sessions_md) from the session-declared state (T137).
 
-    Fails open: returns [] if workspace_config cannot be imported or raises.
-    Telemetry must never break tool calls.
+    Attribution is by the ACTIVE session, read from .claude/.active_workspace via
+    workspace_config (cwd-independent), NOT by the path of the touched file:
+      - workspace session → (slug, that workspace's sessions.md)
+      - harness / undeclared → ("", harness docs/sessions.md)
+
+    This is the SR-008/009/010 helper convergence — the same resolver
+    generate_ticket_index.py uses (T136). A session's records all carry that
+    session's (workspace, S<N>), so analyze_tool_log's (workspace, session)
+    filter never collides across layers (the SR-010 bug).
+
+    Fails open: any error → ("", harness sessions.md). Telemetry must never break
+    a tool call.
     """
+    harness_sessions = ROOT / "docs" / "sessions.md"
     try:
         sys.path.insert(0, str(ROOT / "scripts" / "tools"))
         import workspace_config as _wc
-        return _wc.list_active_workspaces()
+        state, slug = _wc.read_session_state(root=ROOT)
+        if state == _wc.STATE_WORKSPACE:
+            paths = _wc.workspace_paths(slug, root=ROOT)
+            if paths is not None:
+                return (slug, paths[1])
+            _log_error(f"active workspace '{slug}' has no resolvable internal dir")
+            return (slug, None)
+        return ("", harness_sessions)
     except Exception as exc:
-        _log_error(f"list_active_workspaces failed: {exc}")
-        return []
+        _log_error(f"active-workspace resolution failed: {exc}")
+        return ("", harness_sessions)
 
 
-def _candidate_paths(tool_name: str, tool_input: dict) -> list[str]:
-    """Extract path-like tokens from the tool input for workspace matching."""
-    if tool_name in ("Edit", "Write", "Read", "NotebookEdit"):
-        fp = tool_input.get("file_path", "")
-        return [fp] if fp else []
-    if tool_name == "Bash":
-        import shlex
-        cmd = tool_input.get("command", "")
-        try:
-            parts = shlex.split(cmd)
-        except ValueError:
-            parts = cmd.split()
-        tokens: list[str] = []
-        for raw in parts:
-            t = raw.strip("'\"`")
-            if "=" in t and not (t.startswith("/") or t.startswith("~/")):
-                t = t.rsplit("=", 1)[1].strip("'\"`")
-            if t.startswith("/") or t.startswith("~/"):
-                tokens.append(t)
-        return tokens
-    return []
+def _session_from_sessions_md(sessions_md: Path | None) -> str:
+    """Derive S<N> (last-logged + 1) from a sessions.md, or '' on any failure.
 
-
-def _detect_workspace(tool_name: str, tool_input: dict) -> tuple[str, dict | None]:
-    """Return (slug, cfg) for the workspace this tool call targets, or ("", None)."""
-    paths = _candidate_paths(tool_name, tool_input)
-    if not paths:
-        return ("", None)
-    try:
-        sys.path.insert(0, str(ROOT / "scripts" / "tools"))
-        import workspace_config as _wc
-    except Exception as exc:
-        _log_error(f"workspace_config import failed: {exc}")
-        return ("", None)
-    workspaces = _list_workspaces()
-    for path in paths:
-        for slug, cfg in workspaces:
-            try:
-                if _wc.is_within_workspace(Path(path).expanduser(), cfg):
-                    return (slug, cfg)
-            except Exception as exc:
-                _log_error(f"workspace match failed for {slug}: {exc}")
-    return ("", None)
-
-
-def _session_for_workspace(ws_dir: Path | None, ws_cfg: dict | None) -> str:
-    """Read sessions.md from the workspace (if any) or harness root, return next S<N>.
-
-    Resolves sessions.md without calling workspace_config.internal_dir so it
-    works correctly even when ws_dir is None (e.g. workspace_dir() failed in
-    main). Priority: cfg['docs_path'] > ws_dir/internal > harness root.
+    NOTE (T137 / T139): last-logged+1 over-counts by one for records written
+    after the running session's Session Log line is appended at close. This is
+    the same timing skew T139 fixed for SR stamping; it is pre-existing here
+    (path-based stamping had it too) and out of scope for T137. The live
+    claude_session_uuid field is the stable join key that lets a future pass
+    reconcile attribution against the native transcript regardless of the skew.
     """
+    if sessions_md is None:
+        return ""
     import re
-    if ws_cfg is not None:
-        try:
-            docs_path = ws_cfg.get("docs_path")
-            if docs_path:
-                sessions_md = Path(docs_path).expanduser().resolve() / "sessions.md"
-            elif ws_dir is not None:
-                sessions_md = ws_dir / "internal" / "sessions.md"
-            else:
-                _log_error("workspace detected but ws_dir is None and no docs_path in cfg")
-                return ""
-        except Exception as exc:
-            _log_error(f"sessions.md path resolution failed: {exc}")
-            return ""
-    else:
-        sessions_md = ROOT / "docs" / "sessions.md"
     try:
         if not sessions_md.exists():
-            if ws_cfg is not None:
-                _log_error(f"sessions.md missing: {sessions_md}")
             return ""
         text = sessions_md.read_text(encoding="utf-8")
         entries = re.findall(r"^S(\d+)\s+\d{4}-\d{2}-\d{2}:", text, re.MULTILINE)
         if entries:
             return f"S{int(entries[-1]) + 1}"
     except Exception as exc:
-        _log_error(f"sessions.md read failed: {exc}")
+        _log_error(f"session derivation failed: {exc}")
     return ""
 
 
@@ -283,22 +252,18 @@ def main() -> None:
     tool_name = payload.get("tool_name", "")
     tool_input = payload.get("tool_input", {})
 
-    slug, ws_cfg = _detect_workspace(tool_name, tool_input)
-    ws_dir: Path | None = None
-    if ws_cfg is not None and not ws_cfg.get("docs_path"):
-        # ws_dir only needed when docs_path is absent; errors fall-open.
-        try:
-            import workspace_config as _wc
-            ws_dir = _wc.workspace_dir(slug)
-        except Exception:
-            ws_dir = None
+    workspace, sessions_md = _active_workspace_and_sessions_md()
 
     record = {
         "ts": time.time(),
         "tool": tool_name,
         "path": _extract_path(tool_name, tool_input),
-        "session": _session_for_workspace(ws_dir, ws_cfg),
-        "workspace": slug,
+        "session": _session_from_sessions_md(sessions_md),
+        "workspace": workspace,
+        # Live join key to the native JSONL transcript (filename == this UUID).
+        # Enables an on-demand join for richer per-call data (tokens, full I/O)
+        # without a parallel logger — see the deferred join ticket.
+        "claude_session_uuid": os.environ.get("CLAUDE_CODE_SESSION_ID", ""),
     }
 
     try:

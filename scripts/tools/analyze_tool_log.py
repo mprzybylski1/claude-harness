@@ -4,11 +4,15 @@ scripts/tools/analyze_tool_log.py
 Reads .git/session_tool_log.jsonl and produces a workflow efficiency report.
 
 Usage:
-    python scripts/tools/analyze_tool_log.py [--log PATH] [--session SESSION]
+    python scripts/tools/analyze_tool_log.py [--log PATH] [--session SESSION] [--workspace SLUG]
 
 Options:
     --log PATH        Path to the tool log (default: .git/session_tool_log.jsonl)
     --session SESSION Filter to a specific session (e.g. S6); default: all sessions
+    --workspace SLUG  Filter to a workspace ('' or 'harness' = harness layer).
+                      With --session and no --workspace (and the default log), the
+                      active workspace is auto-detected from .claude/.active_workspace
+                      so an S<N> filter does not pull foreign-layer records (SR-010).
 
 Output sections:
     1. Tool call frequency by type
@@ -21,16 +25,26 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from collections import Counter, defaultdict
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(os.environ.get("HARNESS_ROOT", str(Path(__file__).resolve().parents[2])))
 _DEFAULT_LOG = ROOT / ".git" / "session_tool_log.jsonl"
 _RETRY_WINDOW_S = 30.0
 
 
-def _load(log_path: Path, session_filter: str | None) -> tuple[list[dict], int]:
-    """Return (records, skipped_count) where skipped_count counts malformed lines."""
+def _load(
+    log_path: Path,
+    session_filter: str | None,
+    workspace_filter: str | None = None,
+) -> tuple[list[dict], int]:
+    """Return (records, skipped_count) where skipped_count counts malformed lines.
+
+    workspace_filter: None → no workspace filtering; "" → harness-layer records;
+    "<slug>" → that workspace's records. A missing `workspace` key counts as ""
+    (legacy records predate the field — T137), so they filter as harness.
+    """
     if not log_path.exists():
         return [], 0
     records = []
@@ -45,6 +59,8 @@ def _load(log_path: Path, session_filter: str | None) -> tuple[list[dict], int]:
             skipped += 1
             continue
         if session_filter and rec.get("session") != session_filter:
+            continue
+        if workspace_filter is not None and rec.get("workspace", "") != workspace_filter:
             continue
         records.append(rec)
     return records, skipped
@@ -113,8 +129,12 @@ def _session_costs(records: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def report(log_path: Path, session_filter: str | None) -> str:
-    records, skipped = _load(log_path, session_filter)
+def report(
+    log_path: Path,
+    session_filter: str | None,
+    workspace_filter: str | None = None,
+) -> str:
+    records, skipped = _load(log_path, session_filter, workspace_filter)
     if not records and not skipped:
         return (
             f"No telemetry data found in {log_path}.\n"
@@ -124,10 +144,16 @@ def report(log_path: Path, session_filter: str | None) -> str:
     read_tools = {"Read", "WebFetch", "WebSearch"}
     edit_tools = {"Edit", "Write", "NotebookEdit"}
 
+    if workspace_filter is not None:
+        ws_label = workspace_filter if workspace_filter else "harness"
+    else:
+        ws_label = None
+
     header = (
         f"# Workflow Telemetry Report\n"
         f"Log: {log_path}  |  Records: {len(records)}"
         + (f"  |  Session: {session_filter}" if session_filter else "")
+        + (f"  |  Workspace: {ws_label}" if ws_label is not None else "")
         + (f"  |  Skipped (malformed): {skipped}" if skipped else "")
     )
 
@@ -143,15 +169,49 @@ def report(log_path: Path, session_filter: str | None) -> str:
 
 
 def main() -> None:
+    import sys
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--log", default=None, metavar="PATH",
                    help=f"Path to tool log (default: {_DEFAULT_LOG})")
     p.add_argument("--session", default=None, metavar="SESSION",
                    help="Filter to a specific session ID (e.g. S6)")
+    p.add_argument("--workspace", default=None, metavar="SLUG",
+                   help="Filter to a workspace ('' or 'harness' for the harness "
+                        "layer). With --session and no --workspace, the active "
+                        "workspace is auto-detected from .claude/.active_workspace "
+                        "so an S<N> filter does not collide across layers (SR-010).")
     args = p.parse_args()
 
     log_path = Path(args.log) if args.log else _DEFAULT_LOG
-    print(report(log_path, args.session))
+
+    # Normalise an explicit --workspace; "harness" is a friendly alias for "".
+    workspace_filter = args.workspace
+    if workspace_filter in ("harness", "__harness__"):
+        workspace_filter = ""
+
+    # Auto-detect the active workspace ONLY for the default log (an explicit --log
+    # means explicit control — keeps tests/ad-hoc analysis decoupled from session
+    # state) and only when a session is named without an explicit --workspace.
+    if args.log is None and args.workspace is None and args.session is not None:
+        try:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            import workspace_config as _wc
+            state, slug = _wc.read_session_state()
+            if state == _wc.STATE_WORKSPACE:
+                workspace_filter = slug
+            elif state == _wc.STATE_HARNESS:
+                workspace_filter = ""
+            else:
+                print(
+                    "NOTE: session type undeclared — showing all workspaces for "
+                    f"{args.session}. Pass --workspace SLUG to disambiguate.",
+                    file=sys.stderr,
+                )
+        except Exception as exc:
+            print(f"NOTE: workspace auto-detect failed ({exc}); showing all workspaces.",
+                  file=sys.stderr)
+
+    print(report(log_path, args.session, workspace_filter))
 
 
 if __name__ == "__main__":

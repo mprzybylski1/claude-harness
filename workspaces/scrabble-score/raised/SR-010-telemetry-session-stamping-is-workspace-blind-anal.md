@@ -4,9 +4,9 @@ from: scrabble-score
 raised: S12 2026-05-30
 title: Telemetry session-stamping is workspace-blind; analyze_tool_log filter pulls foreign records
 severity: medium
-status: promoted
+status: resolved
 harness_ticket: T137
-resolved_in:
+resolved_in: S25
 ---
 
 ## Context
