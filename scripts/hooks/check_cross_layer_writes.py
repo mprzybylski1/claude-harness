@@ -31,9 +31,35 @@ from pathlib import Path
 _default_root = Path(__file__).resolve().parents[2]
 ROOT = Path(os.environ.get("HARNESS_ROOT", str(_default_root)))
 
-_STATE_FILE = ROOT / ".claude" / ".active_workspace"
+# Single source of truth for the .active_workspace tri-state read (T143). The hook
+# is the *enforcement* authority and read_session_state is the *attribution*
+# authority; keeping two readers risked a silent divergence (Opus S25 Concern #2).
+# The import resolves from THIS file's location (_default_root), independent of the
+# HARNESS_ROOT env override that only redirects where the state file is read.
+#
+# Fail CLOSED on import failure: this hook is the sole confidentiality enforcer
+# (Inv 2/4). Claude Code treats exit 2 as a block but any *other* non-zero — e.g.
+# an uncaught ImportError → exit 1 — as a non-blocking error (the tool proceeds),
+# which would silently fail OPEN. So a broken import must map to exit 2. The hook
+# matches Edit|Write only, so this block still leaves Bash as a recovery surface
+# (consistent with T142's fail-closed-with-recovery design).
+sys.path.insert(0, str(_default_root / "scripts" / "tools"))
+try:
+    import workspace_config as _wc
+except Exception as _e:  # defensive; workspace_config is core infra (test covers this)
+    print(
+        f"CROSS-LAYER WRITE BLOCKED — enforcement hook could not import "
+        f"workspace_config ({_e}); failing closed. Restore scripts/tools/"
+        f"workspace_config.py via Bash to recover.",
+        file=sys.stderr,
+    )
+    sys.exit(2)
+
+STATE_UNDECLARED = _wc.STATE_UNDECLARED
+STATE_HARNESS = _wc.STATE_HARNESS
+STATE_WORKSPACE = _wc.STATE_WORKSPACE
+
 _WS_BASE = (ROOT / "workspaces").resolve()
-_HARNESS_SENTINEL = "__harness__"
 
 _HARNESS_PROTECTED = [
     (ROOT / "docs" / "tickets").resolve(),
@@ -41,23 +67,6 @@ _HARNESS_PROTECTED = [
     (ROOT / "docs" / "opus_notes.md").resolve(),
     (ROOT / "docs" / "architecture_invariants.md").resolve(),
 ]
-
-STATE_UNDECLARED = "undeclared"
-STATE_HARNESS = "harness"
-STATE_WORKSPACE = "workspace"
-
-
-def _read_session_state() -> tuple[str, str | None]:
-    """Return (state, slug). slug is set only for STATE_WORKSPACE."""
-    try:
-        content = _STATE_FILE.read_text(encoding="utf-8").strip()
-    except OSError:
-        return (STATE_UNDECLARED, None)
-    if not content:
-        return (STATE_UNDECLARED, None)
-    if content == _HARNESS_SENTINEL:
-        return (STATE_HARNESS, None)
-    return (STATE_WORKSPACE, content)
 
 
 def _is_boundary_slot(resolved: Path) -> bool:
@@ -116,7 +125,7 @@ def main() -> None:
     if _is_boundary_slot(resolved):
         sys.exit(0)
 
-    state, workspace_slug = _read_session_state()
+    state, workspace_slug = _wc.read_session_state(ROOT)
 
     if state == STATE_UNDECLARED:
         if _is_harness_protected(resolved) or _workspace_internal_slug(resolved) is not None:

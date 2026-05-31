@@ -128,8 +128,10 @@ def list_active_workspaces() -> list[tuple[str, dict]]:
 # Reads the session-state file written by /session-start. This is the robust,
 # cwd-INDEPENDENT signal for "what layer is this session" — unlike
 # active_workspace_dir() above, which sniffs CWD (fragile; CWD drifts, see SR-011).
-# Mirrors the tri-state read in scripts/hooks/check_cross_layer_writes.py; a future
-# pass could have the hook import these instead of keeping its own copy (T136 noted).
+# This is the single source of truth for the tri-state read: the enforcement hook
+# scripts/hooks/check_cross_layer_writes.py imports read_session_state rather than
+# keeping its own copy (T143; the attribution and enforcement authorities must not
+# diverge — Opus S25 Concern #2).
 
 HARNESS_SENTINEL = "__harness__"
 STATE_HARNESS = "harness"

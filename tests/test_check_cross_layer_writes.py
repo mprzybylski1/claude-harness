@@ -11,6 +11,57 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "hooks" / "check_cross_layer_writes.py"
 
 
+class TestSingleSourceOfTruth:
+    """T143: the hook must delegate the .active_workspace tri-state read to
+    workspace_config.read_session_state — the single attribution authority — rather
+    than carry its own private copy. A re-duplicated reader could silently diverge
+    from the attribution side (Opus S25 Concern #2)."""
+
+    def test_hook_imports_shared_reader(self):
+        text = SCRIPT.read_text(encoding="utf-8")
+        assert "workspace_config" in text, "hook must import workspace_config"
+        assert "read_session_state" in text, "hook must use the shared reader"
+
+    def test_hook_has_no_private_tri_state_reader(self):
+        # The private copy (def _read_session_state) and its duplicated sentinel
+        # must be gone — otherwise the duplication T143 removed has crept back.
+        text = SCRIPT.read_text(encoding="utf-8")
+        assert "def _read_session_state" not in text
+        assert "_HARNESS_SENTINEL" not in text
+
+    def test_unresolvable_shared_reader_fails_closed(self, tmp_path):
+        # The new cross-module import is the fail-closed direction of the sole
+        # confidentiality enforcer: an uncaught ImportError would exit 1, which
+        # Claude Code treats as non-blocking → the tool proceeds (fail OPEN). The
+        # hook must map a missing workspace_config to exit 2. Drive that branch by
+        # copying the hook into a skeleton where scripts/tools/ is empty, so its
+        # `sys.path.insert(0, _default_root/scripts/tools)` resolves to nothing.
+        import shutil
+
+        hooks_dir = tmp_path / "scripts" / "hooks"
+        hooks_dir.mkdir(parents=True)
+        (tmp_path / "scripts" / "tools").mkdir()  # intentionally empty
+        (tmp_path / ".claude").mkdir()
+        (tmp_path / ".claude" / ".active_workspace").write_text("__harness__")
+        copied = hooks_dir / "check_cross_layer_writes.py"
+        shutil.copyfile(SCRIPT, copied)
+
+        env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+        env["HARNESS_ROOT"] = str(tmp_path)
+        result = subprocess.run(
+            [sys.executable, str(copied)],
+            input=json.dumps(
+                {"tool_name": "Write", "tool_input": {"file_path": "/tmp/x.md"}}
+            ),
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=str(tmp_path),
+        )
+        assert result.returncode == 2, (result.returncode, result.stderr)
+        assert "could not import workspace_config" in result.stderr
+
+
 def _setup(tmp_path: Path, workspace_slug: str | None = None) -> Path:
     """Set up minimal harness skeleton. Returns harness root.
 
