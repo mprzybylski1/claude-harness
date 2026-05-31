@@ -10,9 +10,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+from conftest import git_init, run_close_ticket, STUB_CURRENT_SESSION, STUB_GENERATE_INDEX
+
 ROOT = Path(__file__).resolve().parents[1]
 HOOK = ROOT / "scripts" / "hooks" / "check_fix_commit_has_code.py"
-CLOSE_TICKET = ROOT / "scripts" / "tools" / "close_ticket.py"
 
 OPEN_TICKET = """\
 ---
@@ -39,16 +40,6 @@ Synthetic.
 """
 
 
-def _make_git_repo(path: Path) -> None:
-    for cmd in [
-        ["git", "init", "-q", str(path)],
-        ["git", "-C", str(path), "config", "user.email", "t@t.com"],
-        ["git", "-C", str(path), "config", "user.name", "Test"],
-        ["git", "-C", str(path), "config", "commit.gpgsign", "false"],
-    ]:
-        subprocess.run(cmd, check=True, capture_output=True)
-
-
 def _setup_harness(tmp_path: Path) -> tuple[Path, Path]:
     """Return (ticket_path, code_file) after creating a minimal harness git repo."""
     docs = tmp_path / "docs"
@@ -59,12 +50,8 @@ def _setup_harness(tmp_path: Path) -> tuple[Path, Path]:
 
     tools = tmp_path / "scripts" / "tools"
     tools.mkdir(parents=True)
-    (tools / "current_session.py").write_text("import sys\nprint('S9')\n")
-    (tools / "generate_ticket_index.py").write_text(
-        "import os; from pathlib import Path\n"
-        "root = Path(os.environ.get('HARNESS_ROOT', '.'))\n"
-        "(root / 'docs' / 'tickets' / 'INDEX.md').write_text('# Updated\\n')\n"
-    )
+    (tools / "current_session.py").write_text(STUB_CURRENT_SESSION)
+    (tools / "generate_ticket_index.py").write_text(STUB_GENERATE_INDEX)
 
     ticket = docs / "tickets" / "open" / "T999-synthetic-integration-test-ticket.md"
     ticket.write_text(OPEN_TICKET, encoding="utf-8")
@@ -72,23 +59,9 @@ def _setup_harness(tmp_path: Path) -> tuple[Path, Path]:
     code_file = tools / "myfix.py"
     code_file.write_text("# v1\n")
 
-    _make_git_repo(tmp_path)
-    subprocess.run(["git", "-C", str(tmp_path), "add", "-A"],
-                   check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(tmp_path), "commit", "-q", "-m", "init"],
-                   check=True, capture_output=True)
-
+    git_init(tmp_path)
     code_file.write_text("# v2\n")
     return ticket, code_file
-
-
-def _run_close(tmp_path: Path, *extra_args: str) -> subprocess.CompletedProcess:
-    import os as _os
-    return subprocess.run(
-        [sys.executable, str(CLOSE_TICKET), *extra_args],
-        capture_output=True, text=True,
-        env={**_os.environ, "HARNESS_ROOT": str(tmp_path), "PYTHONPATH": str(ROOT)},
-    )
 
 
 def _run_hook(command: str, cwd: Path) -> subprocess.CompletedProcess:
@@ -107,11 +80,10 @@ class TestCloseTicketHookIntegration:
         """close_ticket --files stages code; hook allows the suggested fix commit."""
         _ticket, code_file = _setup_harness(tmp_path)
 
-        result = _run_close(tmp_path, "T999", "--resolution", "done",
-                            "--files", str(code_file))
+        result = run_close_ticket(tmp_path, "T999", "--resolution", "done",
+                                  "--files", str(code_file))
         assert result.returncode == 0, f"close_ticket failed:\n{result.stderr}"
 
-        # The suggested commit command
         hook_result = _run_hook(
             f'git commit -m "fix(T999): Synthetic integration test ticket"',
             cwd=tmp_path,
@@ -124,12 +96,9 @@ class TestCloseTicketHookIntegration:
     def test_without_files_hook_blocks_commit(self, tmp_path):
         """close_ticket without --files stages no code; hook blocks the fix commit."""
         _ticket, _code_file = _setup_harness(tmp_path)
-        # code_file has v2 contents (dirty working tree) but is not staged — intentional.
-        # Close the ticket with no --files
-        result = _run_close(tmp_path, "T999", "--resolution", "done")
+        result = run_close_ticket(tmp_path, "T999", "--resolution", "done")
         assert result.returncode == 0, f"close_ticket failed:\n{result.stderr}"
 
-        # Only archive + INDEX are staged; hook must block
         hook_result = _run_hook(
             f'git commit -m "fix(T999): Synthetic integration test ticket"',
             cwd=tmp_path,

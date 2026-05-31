@@ -6,10 +6,9 @@ Index-clean guard: --commit refuses when the index contains unrelated staged cha
 """
 from __future__ import annotations
 
-import subprocess
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -151,35 +150,3 @@ class TestCheckIndexClean:
         assert exc.value.code == 2
 
 
-class TestCommitMainPath:
-    """Tests for the --commit branch in main() via subprocess mocking."""
-
-    def _make_staged_paths(self, tmp_path):
-        ticket = tmp_path / "docs" / "tickets" / "open" / "T099-foo.md"
-        dest = tmp_path / "docs" / "archive" / "T099-foo.md"
-        for p in [ticket, dest]:
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text("---\nid: T099\ntitle: foo\nstatus: open\nclosed:\n---\n\n## Resolution\n(Fill in on close.)\n")
-        return ticket, dest
-
-    def test_commit_called_with_correct_args(self, tmp_path):
-        ticket, dest = self._make_staged_paths(tmp_path)
-        git_root = str(tmp_path)
-
-        status_result = MagicMock(returncode=0, stdout="D  docs/tickets/open/T099-foo.md\nA  docs/archive/T099-foo.md\n", stderr="")
-        with patch.object(close_ticket, "_git_root_for", return_value=(git_root, "")), \
-             patch("subprocess.run", return_value=status_result), \
-             patch("subprocess.check_call") as mock_commit:
-            close_ticket._refuse_multi_root_commit({git_root}, "T099", "docs(T099): foo")
-            close_ticket._check_index_clean(git_root, [dest], ticket)
-            mock_commit.side_effect = None
-            subprocess.check_call(["git", "-C", git_root, "commit", "-m", "docs(T099): foo"])
-        mock_commit.assert_called_once_with(
-            ["git", "-C", git_root, "commit", "-m", "docs(T099): foo"]
-        )
-
-    def test_commit_failure_is_guarded(self):
-        # _refuse_multi_root_commit + _check_index_clean → subprocess raises → exit 2
-        with patch("subprocess.check_call", side_effect=subprocess.CalledProcessError(1, "git")):
-            with pytest.raises(subprocess.CalledProcessError):
-                subprocess.check_call(["git", "-C", "/repo", "commit", "-m", "msg"])

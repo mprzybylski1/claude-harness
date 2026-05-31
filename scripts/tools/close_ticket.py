@@ -25,6 +25,7 @@ import os
 import re
 import subprocess
 import sys
+from collections import defaultdict
 from datetime import date
 from pathlib import Path
 
@@ -114,27 +115,35 @@ def _current_session(internal: Path | None) -> str:
         sys.exit(2)
 
 
-def _check_acs(content: str) -> list[str]:
-    """Return list of unchecked AC lines within the Acceptance Criteria section."""
+def _ac_section_bounds(content: str) -> tuple[int, int] | None:
+    """Return (start, end) indices of the ## Acceptance Criteria section body,
+    or None if the header is not found."""
     ac_header = re.search(r"^## Acceptance Criteria\s*$", content, flags=re.MULTILINE)
     if not ac_header:
-        return [ln.strip() for ln in content.splitlines() if re.match(r"\s*-\s+\[ \]", ln)]
+        return None
     next_section = re.search(r"^## ", content[ac_header.end():], flags=re.MULTILINE)
     ac_end = ac_header.end() + next_section.start() if next_section else len(content)
-    ac_block = content[ac_header.end():ac_end]
-    return [ln.strip() for ln in ac_block.splitlines() if re.match(r"\s*-\s+\[ \]", ln)]
+    return ac_header.end(), ac_end
+
+
+_UNCHECKED_AC_RE = re.compile(r"\s*-\s+\[ \]")
+
+
+def _check_acs(content: str) -> list[str]:
+    """Return list of unchecked AC lines within the Acceptance Criteria section."""
+    bounds = _ac_section_bounds(content)
+    block = content[bounds[0]:bounds[1]] if bounds else content
+    return [ln.strip() for ln in block.splitlines() if _UNCHECKED_AC_RE.match(ln)]
 
 
 def _tick_acs(content: str) -> str:
     """Rewrite unchecked '- [ ]' boxes to '- [x]' within the Acceptance Criteria section only."""
-    ac_header = re.search(r"^## Acceptance Criteria\s*$", content, flags=re.MULTILINE)
-    if not ac_header:
+    bounds = _ac_section_bounds(content)
+    if not bounds:
         return content
-    next_section = re.search(r"^## ", content[ac_header.end():], flags=re.MULTILINE)
-    ac_end = ac_header.end() + next_section.start() if next_section else len(content)
-    ac_block = content[ac_header.end():ac_end]
-    ticked = re.sub(r"^(\s*-)\s+\[ \]", r"\1 [x]", ac_block, flags=re.MULTILINE)
-    return content[:ac_header.end()] + ticked + content[ac_end:]
+    start, end = bounds
+    ticked = re.sub(r"^(\s*-)\s+\[ \]", r"\1 [x]", content[start:end], flags=re.MULTILINE)
+    return content[:start] + ticked + content[end:]
 
 
 def _update_frontmatter(content: str, session: str) -> str:
@@ -222,12 +231,11 @@ def _replace_resolution(content: str, resolution: str, append: bool = False) -> 
         repl = resolution.rstrip() + "\n"
         return strict.sub(lambda m: m.group(1) + repl, content)
 
-    # Permissive fallback: find the placeholder anywhere in the ## Resolution section.
-    res_header = re.search(r"## Resolution\s*\n", content)
-    if res_header:
-        after = content[res_header.end():]
-        next_section = re.search(r"\n##\s", after)
-        section = after[: next_section.start()] if next_section else after
+    # Permissive fallback: reuse _resolution_section for boundaries, then search
+    # for the placeholder within the section body.
+    parsed = _resolution_section(content)
+    if parsed is not None:
+        header, section, rest = parsed
         fill_m = re.search(r"\(Fill in on close[^)]*\)[^\n]*\n?", section)
         if fill_m:
             print(
@@ -235,14 +243,13 @@ def _replace_resolution(content: str, resolution: str, append: bool = False) -> 
                 "— ticket format may be non-standard",
                 file=sys.stderr,
             )
-            return (
-                content[: res_header.end()]
-                + section[: fill_m.start()]
+            new_section = (
+                section[: fill_m.start()]
                 + resolution.rstrip()
                 + "\n"
-                + section[fill_m.end() :]
-                + (after[next_section.start() :] if next_section else "")
+                + section[fill_m.end():]
             )
+            return content[: header.end()] + new_section + rest
 
     print(
         "ERROR: the ## Resolution section has no '(Fill in on close.)' placeholder.\n"
@@ -419,12 +426,10 @@ def _check_gitignored(paths: list[Path]) -> list[Path]:
     if not paths:
         return []
 
-    from collections import defaultdict
     by_root: dict[str, list[Path]] = defaultdict(list)
     for p in paths:
         git_root, git_err = _git_root_for(p)
         if git_root is None:
-            # Path is not inside any git repo — cannot check; proceed (staging will catch it)
             continue
         by_root[git_root].append(p)
 
@@ -472,7 +477,6 @@ def _check_cross_repo_files(
     ticket_root, _ = _git_root_for(ticket_path)
     if ticket_root is None:
         return  # _git_stage will surface the not-in-a-repo case
-    from collections import defaultdict
     out_of_repo: dict[str, list[Path]] = defaultdict(list)
     for ef in extra_files:
         ef_root, _ = _git_root_for(ef)
@@ -484,15 +488,17 @@ def _check_cross_repo_files(
         f"ERROR: {ticket_id} has --files paths in a different repo than the ticket.",
         file=sys.stderr,
     )
+    def _rel(path: Path, repo_root: str) -> str:
+        try:
+            return str(path.resolve().relative_to(repo_root))
+        except ValueError:
+            return str(path)
+
     print(f"  Ticket repo: {ticket_root}", file=sys.stderr)
     print("  Out-of-repo --files:", file=sys.stderr)
     for root, files in out_of_repo.items():
         for f in files:
-            try:
-                rel = f.resolve().relative_to(root)
-            except ValueError:
-                rel = f
-            print(f"    {rel}  (in {root})", file=sys.stderr)
+            print(f"    {_rel(f, root)}  (in {root})", file=sys.stderr)
     print(file=sys.stderr)
     print(
         f"  Commit those paths in their own repo first, then re-run "
@@ -500,12 +506,7 @@ def _check_cross_repo_files(
         file=sys.stderr,
     )
     for root, files in out_of_repo.items():
-        rels: list[str] = []
-        for f in files:
-            try:
-                rels.append(str(f.resolve().relative_to(root)))
-            except ValueError:
-                rels.append(str(f))
+        rels = [_rel(f, root) for f in files]
         print(f"    git -C {root} add -- {' '.join(rels)}", file=sys.stderr)
         print(
             f"    git -C {root} commit -m \"docs({ticket_id}): <description>\"",
@@ -518,7 +519,6 @@ def _stage_extra_files(extra_files: list[Path]) -> None:
     """Stage extra_files grouped by their git root. Exit 2 on failure."""
     if not extra_files:
         return
-    from collections import defaultdict
     by_root: dict[str, list[str]] = defaultdict(list)
     for ef in extra_files:
         ef_root, ef_err = _git_root_for(ef)

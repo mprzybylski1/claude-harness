@@ -2,10 +2,9 @@
 from __future__ import annotations
 
 import subprocess
-import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+from conftest import git_init, make_harness_tree, run_close_ticket
 
 _TICKET_WITH_SOURCE = """\
 ---
@@ -79,7 +78,8 @@ Promoted S5 2026-05-27.
 
 
 def _setup(tmp_path: Path, *, with_sr: bool = True) -> tuple[Path, Path | None]:
-    """Minimal harness + git repo. Returns (ticket_path, sr_path | None)."""
+    """Minimal harness + git repo with source SR. Returns (ticket_path, sr_path | None)."""
+    # Build harness tree without git (we may need to add SR files before commit)
     docs = tmp_path / "docs"
     (docs / "tickets" / "open").mkdir(parents=True)
     (docs / "archive").mkdir(parents=True)
@@ -106,25 +106,8 @@ def _setup(tmp_path: Path, *, with_sr: bool = True) -> tuple[Path, Path | None]:
         sr_path = raised / "SR-001-some-concern.md"
         sr_path.write_text(_SR_BODY, encoding="utf-8")
 
-    for cmd in [
-        ["git", "-C", str(tmp_path), "init", "-q"],
-        ["git", "-C", str(tmp_path), "config", "user.email", "t@test.com"],
-        ["git", "-C", str(tmp_path), "config", "user.name", "Test"],
-        ["git", "-C", str(tmp_path), "config", "commit.gpgsign", "false"],
-        ["git", "-C", str(tmp_path), "add", "-A"],
-        ["git", "-C", str(tmp_path), "commit", "-q", "-m", "init"],
-    ]:
-        subprocess.run(cmd, check=True, capture_output=True)
+    git_init(tmp_path)
     return ticket, sr_path
-
-
-def _run(harness: Path, *args: str) -> subprocess.CompletedProcess:
-    import os as _os
-    return subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / "tools" / "close_ticket.py"), *args],
-        capture_output=True, text=True,
-        env={**_os.environ, "HARNESS_ROOT": str(harness), "PYTHONPATH": str(ROOT)},
-    )
 
 
 class TestCloseTicketSourceSR:
@@ -132,7 +115,7 @@ class TestCloseTicketSourceSR:
     def test_sr_status_set_to_resolved(self, tmp_path):
         """Closing a ticket with source: updates the SR status to resolved."""
         _, sr_path = _setup(tmp_path)
-        result = _run(tmp_path, "T999", "--resolution", "Done.", "--tick-acs")
+        result = run_close_ticket(tmp_path, "T999", "--resolution", "Done.", "--tick-acs")
         assert result.returncode == 0, result.stderr
         content = sr_path.read_text(encoding="utf-8")
         assert "status: resolved" in content
@@ -141,7 +124,7 @@ class TestCloseTicketSourceSR:
     def test_sr_resolved_in_set(self, tmp_path):
         """Closing a ticket with source: sets resolved_in on the SR."""
         _, sr_path = _setup(tmp_path)
-        result = _run(tmp_path, "T999", "--resolution", "Done.", "--tick-acs")
+        result = run_close_ticket(tmp_path, "T999", "--resolution", "Done.", "--tick-acs")
         assert result.returncode == 0, result.stderr
         content = sr_path.read_text(encoding="utf-8")
         assert "resolved_in: S9" in content
@@ -149,7 +132,7 @@ class TestCloseTicketSourceSR:
     def test_sr_staged_in_same_transaction(self, tmp_path):
         """SR file appears in git staging area after close."""
         _, sr_path = _setup(tmp_path)
-        result = _run(tmp_path, "T999", "--resolution", "Done.", "--tick-acs")
+        result = run_close_ticket(tmp_path, "T999", "--resolution", "Done.", "--tick-acs")
         assert result.returncode == 0, result.stderr
         status = subprocess.run(
             ["git", "-C", str(tmp_path), "status", "--porcelain"],
@@ -161,62 +144,35 @@ class TestCloseTicketSourceSR:
     def test_sr_path_in_stdout(self, tmp_path):
         """Output mentions the SR file as staged."""
         _, sr_path = _setup(tmp_path)
-        result = _run(tmp_path, "T999", "--resolution", "Done.", "--tick-acs")
+        result = run_close_ticket(tmp_path, "T999", "--resolution", "Done.", "--tick-acs")
         assert result.returncode == 0, result.stderr
         assert "SR-001" in result.stdout
 
     def test_no_source_field_is_noop(self, tmp_path):
         """Ticket without source: closes normally with no SR side-effect."""
-        docs = tmp_path / "docs"
-        (docs / "tickets" / "open").mkdir(parents=True)
-        (docs / "archive").mkdir(parents=True)
-        (docs / "tickets" / "INDEX.md").write_text("# Index\n", encoding="utf-8")
-        (docs / "sessions.md").write_text(
-            "## Session Log\n\nS1 2026-01-01: init\n", encoding="utf-8"
+        make_harness_tree(
+            tmp_path, _TICKET_NO_SOURCE,
+            ticket_filename="T998-synthetic-ticket-no-source.md",
         )
-        tools = tmp_path / "scripts" / "tools"
-        tools.mkdir(parents=True)
-        (tools / "current_session.py").write_text("print('S9')\n", encoding="utf-8")
-        (tools / "generate_ticket_index.py").write_text(
-            "import os; from pathlib import Path\n"
-            "root = Path(os.environ.get('HARNESS_ROOT', '.'))\n"
-            "(root / 'docs' / 'tickets' / 'INDEX.md').write_text('# Updated\\n')\n",
-            encoding="utf-8",
-        )
-        ticket = docs / "tickets" / "open" / "T998-synthetic-ticket-no-source.md"
-        ticket.write_text(_TICKET_NO_SOURCE, encoding="utf-8")
-        for cmd in [
-            ["git", "-C", str(tmp_path), "init", "-q"],
-            ["git", "-C", str(tmp_path), "config", "user.email", "t@test.com"],
-            ["git", "-C", str(tmp_path), "config", "user.name", "Test"],
-            ["git", "-C", str(tmp_path), "config", "commit.gpgsign", "false"],
-            ["git", "-C", str(tmp_path), "add", "-A"],
-            ["git", "-C", str(tmp_path), "commit", "-q", "-m", "init"],
-        ]:
-            subprocess.run(cmd, check=True, capture_output=True)
-
-        result = _run(tmp_path, "T998", "--resolution", "Done.", "--tick-acs")
+        result = run_close_ticket(tmp_path, "T998", "--resolution", "Done.", "--tick-acs")
         assert result.returncode == 0, result.stderr
-        # No workspace directory created, no error
         assert not (tmp_path / "workspaces").exists() or \
                not (tmp_path / "workspaces" / "myws").exists()
 
     def test_missing_sr_file_blocks_close_by_default(self, tmp_path):
         """T120: missing source SR file blocks close (exit 2) by default."""
         _setup(tmp_path, with_sr=False)
-        result = _run(tmp_path, "T999", "--resolution", "Done.", "--tick-acs")
+        result = run_close_ticket(tmp_path, "T999", "--resolution", "Done.", "--tick-acs")
         assert result.returncode == 2, result.stderr
         assert "SR" in result.stderr
-        # Ticket NOT moved to archive
         assert not (tmp_path / "docs" / "archive" / "T999-synthetic-source-ticket.md").exists()
         assert (tmp_path / "docs" / "tickets" / "open" / "T999-synthetic-source-ticket.md").exists()
 
     def test_missing_sr_file_message_includes_sr_path(self, tmp_path):
         """T120: error message includes the path that was searched."""
         _setup(tmp_path, with_sr=False)
-        result = _run(tmp_path, "T999", "--resolution", "Done.", "--tick-acs")
+        result = run_close_ticket(tmp_path, "T999", "--resolution", "Done.", "--tick-acs")
         assert result.returncode == 2
-        # Path should reference the workspace raised/ dir and SR-001
         assert "myws" in result.stderr
         assert "SR-001" in result.stderr
         assert "--ignore-missing-sr" in result.stderr
@@ -224,7 +180,7 @@ class TestCloseTicketSourceSR:
     def test_ignore_missing_sr_flag_allows_close(self, tmp_path):
         """T120: --ignore-missing-sr allows close to proceed when SR file absent."""
         _setup(tmp_path, with_sr=False)
-        result = _run(
+        result = run_close_ticket(
             tmp_path, "T999", "--resolution", "Done.",
             "--tick-acs", "--ignore-missing-sr",
         )
@@ -234,14 +190,13 @@ class TestCloseTicketSourceSR:
     def test_sr_resolved_in_inserted_when_field_absent(self, tmp_path):
         """resolved_in: is inserted into SR frontmatter even if field was missing."""
         _, sr_path = _setup(tmp_path)
-        # Remove resolved_in: from the SR
         text = sr_path.read_text(encoding="utf-8")
         sr_path.write_text(text.replace("resolved_in:\n", ""), encoding="utf-8")
         subprocess.run(
             ["git", "-C", str(tmp_path), "add", "-A"],
             capture_output=True
         )
-        result = _run(tmp_path, "T999", "--resolution", "Done.", "--tick-acs")
+        result = run_close_ticket(tmp_path, "T999", "--resolution", "Done.", "--tick-acs")
         assert result.returncode == 0, result.stderr
         content = sr_path.read_text(encoding="utf-8")
         assert "resolved_in: S9" in content
