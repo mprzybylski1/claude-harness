@@ -45,6 +45,30 @@ def _command_for(hook_name: str) -> str:
     return matches[0]
 
 
+def _matcher_for(hook_name: str) -> str:
+    """The settings.json matcher (e.g. 'Edit|Write') of the group dispatching the hook."""
+    cfg = json.loads(SETTINGS.read_text(encoding="utf-8"))
+    matchers: list[str] = []
+    for event_groups in cfg.get("hooks", {}).values():
+        for group in event_groups:
+            for hook in group.get("hooks", []):
+                if hook.get("type") == "command" and hook_name in hook["command"]:
+                    matchers.append(group.get("matcher", ""))
+    assert len(matchers) == 1, f"expected one matcher for {hook_name}, got {matchers}"
+    return matchers[0]
+
+
+def _fail_closed_names() -> list[str]:
+    """The hook names in run_hook.sh's FAIL_CLOSED declaration."""
+    decl = [
+        ln for ln in WRAPPER.read_text(encoding="utf-8").splitlines()
+        if ln.strip().startswith("FAIL_CLOSED=")
+    ]
+    assert len(decl) == 1, f"expected one FAIL_CLOSED= line, got {decl}"
+    inner = decl[0].split("=", 1)[1].strip().strip('"').strip("'")
+    return inner.split()
+
+
 def _run(command: str, payload: dict, *, env: dict, cwd: Path) -> subprocess.CompletedProcess:
     return subprocess.run(
         command,
@@ -242,3 +266,16 @@ class TestFailClosedDifferentiation:
         assert "check_cross_layer_writes" in line
         assert "check_ticket_acs" not in line
         assert "check_fix_commit_has_code" not in line
+
+    def test_fail_closed_hooks_retain_a_bash_recovery_surface(self):
+        # The load-bearing safety prong: fail-closing a hook is only non-deadlocking
+        # because its matcher leaves Bash available (so `git checkout` can restore the
+        # missing script). If a future change adds Bash to a fail-closed hook's matcher
+        # — or merges it into the Edit|Write|Bash group — a missing script would block
+        # every recovery surface. This makes that property executable (T142).
+        for name in _fail_closed_names():
+            matcher_tokens = _matcher_for(name).split("|")
+            assert "Bash" not in matcher_tokens, (
+                f"{name} is in FAIL_CLOSED but its matcher includes Bash — a missing "
+                f"script would block every recovery surface (unrecoverable deadlock)."
+            )
