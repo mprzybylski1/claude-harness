@@ -1,13 +1,19 @@
 ---
-id: SR-012
-from: scrabble-score
-raised: S14 2026-05-31
-title: "close_ticket.py: stage-vs-commit wording + optional --commit flag"
+id: T147
+title: close_ticket.py: stage-vs-commit wording + optional --commit flag
 severity: medium
-status: resolved
-harness_ticket: T147
-resolved_in: S27
+status: closed
+phase: 2
+layer: tooling
+# repo: <name from workspace.yaml repos list>
+opened: S27 2026-05-31
+closed: S27 2026-05-31
+source: scrabble-score/SR-012
 ---
+
+## Problem
+
+Promoted from scrabble-score/SR-012.
 
 ## Context
 
@@ -36,12 +42,15 @@ bulk of the session's close-out friction.
 3. Derive the suggested-commit subject prefix from ticket type: `fix(T###):` when
    code files are present in `--files`, else `docs(T###):`.
 
-Acceptance criteria:
-- [ ] CLAUDE.md:132 wording clarifies that close_ticket stages, then the operator runs the printed suggested commit
-- [ ] `close_ticket.py --commit` runs `git commit -m "<suggested>"` after a successful stage
-- [ ] Without `--commit`, behavior is unchanged (suggested-commit print only)
-- [ ] Suggested-commit subject prefix derives from ticket type (fix(T###): if code files present, else docs(T###):)
+## Acceptance Criteria
 
-## Harness disposition
+- [x] CLAUDE.md wording clarifies that close_ticket stages, then the operator runs the printed suggested commit
+- [x] `close_ticket.py --commit` runs `git commit -m "<suggested>"` after a successful stage
+- [x] Without `--commit`, behavior is unchanged (suggested-commit print only)
+- [x] Suggested-commit subject prefix derives from ticket type (fix(T###): if code files present, else docs(T###):)
+- [x] `--commit` refuses (exit 2) when staged files span multiple git roots, printing per-root suggested commits
 
-(Filled by harness on promotion or rejection.)
+## Resolution
+Clarified CLAUDE.md wording (stage, not commit). Added --commit flag with multi-root safety guard (exit 2 when staged files span >1 git root). Commit prefix derives from --files content: fix(T###) with code files, docs(T###) otherwise.
+
+Closed S27 2026-05-31.

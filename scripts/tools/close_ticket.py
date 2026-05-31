@@ -16,6 +16,7 @@ Usage:
     python scripts/tools/close_ticket.py T045 --resolution-file /tmp/res.txt
     python scripts/tools/close_ticket.py T045 --resolution "..." --force
     python scripts/tools/close_ticket.py T045 --resolution "..." --workspace scrabble-score
+    python scripts/tools/close_ticket.py T045 --resolution "..." --files src/x.py --commit
 """
 from __future__ import annotations
 
@@ -251,6 +252,36 @@ def _replace_resolution(content: str, resolution: str, append: bool = False) -> 
         "can replace it.",
         file=sys.stderr,
     )
+    sys.exit(2)
+
+
+def _commit_prefix(ticket_id: str, extra_files: list[Path]) -> str:
+    """Return fix(T###): when --files includes non-.md code files, else docs(T###):."""
+    has_code = any(not p.suffix.lower().endswith(".md") for p in extra_files)
+    return f"fix({ticket_id}):" if has_code else f"docs({ticket_id}):"
+
+
+def _collect_staged_roots(paths: list[Path]) -> set[str]:
+    """Return the set of git roots for the given paths (skipping non-repo paths)."""
+    roots: set[str] = set()
+    for p in paths:
+        root, _ = _git_root_for(p)
+        if root is not None:
+            roots.add(root)
+    return roots
+
+
+def _refuse_multi_root_commit(roots: set[str], ticket_id: str, message: str) -> None:
+    """Exit 2 if roots has more than one entry, printing per-root suggested commits."""
+    if len(roots) <= 1:
+        return
+    print(
+        f"ERROR: --commit refused — staged files for {ticket_id} span multiple git roots.\n"
+        f"  Commit each root separately:",
+        file=sys.stderr,
+    )
+    for root in sorted(roots):
+        print(f'  git -C {root} commit -m "{message}"', file=sys.stderr)
     sys.exit(2)
 
 
@@ -601,6 +632,10 @@ def main() -> None:
                         help="Workspace slug to search (required when ID is ambiguous)")
     parser.add_argument("--files", nargs="+", metavar="PATH",
                         help="Code/test files to stage together with the archive move")
+    parser.add_argument("--commit", action="store_true",
+                        help="Run 'git commit' after staging instead of just printing the "
+                             "suggested command. Refuses (exit 2) when staged files span "
+                             "multiple git roots.")
     parser.add_argument("--path-only", action="store_true",
                         help="Print the ticket file path and exit; no other action taken")
     parser.add_argument("--ignore-missing-sr", action="store_true",
@@ -754,6 +789,9 @@ def main() -> None:
     if sr_source_path is not None:
         staged_paths.append(sr_source_path)
 
+    prefix = _commit_prefix(ticket_id, extra_files)
+    commit_msg = f"{prefix} {title}"
+
     print(f"Closed {ticket_id} → {dest_display}")
     for p in staged_paths:
         try:
@@ -761,8 +799,23 @@ def main() -> None:
         except ValueError:
             print(f"  staged: {p}")
     print()
-    print("Suggested commit:")
-    print(f'  git commit -m "fix({ticket_id}): {title}"')
+
+    if args.commit:
+        roots = _collect_staged_roots(staged_paths)
+        _refuse_multi_root_commit(roots, ticket_id, commit_msg)
+        git_root = roots.pop() if roots else None
+        if git_root is None:
+            print("ERROR: --commit but no staged files are in a git repo", file=sys.stderr)
+            sys.exit(2)
+        try:
+            subprocess.check_call(["git", "-C", git_root, "commit", "-m", commit_msg])
+            print(f"Committed: {commit_msg}")
+        except subprocess.CalledProcessError as exc:
+            print(f"ERROR: git commit failed (exit {exc.returncode})", file=sys.stderr)
+            sys.exit(2)
+    else:
+        print("Suggested commit:")
+        print(f'  git commit -m "{commit_msg}"')
 
 
 if __name__ == "__main__":

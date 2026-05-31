@@ -130,12 +130,14 @@ Session-close commits `docs/` only. This keeps diffs reviewable by Opus and `git
 See `.claude/skills/session-close/SKILL.md` "Commit discipline" section.
 
 Use `close_ticket.py --files <path> [<path>...]` to stage code and test changes together
-with the archive move in a single commit. Example:
+with the archive move. The script stages everything and prints a suggested `git commit`
+command; run it yourself, or pass `--commit` to have the script commit for you. Example:
 
 ```bash
 python scripts/tools/close_ticket.py T099 \
   --resolution "Fixed the bug." \
-  --files scripts/tools/myscript.py tests/test_myscript.py
+  --files scripts/tools/myscript.py tests/test_myscript.py \
+  --commit
 ```
 
 Without `--files`, `close_ticket.py` warns about any unstaged code files it detects.
