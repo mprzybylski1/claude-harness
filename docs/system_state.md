@@ -1,6 +1,6 @@
 # System State
 
-_Last updated: S25 2026-05-31_
+_Last updated: S26 2026-05-31_
 
 ---
 
@@ -27,8 +27,8 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 | ID | Title | Phase | Age |
 |----|-------|-------|-----|
-| T140 | create_ticket.py routes to harness by default in a workspace session (no .active_workspace awareness) | Ph2 | tooling | this session |
-| T141 | analyze_tool_log: join telemetry index to native transcript for token-level data | Ph2 | tooling | this session |
+| T141 | analyze_tool_log: join telemetry index to native transcript for token-level data | Ph2 | tooling | 1 session |
+| T146 | cwd-drift fragility in 'python scripts/tools/X.py' invocations after a cd elsewhere | Ph2 | tooling | this session |
 
 ---
 

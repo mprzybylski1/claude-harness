@@ -19,31 +19,26 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Active Work
 
-**S25 — closed T138/T139/T135/T136/T137 (scrabble-score SR-008/009/010/011 sweep); fixed hook cwd-deadlock, session stamping off-by-one, ticket-number scoping, index workspace-blindness, telemetry attribution; opened T140/T141 as spin-outs.**
+**S26 — cleared the S25 Opus backlog (Concerns #1/#2/#3) + both spin-out tickets; hardened the cross-layer enforcement boundary, made create_ticket session-aware, verified the telemetry join key, and added close_ticket --append. Impl-review + workflow-review both run; ended with 2 deferred tickets open.**
 
 Files changed:
-- `.claude/settings.json` — T138: hook commands switched from `git rev-parse --show-toplevel` to `$CLAUDE_PROJECT_DIR`-based dispatch; fail-open on script-not-found
-- `.claude/skills/session-close/SKILL.md` — T139: pass `--session S[CURRENT_SESSION]` at raise-during-close invocations
-- `CLAUDE.md` — T138: updated hook-paths note (old S3 claim that `$CLAUDE_PROJECT_DIR` is empty now stale; verified present on 2.1.158)
-- `scripts/hooks/run_hook.sh` — T138: new wrapper; locates scripts via `$0`, fails open
-- `scripts/hooks/log_tool_usage.py` — T137: attribution switched from per-file-path (T057) to active-session via `workspace_config.read_session_state`; added `claude_session_uuid` live join key; removed path-based `_detect_workspace`/`_candidate_paths`/`_list_workspaces`/`_session_for_workspace` subsystem
-- `scripts/tools/analyze_tool_log.py` — T137: `--workspace` filter + `(workspace, session)` pair filtering; gated auto-detect from `.active_workspace` when using default log
-- `scripts/tools/create_ticket.py` — T135: `_next_id(internal)` scoped to target layer only (workspace or harness); includes workspace `tickets/closed/` previously omitted
-- `scripts/tools/generate_ticket_index.py` — T136: `--workspace SLUG`; fail-closed for workspace/undeclared bare invocation; reads `.active_workspace` via T136 helpers
-- `scripts/tools/raise_for_harness.py` — T139: `--session S<N>` flag; used verbatim, bypasses last-logged+1 lookup
-- `scripts/tools/workspace_config.py` — T136: added `read_session_state()` + `workspace_paths()` (cwd-independent, `.active_workspace`-based; used by T136/T137)
-- `scripts/tools/README.md` — doc sync: both tools' new `--workspace` flags
-- `docs/native_vs_custom.md` — T137: resolved the fix-vs-replace decision gate; recorded "keep custom as thin live-stamped domain index" rationale
-- `workspaces/scrabble-score/CLAUDE.md` — T139: breadcrumb: pass `--session S[CURRENT_SESSION]` when raising SR during close
-- `workspaces/scrabble-score/raised/SR-008/009/010/011-*.md` — resolved; harness_ticket set
-- `tests/test_hook_command_resolution.py` — T138: 10 tests (command-shape, drift-independence, fail-open)
-- `tests/test_raise_for_harness.py` — T139: 4 tests (explicit session, bypass missing sessions.md, invalid rejected, no-flag unchanged)
-- `tests/test_create_ticket.py` — T135: 3 tests (workspace ignores harness, harness ignores workspace, workspace closed-dir included)
-- `tests/test_generate_ticket_index.py` — T136: 8 tests (fail-closed, harness pass-through, --workspace, explicit bypass, idempotency)
-- `tests/test_telemetry.py` — T137: replaced TestWorkspaceAwareStamping (path-based) with TestActiveWorkspaceStamping + TestWorkspaceFilter (active-based + analyzer filter)
+- `scripts/hooks/run_hook.sh` — T142: default fail-OPEN kept; added explicit `FAIL_CLOSED` list (exactly `check_cross_layer_writes`) → missing script stderr-warns + exit 2. Narrowed from Opus's 3-hook suggestion after matcher-by-matcher deadlock analysis (fail-closed default deadlocks via `check_ticket_acs`'s Edit|Write|Bash matcher)
+- `scripts/hooks/check_cross_layer_writes.py` — T143: imports `workspace_config.read_session_state` (single source of truth with the attribution side); dropped private `_read_session_state`/`_HARNESS_SENTINEL`; import failure maps to exit 2 (fail-closed, since exit 1 = non-blocking)
+- `scripts/tools/workspace_config.py` — T143: replaced the deferred-debt note with a single-source statement
+- `scripts/tools/create_ticket.py` — T140: bare invocation consults `read_session_state` (mirror T136); workspace/undeclared → exit 2 with recovery command; added explicit `--harness` flag (mutually exclusive with `--workspace`) for programmatic callers
+- `scripts/tools/promote_raised_concern.py` — T140: passes `--harness` (always creates a harness ticket; broke under fail-closed otherwise)
+- `scripts/tools/close_ticket.py` — T144: new `--append` keeps existing Resolution content and adds summary at section end; split into `_resolution_section`/`_append_resolution`; reworded no-placeholder error to name both remediations (T145)
+- `docs/architecture_invariants.md` — impl-review fix: Invariant 2 verification grep updated for the T143 refactor (`_STATE_FILE` gone → grep `read_session_state` + `_HARNESS_PROTECTED`/`sys.exit`)
+- `scripts/tools/close_ticket.py` — Opus-S26-review fixes: (#1) `--append` "nothing to preserve" guard now strips the client-visible blockquote, not just the bare placeholder (was leaving the placeholder on fresh TEMPLATE.md tickets); (#2) named the non-fence-aware `\n##\s` section-terminator assumption to stop the 3rd recurrence
+- `tests/test_hook_command_resolution.py` — T142: +6 tests (fail-closed differentiation, mutation-verified Bash-recovery-surface guard)
+- `tests/test_check_cross_layer_writes.py` — T143: +3 tests (single-source guard, mutation-verified fail-closed-on-missing-import)
+- `tests/test_create_ticket.py` — T140: +7 tests (session-aware routing, `--harness` bypass, mutual exclusion)
+- `tests/test_close_ticket_resolution.py` — T144/T145: new file, 6 unit tests for `_replace_resolution` append/error paths
 
-Tickets opened: T140 (create_ticket routing, low), T141 (telemetry transcript join, low)
-Tickets closed: T138, T139, T135, T136, T137 (all from scrabble-score SR-008/009/010/011 sweep)
+Tickets opened: T142 (medium, hook fail-closed differentiation), T143 (low, reader dedup), T144 (medium, close_ticket --append), T145 (low, error reword), T146 (low, cwd-drift wrapper)
+Tickets closed: T142, T143, T140, T144, T145 (+ T141 verified & deferred under its YAGNI clause)
+Reviews: implementation-review (1 finding fixed inline — invariants grep); workflow-review (3 tickets opened: T144/T145/T146); Opus session-close review (Concern #1 --append guard bug fixed inline + test; #2 recurrence commented; #3 --harness bypass = recorded decision, no change)
+Open at close: T141 (deferred, YAGNI), T146 (low, deferred)
 
 ---
 
@@ -77,3 +72,4 @@ S22 2026-05-28: closed T123-T126 (4 tickets: SR triage + YAML-quoting + cross-re
 S23 2026-05-28: closed T127-T134 (8 tickets: Opus S22 backlog + workflow-review T133/T134 — fail-closed session-lookup consolidation, invariants reconcile, unparseable SR surface, SR→AC bullet parser, session-close Active Work replace semantics + Stop-hook validation); impl-review 6 inline fixes; Opus S22 Concern #2 retired (regex already rejects __harness__)
 S24 2026-05-30: triaged SR-008/009/010 → T135/T136/T137 (workspace-blind tooling sweep); produced docs/native_vs_custom.md; T137 decision gate (fix vs. native OTel); T136 regen-hook flakiness evidence recorded; 3 open at close
 S25 2026-05-31: closed T138/T139/T135/T136/T137 (SR-008/009/010/011 sweep complete); hook cwd-deadlock fixed, session stamping, ticket-number scoping, index workspace-blindness, telemetry attribution; T140/T141 opened; 2 open at close
+S26 2026-05-31: cleared S25 Opus backlog — closed T142/T143/T140 (hook fail-closed differentiation, cross-layer reader dedup, create_ticket session-awareness + --harness); verified T141 join key & deferred under YAGNI; impl-review fixed invariants grep; workflow-review opened+closed T144/T145 (close_ticket --append) and opened T146; 2 deferred open at close
