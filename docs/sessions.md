@@ -19,25 +19,23 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Active Work
 
-**S26 — cleared the S25 Opus backlog (Concerns #1/#2/#3) + both spin-out tickets; hardened the cross-layer enforcement boundary, made create_ticket session-aware, verified the telemetry join key, and added close_ticket --append. Impl-review + workflow-review both run; ended with 2 deferred tickets open.**
+**S27 — promoted + implemented SR-012/SR-013 (close_ticket --commit flag, create_ticket --problem flag); impl-review added index-clean guard + fail-closed _apply_problem; /simplify deduplicated test boilerplate (–226 lines). 2 tickets still deferred (T141, T146).**
 
 Files changed:
-- `scripts/hooks/run_hook.sh` — T142: default fail-OPEN kept; added explicit `FAIL_CLOSED` list (exactly `check_cross_layer_writes`) → missing script stderr-warns + exit 2. Narrowed from Opus's 3-hook suggestion after matcher-by-matcher deadlock analysis (fail-closed default deadlocks via `check_ticket_acs`'s Edit|Write|Bash matcher)
-- `scripts/hooks/check_cross_layer_writes.py` — T143: imports `workspace_config.read_session_state` (single source of truth with the attribution side); dropped private `_read_session_state`/`_HARNESS_SENTINEL`; import failure maps to exit 2 (fail-closed, since exit 1 = non-blocking)
-- `scripts/tools/workspace_config.py` — T143: replaced the deferred-debt note with a single-source statement
-- `scripts/tools/create_ticket.py` — T140: bare invocation consults `read_session_state` (mirror T136); workspace/undeclared → exit 2 with recovery command; added explicit `--harness` flag (mutually exclusive with `--workspace`) for programmatic callers
-- `scripts/tools/promote_raised_concern.py` — T140: passes `--harness` (always creates a harness ticket; broke under fail-closed otherwise)
-- `scripts/tools/close_ticket.py` — T144: new `--append` keeps existing Resolution content and adds summary at section end; split into `_resolution_section`/`_append_resolution`; reworded no-placeholder error to name both remediations (T145)
-- `docs/architecture_invariants.md` — impl-review fix: Invariant 2 verification grep updated for the T143 refactor (`_STATE_FILE` gone → grep `read_session_state` + `_HARNESS_PROTECTED`/`sys.exit`)
-- `scripts/tools/close_ticket.py` — Opus-S26-review fixes: (#1) `--append` "nothing to preserve" guard now strips the client-visible blockquote, not just the bare placeholder (was leaving the placeholder on fresh TEMPLATE.md tickets); (#2) named the non-fence-aware `\n##\s` section-terminator assumption to stop the 3rd recurrence
-- `tests/test_hook_command_resolution.py` — T142: +6 tests (fail-closed differentiation, mutation-verified Bash-recovery-surface guard)
-- `tests/test_check_cross_layer_writes.py` — T143: +3 tests (single-source guard, mutation-verified fail-closed-on-missing-import)
-- `tests/test_create_ticket.py` — T140: +7 tests (session-aware routing, `--harness` bypass, mutual exclusion)
-- `tests/test_close_ticket_resolution.py` — T144/T145: new file, 6 unit tests for `_replace_resolution` append/error paths
+- `scripts/tools/close_ticket.py` — T147: added `--commit` flag (runs git commit after staging; refuses exit 2 when staged files span >1 git root; checks index clean before committing); commit prefix derives from --files content (fix/docs); extracted `_commit_prefix`, `_collect_staged_roots`, `_refuse_multi_root_commit`, `_check_index_clean`, `_ac_section_bounds`, `_UNCHECKED_AC_RE`; permissive fallback now calls `_resolution_section` (no re-derivation); `_rel()` deduplicates relative_to pattern; `defaultdict` lifted to module-level
+- `scripts/tools/create_ticket.py` — T148: added `--problem TEXT` flag (replaces placeholder in ## Problem); `_apply_problem` fails closed if placeholder not found; `_PROBLEM_PLACEHOLDER` constant
+- `CLAUDE.md` — T147: clarified wording (stages, not commits); updated example to show `--commit`
+- `tests/conftest.py` — new: shared `git_init`, `make_harness_tree`, `run_close_ticket` helpers
+- `tests/test_close_ticket_commit.py` — T147 + impl-review: 17 tests covering prefix derivation, multi-root refusal, index-clean guard (4 cases), `TestCommitMainPath` deleted (tested mocks)
+- `tests/test_create_ticket_problem.py` — T148 + impl-review: 4 tests
+- `tests/test_close_ticket_stage_files.py` — refactored: uses conftest helpers (–169 lines)
+- `tests/test_close_ticket_path_only.py` — refactored: uses conftest helpers (–11 lines)
+- `tests/test_close_ticket_source_sr.py` — refactored: uses conftest helpers (–45 lines)
+- `tests/test_close_ticket_hook_integration.py` — refactored: uses conftest helpers (–31 lines)
 
-Tickets opened: T142 (medium, hook fail-closed differentiation), T143 (low, reader dedup), T144 (medium, close_ticket --append), T145 (low, error reword), T146 (low, cwd-drift wrapper)
-Tickets closed: T142, T143, T140, T144, T145 (+ T141 verified & deferred under its YAGNI clause)
-Reviews: implementation-review (1 finding fixed inline — invariants grep); workflow-review (3 tickets opened: T144/T145/T146); Opus session-close review (Concern #1 --append guard bug fixed inline + test; #2 recurrence commented; #3 --harness bypass = recorded decision, no change)
+Tickets opened: T147 (medium, close_ticket --commit), T148 (low, create_ticket --problem) — promoted from SR-012/SR-013
+Tickets closed: T147, T148
+Reviews: impl-review (3 findings fixed: index-clean guard for --commit, _apply_problem fail-closed, TestCommitMainPath deleted); /simplify (8 findings fixed, 6 skipped; –226 test lines)
 Open at close: T141 (deferred, YAGNI), T146 (low, deferred)
 
 ---
@@ -73,3 +71,4 @@ S23 2026-05-28: closed T127-T134 (8 tickets: Opus S22 backlog + workflow-review 
 S24 2026-05-30: triaged SR-008/009/010 → T135/T136/T137 (workspace-blind tooling sweep); produced docs/native_vs_custom.md; T137 decision gate (fix vs. native OTel); T136 regen-hook flakiness evidence recorded; 3 open at close
 S25 2026-05-31: closed T138/T139/T135/T136/T137 (SR-008/009/010/011 sweep complete); hook cwd-deadlock fixed, session stamping, ticket-number scoping, index workspace-blindness, telemetry attribution; T140/T141 opened; 2 open at close
 S26 2026-05-31: cleared S25 Opus backlog — closed T142/T143/T140 (hook fail-closed differentiation, cross-layer reader dedup, create_ticket session-awareness + --harness); verified T141 join key & deferred under YAGNI; impl-review fixed invariants grep; workflow-review opened+closed T144/T145 (close_ticket --append) and opened T146; 2 deferred open at close
+S27 2026-05-31: promoted SR-012/SR-013 → closed T147/T148 (close_ticket --commit + index-clean guard, create_ticket --problem); impl-review 3 inline fixes; /simplify deduplicated test boilerplate (–226 lines, conftest.py); 2 deferred open at close
