@@ -5,6 +5,7 @@ Create a new harness ticket with correct frontmatter and scaffolding.
 Usage:
     create_ticket.py "Title here" --severity high --phase 2
     create_ticket.py "Title here" --severity medium --ac "AC one" --ac "AC two"
+    create_ticket.py "Title here" --problem "What went wrong." --ac "Fixed it"
     create_ticket.py "Title here" --workspace scrabble-score
 
 Layer selection (T140):
@@ -172,6 +173,11 @@ def _regenerate_index(internal: Path | None) -> None:
         print(f"WARNING: generate_ticket_index.py failed: {exc}", file=sys.stderr)
 
 
+def _apply_problem(content: str, problem_text: str) -> str:
+    """Replace the '(Describe the problem here.)' placeholder in ## Problem."""
+    return content.replace("(Describe the problem here.)", problem_text)
+
+
 _LAYER_VALUES = ("backend", "frontend", "fullstack", "infra", "process", "tooling")
 
 _TEMPLATE = """\
@@ -214,6 +220,8 @@ def main() -> None:
                              help="Force the harness layer, bypassing the session-state "
                                   "check (for programmatic harness operations like "
                                   "promote_raised_concern.py — T140)")
+    parser.add_argument("--problem", metavar="TEXT",
+                        help="Problem description — replaces the placeholder in ## Problem")
     parser.add_argument("--layer", choices=_LAYER_VALUES, default="tooling",
                         help="Layer value for ticket frontmatter (default: tooling)")
     parser.add_argument("--repo", metavar="SLUG",
@@ -259,6 +267,8 @@ def main() -> None:
             today=today,
             acs=ac_lines,
         )
+        if args.problem:
+            content = _apply_problem(content, args.problem)
         try:
             with open(dest, "x", encoding="utf-8") as fh:
                 fh.write(content)

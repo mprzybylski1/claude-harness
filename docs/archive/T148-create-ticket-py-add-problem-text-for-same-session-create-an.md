@@ -1,13 +1,19 @@
 ---
-id: SR-013
-from: scrabble-score
-raised: S14 2026-05-31
-title: "create_ticket.py: add --problem TEXT for same-session create-and-close"
+id: T148
+title: create_ticket.py: add --problem TEXT for same-session create-and-close
 severity: low
-status: resolved
-harness_ticket: T148
-resolved_in: S27
+status: closed
+phase: 2
+layer: tooling
+# repo: <name from workspace.yaml repos list>
+opened: S27 2026-05-31
+closed: S27 2026-05-31
+source: scrabble-score/SR-013
 ---
+
+## Problem
+
+Promoted from scrabble-score/SR-013.
 
 ## Context
 
@@ -31,11 +37,13 @@ the text is written into the body's `## Problem` section in place of the
 `create_ticket.py` invocation then produces a close-ready ticket (no intermediate
 Edit needed).
 
-Acceptance criteria:
-- [ ] `create_ticket.py "title" --problem "..."` writes the text into the ## Problem section
-- [ ] Without `--problem`, the current placeholder behavior is preserved
-- [ ] Combined with `--ac`, a single create invocation produces a close-ready ticket (no unchecked-AC / placeholder-Problem residue)
+## Acceptance Criteria
 
-## Harness disposition
+- [x] `create_ticket.py "title" --problem "..."` writes the text into the ## Problem section
+- [x] Without `--problem`, the current placeholder behavior is preserved
+- [x] Combined with `--ac`, a single create invocation produces a close-ready ticket (no placeholder residue)
 
-(Filled by harness on promotion or rejection.)
+## Resolution
+Added --problem TEXT flag to create_ticket.py. Replaces the placeholder in ## Problem. Combined with --ac, produces a close-ready ticket with no placeholder residue.
+
+Closed S27 2026-05-31.
