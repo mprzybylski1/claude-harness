@@ -81,13 +81,21 @@ write.
    ```
    grep -A2 "check_cross_layer_writes" .claude/settings.json
    ```
-2. The hook reads the state file and enforces the protected-paths list:
+2. The hook delegates the `.active_workspace` tri-state read to the shared function
+   (T143) and enforces the protected-paths list:
    ```
-   grep -nE "_STATE_FILE|_HARNESS_PROTECTED|STATE_UNDECLARED" \
+   # State-file resolution lives in workspace_config.read_session_state — confirm
+   # the hook imports and calls it (single source of truth, no private copy):
+   grep -nE "read_session_state|STATE_UNDECLARED" \
+       scripts/hooks/check_cross_layer_writes.py
+   # Protected-paths list and blocking exits are in the hook itself:
+   grep -nE "_HARNESS_PROTECTED|sys\.exit" \
        scripts/hooks/check_cross_layer_writes.py
    ```
-   Must show: state file path resolution, the protected-paths list above, and
-   `sys.exit` (non-zero) on the undeclared / mismatched-slug paths.
+   First grep must show the hook importing and calling `read_session_state` and
+   re-exporting `STATE_UNDECLARED` from `workspace_config`. Second grep must show
+   the `_HARNESS_PROTECTED` list and at least one `sys.exit(2)` covering the
+   undeclared / mismatched-slug blocking paths.
 3. Hook tests cover the four state × target combinations:
    ```
    grep -nE "def test_" tests/test_check_cross_layer_writes.py
