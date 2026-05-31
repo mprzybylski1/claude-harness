@@ -176,3 +176,69 @@ class TestWrapper:
         )
         # Read is not Edit/Write → hook exits 0 immediately. Proves dispatch works.
         assert result.returncode == 0, (result.returncode, result.stderr)
+
+
+class TestFailClosedDifferentiation:
+    """T142: a missing *confidentiality-enforcing* hook script must fail closed
+    (stderr + exit 2); every other hook still fails open (exit 0).
+
+    Rationale (see T142): the original Opus suggestion named three "enforcement"
+    hooks, but a matcher-by-matcher deadlock analysis shows a fail-closed *default*
+    deadlocks via check_ticket_acs (matcher Edit|Write|Bash → blocks all recovery
+    surfaces). So the design is default fail-OPEN with an explicit fail-CLOSED list
+    of exactly one hook: check_cross_layer_writes (Inv 2/4 enforcer, Edit|Write-only
+    → Bash survives as a `git checkout` recovery surface).
+    """
+
+    def _wrapper_in_empty_dir(self, tmp_path: Path) -> Path:
+        """Copy run_hook.sh into a dir with NO hook scripts, so every <name>.py
+        resolves as missing. Lets us drive the script-not-found branch by name."""
+        import shutil
+
+        wrapper = tmp_path / "run_hook.sh"
+        shutil.copyfile(WRAPPER, wrapper)
+        return wrapper
+
+    def _run_missing(self, tmp_path: Path, name: str) -> subprocess.CompletedProcess:
+        wrapper = self._wrapper_in_empty_dir(tmp_path)
+        return subprocess.run(
+            ["bash", str(wrapper), name],
+            input="{}",
+            capture_output=True,
+            text=True,
+            cwd="/tmp",
+        )
+
+    def test_missing_confidentiality_hook_fails_closed(self, tmp_path):
+        result = self._run_missing(tmp_path, "check_cross_layer_writes")
+        assert result.returncode == 2, (result.returncode, result.stderr)
+        assert result.stderr.strip(), "fail-closed must emit a visible stderr warning"
+        assert "check_cross_layer_writes" in result.stderr
+
+    def test_missing_process_hook_fails_open_no_deadlock(self, tmp_path):
+        # check_ticket_acs matches Edit|Write|Bash; fail-closed here would block
+        # every recovery surface. It MUST stay fail-open.
+        result = self._run_missing(tmp_path, "check_ticket_acs")
+        assert result.returncode == 0, (result.returncode, result.stderr)
+
+    def test_missing_fix_commit_hook_fails_open(self, tmp_path):
+        result = self._run_missing(tmp_path, "check_fix_commit_has_code")
+        assert result.returncode == 0, (result.returncode, result.stderr)
+
+    def test_missing_telemetry_hook_fails_open(self, tmp_path):
+        result = self._run_missing(tmp_path, "log_tool_usage")
+        assert result.returncode == 0, (result.returncode, result.stderr)
+
+    def test_fail_closed_set_is_named_in_wrapper(self):
+        # Guard against silent scope creep: the FAIL_CLOSED declaration is exactly
+        # {check_cross_layer_writes}. A future confidentiality enforcer must be
+        # added here deliberately (the accepted residual tradeoff in T142). Inspect
+        # the declaration line, not the whole file — the process hooks are named in
+        # the rationale comment, which is fine.
+        text = WRAPPER.read_text(encoding="utf-8")
+        decl = [ln for ln in text.splitlines() if ln.strip().startswith("FAIL_CLOSED=")]
+        assert len(decl) == 1, f"expected one FAIL_CLOSED= line, got {decl}"
+        line = decl[0]
+        assert "check_cross_layer_writes" in line
+        assert "check_ticket_acs" not in line
+        assert "check_fix_commit_has_code" not in line
