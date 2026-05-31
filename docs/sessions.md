@@ -19,20 +19,31 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Active Work
 
-**S24 — triaged SR-008/009/010 → T135/T136/T137; produced native-vs-custom analysis; added T137 fix-vs-replace decision gate; recorded T136 regen-hook flakiness field evidence.**
+**S25 — closed T138/T139/T135/T136/T137 (scrabble-score SR-008/009/010/011 sweep); fixed hook cwd-deadlock, session stamping off-by-one, ticket-number scoping, index workspace-blindness, telemetry attribution; opened T140/T141 as spin-outs.**
 
 Files changed:
-- `docs/tickets/open/T135-*.md` — promoted SR-008; workspace_context.py helper owner; coordination notes for T136/T137
-- `docs/tickets/open/T136-*.md` — promoted SR-009; coordination notes; S24 field evidence: regen hook produces stale stamp + whitespace churn on harness-root edits (idempotency test required)
-- `docs/tickets/open/T137-*.md` — promoted SR-010; decision-required gate: fix custom telemetry logger vs. replace with native OTel/transcripts
-- `workspaces/scrabble-score/raised/SR-008-*.md` — status: promoted, harness_ticket: T135
-- `workspaces/scrabble-score/raised/SR-009-*.md` — status: promoted, harness_ticket: T136
-- `workspaces/scrabble-score/raised/SR-010-*.md` — status: promoted, harness_ticket: T137
-- `docs/native_vs_custom.md` — new: verdict table (keep-custom / reinventing-native / hybrid), three buckets, portfolio take, native-feature caveat
-- `docs/tickets/INDEX.md` — regenerated (3 open, all Medium: T135/T136/T137)
+- `.claude/settings.json` — T138: hook commands switched from `git rev-parse --show-toplevel` to `$CLAUDE_PROJECT_DIR`-based dispatch; fail-open on script-not-found
+- `.claude/skills/session-close/SKILL.md` — T139: pass `--session S[CURRENT_SESSION]` at raise-during-close invocations
+- `CLAUDE.md` — T138: updated hook-paths note (old S3 claim that `$CLAUDE_PROJECT_DIR` is empty now stale; verified present on 2.1.158)
+- `scripts/hooks/run_hook.sh` — T138: new wrapper; locates scripts via `$0`, fails open
+- `scripts/hooks/log_tool_usage.py` — T137: attribution switched from per-file-path (T057) to active-session via `workspace_config.read_session_state`; added `claude_session_uuid` live join key; removed path-based `_detect_workspace`/`_candidate_paths`/`_list_workspaces`/`_session_for_workspace` subsystem
+- `scripts/tools/analyze_tool_log.py` — T137: `--workspace` filter + `(workspace, session)` pair filtering; gated auto-detect from `.active_workspace` when using default log
+- `scripts/tools/create_ticket.py` — T135: `_next_id(internal)` scoped to target layer only (workspace or harness); includes workspace `tickets/closed/` previously omitted
+- `scripts/tools/generate_ticket_index.py` — T136: `--workspace SLUG`; fail-closed for workspace/undeclared bare invocation; reads `.active_workspace` via T136 helpers
+- `scripts/tools/raise_for_harness.py` — T139: `--session S<N>` flag; used verbatim, bypasses last-logged+1 lookup
+- `scripts/tools/workspace_config.py` — T136: added `read_session_state()` + `workspace_paths()` (cwd-independent, `.active_workspace`-based; used by T136/T137)
+- `scripts/tools/README.md` — doc sync: both tools' new `--workspace` flags
+- `docs/native_vs_custom.md` — T137: resolved the fix-vs-replace decision gate; recorded "keep custom as thin live-stamped domain index" rationale
+- `workspaces/scrabble-score/CLAUDE.md` — T139: breadcrumb: pass `--session S[CURRENT_SESSION]` when raising SR during close
+- `workspaces/scrabble-score/raised/SR-008/009/010/011-*.md` — resolved; harness_ticket set
+- `tests/test_hook_command_resolution.py` — T138: 10 tests (command-shape, drift-independence, fail-open)
+- `tests/test_raise_for_harness.py` — T139: 4 tests (explicit session, bypass missing sessions.md, invalid rejected, no-flag unchanged)
+- `tests/test_create_ticket.py` — T135: 3 tests (workspace ignores harness, harness ignores workspace, workspace closed-dir included)
+- `tests/test_generate_ticket_index.py` — T136: 8 tests (fail-closed, harness pass-through, --workspace, explicit bypass, idempotency)
+- `tests/test_telemetry.py` — T137: replaced TestWorkspaceAwareStamping (path-based) with TestActiveWorkspaceStamping + TestWorkspaceFilter (active-based + analyzer filter)
 
-Tickets opened: T135, T136, T137 (promoted from SR-008/009/010; all in workspace-blind tooling sweep)
-Tickets closed: none
+Tickets opened: T140 (create_ticket routing, low), T141 (telemetry transcript join, low)
+Tickets closed: T138, T139, T135, T136, T137 (all from scrabble-score SR-008/009/010/011 sweep)
 
 ---
 
@@ -65,3 +76,4 @@ S21 2026-05-28: closed T113-T122 (10 tickets: SR-002/SR-003 + Opus S20 backlog +
 S22 2026-05-28: closed T123-T126 (4 tickets: SR triage + YAML-quoting + cross-repo close guard + large-asset diff exclusion + auto-commit archives); impl-review 5 inline fixes; workflow-review opened T127-T131
 S23 2026-05-28: closed T127-T134 (8 tickets: Opus S22 backlog + workflow-review T133/T134 — fail-closed session-lookup consolidation, invariants reconcile, unparseable SR surface, SR→AC bullet parser, session-close Active Work replace semantics + Stop-hook validation); impl-review 6 inline fixes; Opus S22 Concern #2 retired (regex already rejects __harness__)
 S24 2026-05-30: triaged SR-008/009/010 → T135/T136/T137 (workspace-blind tooling sweep); produced docs/native_vs_custom.md; T137 decision gate (fix vs. native OTel); T136 regen-hook flakiness evidence recorded; 3 open at close
+S25 2026-05-31: closed T138/T139/T135/T136/T137 (SR-008/009/010/011 sweep complete); hook cwd-deadlock fixed, session stamping, ticket-number scoping, index workspace-blindness, telemetry attribution; T140/T141 opened; 2 open at close
