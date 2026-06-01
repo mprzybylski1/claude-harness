@@ -17,6 +17,7 @@ Usage:
     python scripts/tools/close_ticket.py T045 --resolution "..." --force
     python scripts/tools/close_ticket.py T045 --resolution "..." --workspace scrabble-score
     python scripts/tools/close_ticket.py T045 --resolution "..." --files src/x.py --commit
+    python scripts/tools/close_ticket.py T045 --resolution "..." --session S8
 """
 from __future__ import annotations
 
@@ -382,7 +383,7 @@ def _atomic_move(ticket_path: Path, dest: Path, content: str) -> None:
         sys.exit(2)
 
 
-def _regenerate_index(internal: Path | None) -> None:
+def _regenerate_index(internal: Path | None, session: str | None = None) -> None:
     cmd = [sys.executable, str(ROOT / "scripts" / "tools" / "generate_ticket_index.py")]
     if internal is not None:
         cmd += [
@@ -390,6 +391,10 @@ def _regenerate_index(internal: Path | None) -> None:
             "--tickets-dir", str(internal / "tickets"),
             "--output", str(internal / "tickets" / "INDEX.md"),
         ]
+    if session is not None:
+        m = re.match(r"S(\d+)", session)
+        if m:
+            cmd += ["--session", m.group(1)]
     try:
         subprocess.check_call(cmd, stdout=subprocess.DEVNULL)
     except subprocess.CalledProcessError as exc:
@@ -703,11 +708,20 @@ def main() -> None:
                              "multiple git roots.")
     parser.add_argument("--path-only", action="store_true",
                         help="Print the ticket file path and exit; no other action taken")
+    parser.add_argument("--session", metavar="S<N>",
+                        help="Override the session ID instead of deriving it from "
+                             "sessions.md (use when the session log line is already written)")
     parser.add_argument("--ignore-missing-sr", action="store_true",
                         help="Close even if the source: SR file is missing (manual override)")
     args = parser.parse_args()
 
     ticket_id = args.ticket_id.upper()
+
+    if args.session is not None:
+        m = re.match(r"^S?(\d+)$", args.session)
+        if not m:
+            parser.error(f"--session must be S<N> or <N> (got '{args.session}')")
+        args.session = f"S{m.group(1)}"
 
     if args.path_only:
         if args.resolution or args.resolution_file:
@@ -795,7 +809,7 @@ def main() -> None:
         sys.exit(1)
 
     # Derive session and today's date
-    session = _current_session(internal)
+    session = args.session if args.session else _current_session(internal)
 
     # Append session info to resolution (only if not already stamped by a prior run).
     full_resolution = resolution
@@ -828,8 +842,8 @@ def main() -> None:
         _resolve_source_sr(sr_source_path, session)
         _stage_extra_files([sr_source_path])
 
-    # Regenerate index
-    _regenerate_index(internal)
+    # Regenerate index (pass the same session used for frontmatter)
+    _regenerate_index(internal, session=session)
 
     # Stage ticket deletion, archive, and INDEX (extra_files already staged above)
     _git_stage(ticket_path, dest, internal)

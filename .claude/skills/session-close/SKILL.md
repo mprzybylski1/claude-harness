@@ -136,13 +136,15 @@ If the workspace's session data should also update global state, do so manually.
 
 For any ticket being closed this session:
 1. Tick all satisfied ACs in the ticket file. For incomplete items add `— DEFERRED to T[N]` or `— N/A: <reason>`.
-2. Run the closure script:
+2. Run the closure script with `--session S<N>` (the CURRENT_SESSION from Step 0):
    ```bash
-   python scripts/tools/close_ticket.py T### --resolution "What was done."
+   python scripts/tools/close_ticket.py T### --resolution "What was done." --session S<N>
    # or for workspace tickets: HARNESS_ROOT is auto-detected; no extra flags needed
    # use --resolution-file /tmp/res.txt for multi-paragraph resolutions
    # use --force to close despite unchecked ACs
    ```
+   The `--session` flag prevents an off-by-one: Step 1 appends the session log line
+   before Step 2 runs, so without `--session` the tool reads `S<N>` and derives `S<N+1>`.
    This updates frontmatter, replaces the Resolution placeholder, moves to archive/,
    regenerates INDEX.md, and prints a suggested git commit message.
 

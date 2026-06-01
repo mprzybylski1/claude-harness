@@ -2,11 +2,11 @@
 id: T153
 title: close_ticket.py / generate_ticket_index.py stamp S<N+1> instead of S<N> for workspace sessions
 severity: medium
-status: open
+status: closed
 phase: 2
 layer: tooling
 opened: S29 2026-06-01
-closed:
+closed: S29 2026-06-01
 source: sub-tracker/SR-001
 ---
 
@@ -37,13 +37,13 @@ the frontmatter stamp and the INDEX regen (via `--session` passthrough) resolve.
 
 ## Acceptance Criteria
 
-- [ ] When `sessions.md` already contains an `S<N>` log entry, `close_ticket.py` stamps `closed: S<N>` (not `S<N+1>`) in the archived ticket's frontmatter
-- [ ] When `sessions.md` already contains an `S<N>` log entry, the regenerated INDEX.md reads `Generated S<N>` (not `S<N+1>`)
-- [ ] Regression test: closing a ticket after the session log line is appended produces the correct session stamp
-- [ ] Existing behavior when no log line exists yet (mid-session close before session-close) is unchanged
+- [x] When `sessions.md` already contains an `S<N>` log entry, `close_ticket.py` stamps `closed: S<N>` (not `S<N+1>`) in the archived ticket's frontmatter
+- [x] When `sessions.md` already contains an `S<N>` log entry, the regenerated INDEX.md reads `Generated S<N>` (not `S<N+1>`)
+- [x] Regression test: closing a ticket after the session log line is appended produces the correct session stamp
+- [x] Existing behavior when no log line exists yet (mid-session close before session-close) is unchanged
 
 ## Resolution
 
-> **Client-visible:**
+Added --session flag to close_ticket.py. When provided, it overrides the current_session.py lookup — preventing the off-by-one when the session log line is already written. The flag normalizes input (accepts S8 or 8, rejects garbage), passes the session number through to _regenerate_index (which forwards it as --session to generate_ticket_index.py), and the session-close SKILL now documents passing --session S<N> in Step 2. Remaining vector: the PostToolUse regenerate_ticket_index hook still self-derives the session from sessions.md — not currently triggerable during the close flow (close_ticket.py uses open(), not Edit/Write), but noted for future hardening.
 
-(Fill in on close.)
+Closed S29 2026-06-01.
