@@ -4,8 +4,8 @@ from: sub-tracker
 raised: S1 2026-06-01
 title: close_ticket.py / generate_ticket_index.py stamp S<N+1> instead of S<N> for workspace sessions
 severity: medium
-status: raised
-harness_ticket:
+status: promoted
+harness_ticket: T153
 resolved_in:
 ---
 

@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S29 2026-06-01. 6 open tickets.
+Generated S29 2026-06-01. 7 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -11,13 +11,14 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Medium (3)
+## Medium (4)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
 | T150 | Warn on machine-specific absolute paths in workspace.py create and repo_hygiene.py | Ph2 | tooling | this session |
 | T151 | Scaffold sessions.md and INDEX.md when creating a workspace | Ph2 | tooling | this session |
 | T152 | Detect gitignored docs_path location at session-start | Ph2 | tooling | this session |
+| T153 | close_ticket.py / generate_ticket_index.py stamp S<N+1> instead of S<N> for workspace sessions | Ph2 | tooling | this session |
 
 ## Low (3)
 
