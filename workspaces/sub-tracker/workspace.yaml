@@ -4,6 +4,5 @@ status: planning
 opened: '2026-05-31'
 repos:
 - name: subtracker
-  path: /Users/mprzybylski/Documents/Projects/SubTracker
+  path: ~/SubTracker
   role: primary
-docs_path: /Users/mprzybylski/Documents/Projects/SubTracker/.harness

@@ -21,11 +21,11 @@ At session start, run `/session-start`. Context files for this workspace:
 
 _See workspace.yaml for declared repos._
 
-The Xcode project does not exist yet. First implementation session should:
-1. Create `/Users/mprzybylski/Documents/Projects/SubTracker/` directory
-2. Initialize Xcode project (iOS App, SwiftUI, SwiftData)
-3. Set up git repo
-4. Update `workspace.yaml` path if needed
+Repo path uses `~/SubTracker` (symlinked to the real location on each machine).
+- **Linux:** `ln -s ~/PycharmProjects/SubTracker ~/SubTracker`
+- **macOS:** `ln -s ~/Documents/Projects/SubTracker ~/SubTracker`
+
+Git repo is initialized. Xcode project setup is T001.
 
 ## Key Context for Future Sessions
 
@@ -93,7 +93,7 @@ Full day-by-day breakdown in `SPEC.md` under "Build Plan".
 
 ## Commands
 
-All commands assume `cwd = ~/Documents/Projects/SubTracker`.
+All commands assume `cwd = ~/SubTracker` (the symlinked repo path).
 
 ### Run tests (simulator)
 
@@ -107,7 +107,7 @@ xcodebuild -project SubTracker.xcodeproj -scheme SubTracker \
 
 ```bash
 xcodebuild -project SubTracker.xcodeproj -scheme SubTracker \
-  -destination 'id=00008140-000270A8143B801C' build
+  -destination generic/platform=iOS build
 ```
 
 ### List available simulators
