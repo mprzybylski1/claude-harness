@@ -7,6 +7,7 @@ any file outside the harness root — this is the isolation guarantee.
 from __future__ import annotations
 
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -207,6 +208,32 @@ def secondary_repos(workspace: dict) -> list[Path]:
         for r in all_repos(workspace)
         if r.get("role") != "primary"
     ]
+
+
+# ── Machine-specific path detection ──────────────────────────────────────────
+
+_MACHINE_PREFIXES = ("/Users/", "/home/", "/mnt/", "/Volumes/")
+
+
+def is_machine_specific_path(raw: str) -> bool:
+    """Return True if the raw path string uses a machine-specific absolute prefix.
+
+    Must be called on the literal string BEFORE expanduser/resolve — after
+    resolution, ~/foo and /Users/me/foo are indistinguishable.
+    """
+    for prefix in _MACHINE_PREFIXES:
+        if raw.startswith(prefix):
+            return True
+    return bool(re.match(r"[A-Za-z]:[\\/]", raw))
+
+
+def portable_path(resolved: Path) -> str:
+    """Collapse the user's home directory to ~ for portable YAML storage."""
+    s = str(resolved)
+    home = str(Path.home())
+    if s.startswith(home + os.sep) or s == home:
+        return "~" + s[len(home):]
+    return s
 
 
 # ── Isolation enforcement (T005) ──────────────────────────────────────────────

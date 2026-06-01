@@ -351,6 +351,36 @@ def check_stale_ops_digest() -> list[Finding]:
     return []
 
 
+def check_workspace_paths() -> list[Finding]:
+    """WARN for workspace.yaml repo paths or docs_path with machine-specific prefixes."""
+    sys.path.insert(0, str(REPO_ROOT / "scripts" / "tools"))
+    from workspace_config import is_machine_specific_path, list_active_workspaces
+
+    findings = []
+    for slug, cfg in list_active_workspaces():
+        yaml_loc = f"workspaces/{slug}/workspace.yaml"
+        for repo in cfg.get("repos", []):
+            raw = repo.get("path", "")
+            if is_machine_specific_path(raw):
+                findings.append(Finding(
+                    severity="WARN",
+                    category="machine-specific-path",
+                    location=yaml_loc,
+                    detail=f"repos[].path: {raw}",
+                    hint="Use ~/... instead of machine-specific prefix for portability",
+                ))
+        docs_raw = cfg.get("docs_path", "")
+        if docs_raw and is_machine_specific_path(docs_raw):
+            findings.append(Finding(
+                severity="WARN",
+                category="machine-specific-path",
+                location=yaml_loc,
+                detail=f"docs_path: {docs_raw}",
+                hint="Use ~/... instead of machine-specific prefix for portability",
+            ))
+    return findings
+
+
 def main() -> None:
     warn_only = "--warn-only" in sys.argv
 
@@ -368,6 +398,7 @@ def main() -> None:
         + check_grep_patterns()
         + check_stale_ops_digest()
         + check_test_imports(tests_dir)
+        + check_workspace_paths()
     )
 
     if warn_only:
