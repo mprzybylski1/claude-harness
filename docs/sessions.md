@@ -19,24 +19,24 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Active Work
 
-**S28 — ideation session: competitor analysis + stress tests for 4 app ideas; created portfolio layer + app workspaces (sub-tracker, retention-app); standardized spec template and rejected ideas pipeline. No code changes.**
+**S29 — closed T150/T151/T152 (workspace path portability, scaffold format, gitignored docs_path); prose-trimmed CLAUDE.md and skills (−80 lines); impl-review 2 inline fixes.**
 
 Files changed:
-- `portfolio/CLAUDE.md` — new: portfolio-level process docs (ideation → stress test → spec → dev handoff)
-- `portfolio/portfolio.md` — new: master tracker across all app workspaces (status, sectors, metrics)
-- `portfolio/templates/spec.md` — new: standardized spec template for new app ideas
-- `portfolio/rejected/supplement-optimizer.md` — moved from workspaces/sub-tracker/ideas/rejected/; stress test rationale
-- `workspaces/sub-tracker/CLAUDE.md` — new: app-level handoff instructions and build commands
-- `workspaces/sub-tracker/SPEC.md` — new: full product spec (problem, competitors, data model, build plan)
-- `workspaces/sub-tracker/workspace.yaml` — new
-- `workspaces/sub-tracker/sessions.md` — new
-- `workspaces/sub-tracker/tickets/INDEX.md` — new
-- `workspaces/retention-app/SPEC.md` — new: parked idea spec with risks and build criteria
-- `workspaces/retention-app/workspace.yaml` — new (status: parked)
+- `scripts/tools/workspace_config.py` — added `is_machine_specific_path()` and `portable_path()` helpers
+- `scripts/tools/workspace.py` — warn on machine-specific paths at create; store portable `~/...` form
+- `scripts/tools/repo_hygiene.py` — new `check_workspace_paths()` WARN check
+- `scripts/tools/check_docs_path_gitignored.py` — new: `git check-ignore` check for workspace docs_path
+- `workspaces/scrabble-score/workspace.yaml` — migrated paths to `~/...` form
+- `.claude/skills/session-start/SKILL.md` — added step 9 (gitignored docs_path check); prose trimmed
+- `.claude/skills/session-close/SKILL.md` — removed stale flag hedges; de-fenced bash example
+- `CLAUDE.md` — collapsed two post-mortem essays and removed empty TODO scaffolding (−69 lines)
+- `tests/test_machine_specific_paths.py` — 23 tests for T150
+- `tests/test_workspace_scaffold.py` — 8 tests for T151
+- `tests/test_check_docs_path_gitignored.py` — 5 tests for T152
 
 Tickets opened: none
-Tickets closed: none
-Open at close: T141 (deferred, YAGNI), T146 (low, deferred)
+Tickets closed: T150, T151, T152
+Open at close: T141 (deferred, YAGNI), T146 (low, deferred), T149/T154/T155/T156 (low/medium, open)
 
 ---
 
@@ -73,3 +73,4 @@ S25 2026-05-31: closed T138/T139/T135/T136/T137 (SR-008/009/010/011 sweep comple
 S26 2026-05-31: cleared S25 Opus backlog — closed T142/T143/T140 (hook fail-closed differentiation, cross-layer reader dedup, create_ticket session-awareness + --harness); verified T141 join key & deferred under YAGNI; impl-review fixed invariants grep; workflow-review opened+closed T144/T145 (close_ticket --append) and opened T146; 2 deferred open at close
 S27 2026-05-31: promoted SR-012/SR-013 → closed T147/T148 (close_ticket --commit + index-clean guard, create_ticket --problem); impl-review 3 inline fixes; /simplify deduplicated test boilerplate (–226 lines, conftest.py); 2 deferred open at close
 S28 2026-06-01: ideation session — competitor analysis + stress tests (sub-tracker, retention-app, supplement-optimizer, UK utility); portfolio layer created with spec template + rejected ideas pipeline; no code changes
+S29 2026-06-01: closed T150/T151/T152 (workspace path portability, scaffold format, gitignored docs_path); prose-trimmed CLAUDE.md + skills (−80 lines); impl-review 2 inline fixes

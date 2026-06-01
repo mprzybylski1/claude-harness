@@ -50,10 +50,8 @@ python scripts/tools/workspace.py list
   echo -n "__harness__" > .claude/.active_workspace
   ```
 
-The hook **fails closed** if the state file is missing or empty — writes to
-`docs/tickets/`, `docs/sessions.md`, `docs/opus_notes.md`, and `workspaces/*/internal/`
-will be blocked until you declare session type. This prevents the "forgot to write
-the slug" failure mode where a workspace session silently writes harness docs.
+The `check_cross_layer_writes` hook fails closed if this file is missing or empty — all doc writes
+will be blocked until you declare session type.
 
 **Path substitution for workspace sessions:**
 
@@ -114,9 +112,6 @@ Read these files **sequentially** (use workspace-scoped paths if in a workspace)
    If output is non-empty, surface it in the Step 3 briefing as a high-severity warning
    under **docs_path gitignored**. If empty, omit the section.
    Skipped silently when docs_path is not configured.
-
-**If extract_session_brief.py or extract_opus_key_sections.py do not yet support --sessions
-or --opus flags:** read the files directly as a fallback and note the gap.
 
 **Do not read individual ticket files at session start.** The INDEX has everything needed.
 

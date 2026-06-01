@@ -1,11 +1,3 @@
-# Opus Review — S28 2026-06-01 (static analysis, docs session)
-
-**Session type:** docs-only — portfolio layer creation, app workspace scaffolding, idea research. No code changes.
-**Static analysis:** 3/3 PASS — 35 test files compile cleanly, no `datetime.utcnow()`, all 9 CLAUDE.md bash blocks valid.
-**Stale `.active_workspace` at close:** Found `scrabble-score` in `.active_workspace` at session-close time, blocking harness docs writes. Reset manually to `__harness__`. This is a recurring risk — a crashed or improperly-closed workspace session leaves stale state that blocks subsequent harness-root closes. Worth a low-priority ticket: session-start should set `.active_workspace` and session-close should reset it atomically, so stale state cannot persist across sessions.
-
----
-
 # Opus Review — S26 2026-05-31
 
 Scope: cleared the full S25 Opus backlog and both spin-outs — closed T142/T143/T140/T144/T145,
@@ -182,3 +174,110 @@ The five tickets touched four shared files; no seams left:
 No multi-session carry-forwards: all three S25 concerns were retired this session (Concern #1 → T142,
 Concern #2 → T143, Concern #3 → T141 verify-and-defer). All three S26 items are net-new from this
 session's diff, and two of the three are Low impact.
+
+---
+
+# Opus Review — S29 2026-06-01
+
+Scope: T150/T151/T152 — portability and scaffolding tooling, plus doc/spec edits. T150 adds a
+shared `is_machine_specific_path` detector + `portable_path` collapser in `workspace_config.py`,
+wires WARNINGs into `workspace.py cmd_create` (interactive) and a new `check_workspace_paths()`
+finding in `repo_hygiene.py`, and rewrites the two existing workspace.yaml entries to `~/...` form.
+T151 makes `_write_initial_files` scaffold a real `S0` sessions.md entry and a generator-format
+INDEX.md. T152 adds `check_docs_path_gitignored.py` (advisory, always exit 0) and a session-start
+step that surfaces a gitignored docs_path. No enforcement surface was touched: no change to
+`check_cross_layer_writes.py`, `.claude/settings.json`, the `--sessions` session-ID routing in
+`create_ticket.py`/`close_ticket.py`, or `assert_workspace_boundary`. 731 insertions / 42 deletions;
+all 36 new tests pass; static analysis clean except the pre-existing, non-S29 bash-block-2
+placeholder snippet (`--session S<N>` in CLAUDE.md commit example — illustrative, not executable).
+
+## Invariant Violations
+
+None.
+
+Per-invariant verification against the S29 diff:
+- **Inv 1 (workspace↔harness session-number separation):** Holds. The only session-numbered writes
+  this session are the T151 scaffold (`workspace.py` L183-207): an `S0` Active-Work line + `S0`
+  Session-Log entry in the **workspace** `sessions.md`, and `Generated S0` in the **workspace**
+  INDEX.md. `S0` is a workspace number written into workspace-layer state — no harness `S<N>` leak,
+  and no harness state is written by any S29 change. The `--sessions` routing flagged in the
+  invariant's verification (`create_ticket.py`/`close_ticket.py`) is untouched.
+- **Inv 2 (session-type declaration required):** Holds. The hook (`check_cross_layer_writes.py`) and
+  its `Edit|Write` matcher in `settings.json` are unchanged. The only related touch is doc-only and
+  it carries a minor precision regression worth recording (Concern 1): the **staged** session-start
+  SKILL.md edit (context L692-697) rewrites the fail-closed description from "fails closed if the
+  state file is missing **or empty**" to "fails closed if this file is **missing**." The hook still
+  blocks on empty (`STATE_UNDECLARED` covers empty per the invariant), so this is a doc weakening of
+  the *described* enforcement surface, not the actual one.
+- **Inv 3 (fail-closed on workspace-boundary ambiguity):** Holds. `check_workspace_paths()`
+  (`repo_hygiene.py` L120-147) reads only workspace.yaml config *strings* and emits `WARN` findings;
+  it makes no boundary decision and stamps no audit field. `check_docs_path_gitignored.py` is
+  advisory-by-design (exit 0 always, per its docstring). Neither is a fail-closed surface, and the
+  two named write-path tools in the invariant are untouched.
+- **Inv 4 (workspace isolation):** Holds. `check_workspace_paths()` iterates
+  `list_active_workspaces()` config only — no repo *content* is read, so no cross-workspace content
+  can leak. `check_docs_path_gitignored.py` reads only the target workspace's own `workspace.yaml`
+  and runs `git check-ignore` against that workspace's own docs_path. The cross-workspace block in
+  `check_cross_layer_writes.py` is untouched.
+
+## Architectural Concerns
+
+1. **Staged session-start SKILL.md edit drops "or empty" from the fail-closed description**
+   (context L692-697). [Low impact, doc-only] The new wording says the hook "fails closed if this
+   file is **missing**"; the original said "missing **or empty**." The actual hook still blocks the
+   empty case (Invariant 2 maps empty → `STATE_UNDECLARED` → blocked), so this is a precision
+   regression in the *prose*, not a behavior change. It's the same class of issue the invariants doc
+   warns about: the doc that an operator reads to understand enforcement now under-describes it.
+   Recommendation: restore "missing or empty" (or "missing/empty/undeclared"). ~1 word.
+
+2. **`is_machine_specific_path` covers only four POSIX prefixes + Windows drives**
+   (`workspace_config.py` L270-282; tests L613-635). [Low impact, likely by-design] The detector
+   flags `/Users/`, `/home/`, `/mnt/`, `/Volumes/`, and `[A-Za-z]:[\\/]`, but not other absolute
+   prefixes that are equally non-portable across machines/users (`/opt/...`, `/srv/...`, `/data/...`,
+   bare `/Projects/...`). The parametrized test only asserts the covered prefixes, so coverage *looks*
+   exhaustive but isn't — a path under `/opt/work/repo` silently passes the portability check and
+   gets stored verbatim. Given the WARN is advisory and the realistic case is home-rooted paths,
+   severity is genuinely low; flagging so the prefix list is a recorded decision, not an unexamined
+   gap. Optional: warn on any leading `/` that isn't already `~`-collapsible, or document the
+   intentional scope in a comment.
+
+3. **`check_docs_path_gitignored` has no test for the not-a-git-repo case** (`check_gitignored`
+   L86-96; tests in `test_check_docs_path_gitignored.py`). [Low impact, test gap not bug] When
+   `docs_path.parent` is not inside a git repo, `git check-ignore` exits 128; the code treats every
+   non-zero return as "not ignored" → returns None (silent). That is the correct fail-silent
+   behavior for an advisory check, but all five tests either build a real repo or skip the git path
+   (`test_silent_when_no_docs_path`, `test_silent_when_docs_path_does_not_exist` both return before
+   the subprocess). No test pins the 128/not-a-repo branch, so a future refactor that mis-handles
+   non-zero-but-not-1 returncodes wouldn't be caught. Add one test: existing docs_path whose parent
+   is not a git repo → asserts None.
+
+4. **Scaffold↔generator format coupling is now load-bearing and only guarded by one byte-for-byte
+   test** (`workspace.py` L196-207 vs `generate_ticket_index.py render_index`). [Low impact, noted as
+   healthy] The T151 hand-written INDEX.md scaffold must match `render_index([], 0, today)` exactly,
+   and `test_index_matches_generator_output` (L104-121) asserts this byte-for-byte — verified passing,
+   and `SEVERITY_ORDER = [critical, high, medium, low, unknown]` confirms the section list matches.
+   This is good (the drift risk is caught), but the coupling is implicit: a change to `render_index`'s
+   header text or section order will break the scaffold and the failure surfaces only in this one
+   test, in a different file. No action needed; recorded so the next `render_index` editor knows the
+   scaffold mirror exists.
+
+## Suggested Next Session Focus
+
+1. **Restore "or empty" in the session-start SKILL.md fail-closed description (Concern 1).** ~1 word;
+   the edit is still staged/uncommitted, so it can be fixed before it lands. Keeps the operator-facing
+   doc honest about Invariant 2's actual enforcement (empty state file is blocked).
+
+2. **Add the not-a-git-repo test for `check_docs_path_gitignored` (Concern 3).** ~1 test; pins the
+   fail-silent branch that the current five tests skip.
+
+3. **Decide the `is_machine_specific_path` prefix scope (Concern 2).** Either broaden beyond the four
+   POSIX prefixes or add a comment stating the home-rooted scope is intentional. Lowest priority — the
+   check is advisory and the realistic miss is narrow.
+
+Carry-forward status: the one S26 item with teeth — Concern #1, the `_append_resolution` fresh-ticket
+guard that could leave `(Fill in on close.)` in closed tickets — is **resolved**. Verified directly:
+`close_ticket.py` L193-199 now uses the blockquote-aware "nothing to preserve" pattern
+(`> \*\*Client-visible:\*\*.*?\n(?:> .*\n)*` + the placeholder), matching `strict`'s shape as S26
+recommended. S26 Concerns #2 (`_resolution_section` fence-terminator) and #3 (`--harness` bypass) are
+out of S29's diff and remain as previously dispositioned (low/latent and recorded-decision
+respectively); no S29 change touched their surfaces.

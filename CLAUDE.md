@@ -7,31 +7,8 @@ This file provides guidance to Claude Code when working in this repository.
 ## Commands
 
 ```bash
-# TODO: fill in your run/test/build commands, for example:
-# python main.py
-# pytest tests/
-# npm run dev
+pytest tests/
 ```
-
----
-
-## Architecture
-
-<!-- TODO: describe your system's key components, data flow, and trust boundaries.
-     Be specific enough that Claude can make correct decisions without reading all source files.
-     Example structure:
-
-### Core components
-
-- `src/core/` — safety-critical, fail-closed on all exceptions
-- `src/api/` — HTTP layer, validates input before passing to core
-- `tests/` — full test suite; run with `pytest tests/`
-
-### Key constraints
-
-- [Constraint 1: e.g. "No direct database writes from API layer — go through core/"]
-- [Constraint 2: e.g. "Config values are read once at startup; runtime mutation not allowed"]
--->
 
 ---
 
@@ -39,42 +16,13 @@ This file provides guidance to Claude Code when working in this repository.
 
 ### `isolation: "worktree"` does not prevent main-repo writes
 
-Claude Code's `isolation: "worktree"` on the `Agent` tool creates a separate git
-worktree, but isolation is at the **git level only** — it does not prevent agents
-from reading or writing absolute paths outside the worktree directory. When agent
-prompts contain absolute main-repo paths (e.g. ticket file paths, docs paths),
-agents will operate directly on the main repo, not the worktree.
-
-Observed S13: 3 of 5 parallel agents with `isolation: "worktree"` wrote to main-repo
-paths, causing a ghost-tracked file and a stale INDEX.md committed to `master`.
-
-**Do not use `isolation: "worktree"` for parallel harness-root work.**
-
-**Recommended parallel strategy:** open N separate Claude Code sessions (terminal
-tabs or IDE windows), each tackling one independent ticket, without worktree
-isolation. Alternatively, run tickets sequentially within one session. Do not spawn
-multiple `Agent` calls with `isolation: "worktree"` when their prompts contain
-absolute main-repo paths.
-
----
-
-## Phase Roadmap
-
-<!-- TODO: optional — use if your project has discrete phases with gate criteria.
-     Delete this section if you prefer a continuous backlog model.
-
-**Phase 1 (Active):** [Goal and gate criteria]
-**Phase 2 (Planned):** [Goal and gate criteria]
--->
+**Do not use `isolation: "worktree"` for parallel harness-root work.** Worktree
+isolation is git-level only — agents with absolute paths write to the main repo.
+Use separate Claude Code sessions or run tickets sequentially. (See T038 for details.)
 
 ---
 
 ## Configuration
-
-<!-- TODO: describe key config files, dangerous settings, and environment variables.
-
-`config.yaml` controls [what]. Changing [X setting] affects [Y behaviour].
--->
 
 ### Ticket archive directories
 
@@ -82,26 +30,9 @@ absolute main-repo paths.
 
 ### Hook paths in `.claude/settings.json`
 
-Hook commands locate the harness root via `$CLAUDE_PROJECT_DIR` and dispatch through
-`scripts/hooks/run_hook.sh`:
-
-```
-bash -c 'H="$CLAUDE_PROJECT_DIR/scripts/hooks/run_hook.sh"; [ -f "$H" ] && exec bash "$H" <name> || exit 0'
-```
-
-**Do not use `$(git rev-parse --show-toplevel)` here.** That resolves against the
-session cwd, which drifts when a Bash command does `cd` into another git repo (e.g. a
-workspace repo). The old form caused SR-011/T138: a wedged cwd made `git rev-parse`
-find a repo with no harness hooks → `python3: can't open file` → exit 2 → PreToolUse
-fail-closed-blocked *every* tool (hard deadlock). `$CLAUDE_PROJECT_DIR` is set in every
-hook process and stays **fixed for the session** — it does not drift with `cd`.
-(The S3 2026-05-26 note that it was "empty in the hook subshell" is stale; verified
-present and correct on Claude Code 2.1.158, T138.)
-
-`run_hook.sh` re-derives the hooks dir from its own `$0` and **fails open** (exit 0)
-when the named script is missing, so a resolution accident can never deadlock the
-session. `exec` ensures a hook's deliberate `exit 2` (a real block) propagates to
-Claude Code and is not masked by the trailing `|| exit 0`. See T138.
+Hooks use `$CLAUDE_PROJECT_DIR` (not `git rev-parse`) to locate `scripts/hooks/run_hook.sh`.
+**Do not change this to `$(git rev-parse --show-toplevel)`** — cwd drift causes deadlocks (T138).
+`run_hook.sh` fails open when a script is missing; `exec` propagates deliberate exit 2 blocks.
 
 ---
 

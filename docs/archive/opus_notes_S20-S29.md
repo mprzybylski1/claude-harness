@@ -437,4 +437,12 @@ Per-invariant verification against the S27 diff:
 
 ---
 
+# Opus Review — S28 2026-06-01 (static analysis, docs session)
+
+**Session type:** docs-only — portfolio layer creation, app workspace scaffolding, idea research. No code changes.
+**Static analysis:** 3/3 PASS — 35 test files compile cleanly, no `datetime.utcnow()`, all 9 CLAUDE.md bash blocks valid.
+**Stale `.active_workspace` at close:** Found `scrabble-score` in `.active_workspace` at session-close time, blocking harness docs writes. Reset manually to `__harness__`. This is a recurring risk — a crashed or improperly-closed workspace session leaves stale state that blocks subsequent harness-root closes. Worth a low-priority ticket: session-start should set `.active_workspace` and session-close should reset it atomically, so stale state cannot persist across sessions.
+
+---
+
 
