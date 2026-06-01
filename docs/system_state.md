@@ -1,6 +1,6 @@
 # System State
 
-_Last updated: S27 2026-05-31_
+_Last updated: S28 2026-06-01_
 
 ---
 
@@ -27,8 +27,8 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 | ID | Title | Phase | Age |
 |----|-------|-------|-----|
-| T141 | analyze_tool_log: join telemetry index to native transcript for token-level data | Ph2 | tooling | 2 sessions |
-| T146 | cwd-drift fragility in 'python scripts/tools/X.py' invocations after a cd elsewhere | Ph2 | tooling | 1 session |
+| T141 | analyze_tool_log: join telemetry index to native transcript for token-level data | Ph2 | tooling | 3 sessions |
+| T146 | cwd-drift fragility in 'python scripts/tools/X.py' invocations after a cd elsewhere | Ph2 | tooling | 2 sessions |
 
 ---
 

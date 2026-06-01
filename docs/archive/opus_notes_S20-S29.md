@@ -345,4 +345,96 @@ was docs-only). All three S25 items are net-new from this session's diff.
 
 ---
 
+# Opus Review — S27 2026-05-31
+
+Scope: promoted SR-012/SR-013 → closed T147 (`close_ticket.py --commit`) and T148
+(`create_ticket.py --problem`); impl-review added an index-clean guard + fail-closed
+`_apply_problem`; `/simplify` deduplicated test boilerplate into a new `tests/conftest.py`
+(net –226 test lines). The feature surface is small and well-factored: `--commit` runs
+`git commit` after staging, refusing (exit 2) on multi-root spans and on an index that
+holds staged changes beyond what close_ticket staged; `--problem` fills the `## Problem`
+placeholder, failing closed (exit 1) if the placeholder is absent. The helper extraction
+(`_ac_section_bounds`, `_resolution_section` reuse, `_rel`, module-level `defaultdict`) is
+clean. One real test gap on the headline feature (Concern #1); everything else holds.
+
+## Invariant Violations
+
+None.
+
+Per-invariant verification against the S27 diff:
+- **Inv 1 (workspace↔harness session-number separation):** Holds. The one new write
+  surface is `commit_msg = f"{prefix} {title}"` (close_ticket.py:858) — `prefix` is
+  `fix(T###):`/`docs(T###):` from `_commit_prefix`, `title` is the ticket frontmatter
+  title; no session ID is embedded, so `--commit` cannot leak an `S<N>` into a commit
+  message. `--sessions` routing is untouched. `create_ticket --problem` only substitutes
+  body text and does not touch the session-ID lookup.
+- **Inv 2 (session-type declaration required):** Holds, unchanged. No S27 change touches
+  `.claude/settings.json`, `check_cross_layer_writes.py`, or `workspace_config.read_session_state`.
+  Note: both new write paths bypass the Edit/Write hook because they write via `os.replace`
+  / `git`, but that is the pre-existing tool-write model (same as every other close/create
+  operation) — not a regression introduced this session.
+- **Inv 3 (fail-closed on workspace-boundary ambiguity):** Holds, and *strengthened*. The
+  new `_refuse_multi_root_commit` (close_ticket.py:174) exits 2 when staged paths span >1
+  git root before any commit — a direct extension of the T125 cross-repo case the invariant
+  names. `_check_index_clean` (close_ticket.py:188) adds a further exit-2 site: a bare `git
+  commit` would fold any pre-existing staged change into the ticket commit, so it refuses
+  unless the index contains only the paths close_ticket staged. `git status` failure /
+  non-zero also exits 2 (no silent proceed). `create_ticket._apply_problem` exits 1 — not 2 —
+  when the placeholder is missing; correct, since create_ticket is not a tracked-audit-state
+  write at that point and exit 1 simply aborts the create.
+- **Inv 4 (workspace isolation):** Holds, unchanged. No diff touch to `_workspace_internal_slug`
+  or `assert_workspace_boundary`. The multi-root refusal incidentally reinforces it: a close
+  whose staged set spans a workspace repo and the harness repo cannot be auto-committed.
+
+## Architectural Concerns
+
+1. **`--commit` — the session's headline feature — has zero end-to-end test coverage.**
+   [Medium impact, test gap on a new git-mutating path] `tests/test_close_ticket_commit.py`
+   is entirely mocked unit tests of the helpers in isolation: `_commit_prefix` (pure),
+   `_collect_staged_roots` (patches `_git_root_for`), `_refuse_multi_root_commit` (called
+   directly), `_check_index_clean` (patches `subprocess.run` with canned porcelain). Nothing
+   in the suite invokes `close_ticket.py --commit` against a real temp repo. sessions.md
+   records that the refactor *deleted* `TestCommitMainPath` as "tested mocks" — so the
+   `main()` composition (close_ticket.py:868-881) that wires `_collect_staged_roots` →
+   `_refuse_multi_root_commit` → `_check_index_clean` → real `git commit` and prints
+   `Committed:` is now untested. `grep -rn -- "--commit" tests/` returns only docstring
+   lines. The guards are individually correct, but their integration in the commit path —
+   the part that actually mutates HEAD — has no coverage, on the one feature this session
+   shipped to do exactly that. The masking risk is concrete: a wiring bug (wrong `staged_paths`
+   passed to `_check_index_clean`, `commit_msg` not threaded, `git -C git_root` root mismatch)
+   would pass every existing test. Fix: one integration test using the new conftest helpers
+   (`make_harness_tree` + `run_close_ticket(..., "--files", "x.py", "--commit")`) asserting
+   `git rev-parse HEAD` advanced and `git log -1 --format=%s` equals `fix(T###): <title>`,
+   plus a second asserting `--commit` with a pre-existing unrelated staged file exits non-zero
+   and leaves HEAD unmoved. ~15 lines; the conftest scaffolding for it already exists.
+
+## Notes (decisions, not defects)
+
+- **SR-013 AC#3 vs. implementation — `--problem --ac` is not fully "close-ready."** SR-013
+  AC#3 reads "a single create invocation produces a close-ready ticket (no unchecked-AC ...
+  residue)." The implementation (and `test_close_ticket_commit`'s own docstring) deliberately
+  leaves `- [ ]` boxes unchecked — "criteria to verify, not auto-ticked." So a
+  `create --problem --ac` ticket still needs `--tick-acs`/`--force` at close. This is the
+  correct call (auto-ticking ACs at create time would defeat the AC gate), but it diverges
+  from the AC's literal wording. Recording as a decision so it isn't re-litigated, not a bug.
+- **No carry-forwards.** All three S26 concerns were retired during S26 close, before the
+  S27 baseline (3c42a45): Concern #1 (`--append` fresh-ticket guard) fixed in `42e7512`;
+  Concern #2 (`\n##\s` non-fence-aware terminator) commented in `3bc8169`; Concern #3
+  (`--harness` bypass) was a recorded decision. The live `close_ticket.py` still contains
+  `_resolution_section` with the `\n##\s` terminator and the append guard, but both are
+  addressed — not open.
+
+## Suggested Next Session Focus
+
+1. **Add end-to-end `--commit` coverage (Concern #1).** Two integration tests via the new
+   conftest helpers: (a) `--files x.py --commit` advances HEAD with `fix(T###): <title>`;
+   (b) `--commit` with an unrelated staged file exits 2 and leaves HEAD unmoved. ~15 LoC.
+   This is the only Medium finding and it closes a coverage hole on the session's one
+   git-mutating feature.
+2. **Pick up a deferred ticket** — T141 (telemetry↔transcript join, deferred under YAGNI
+   since S25) or T146 (cwd-drift fragility in `python scripts/tools/X.py` invocations).
+   T146 sits closest to the harness trust boundary that recent sessions have been hardening.
+
+---
+
 

@@ -19,23 +19,23 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Active Work
 
-**S27 — promoted + implemented SR-012/SR-013 (close_ticket --commit flag, create_ticket --problem flag); impl-review added index-clean guard + fail-closed _apply_problem; /simplify deduplicated test boilerplate (–226 lines). 2 tickets still deferred (T141, T146).**
+**S28 — ideation session: competitor analysis + stress tests for 4 app ideas; created portfolio layer + app workspaces (sub-tracker, retention-app); standardized spec template and rejected ideas pipeline. No code changes.**
 
 Files changed:
-- `scripts/tools/close_ticket.py` — T147: added `--commit` flag (runs git commit after staging; refuses exit 2 when staged files span >1 git root; checks index clean before committing); commit prefix derives from --files content (fix/docs); extracted `_commit_prefix`, `_collect_staged_roots`, `_refuse_multi_root_commit`, `_check_index_clean`, `_ac_section_bounds`, `_UNCHECKED_AC_RE`; permissive fallback now calls `_resolution_section` (no re-derivation); `_rel()` deduplicates relative_to pattern; `defaultdict` lifted to module-level
-- `scripts/tools/create_ticket.py` — T148: added `--problem TEXT` flag (replaces placeholder in ## Problem); `_apply_problem` fails closed if placeholder not found; `_PROBLEM_PLACEHOLDER` constant
-- `CLAUDE.md` — T147: clarified wording (stages, not commits); updated example to show `--commit`
-- `tests/conftest.py` — new: shared `git_init`, `make_harness_tree`, `run_close_ticket` helpers
-- `tests/test_close_ticket_commit.py` — T147 + impl-review: 17 tests covering prefix derivation, multi-root refusal, index-clean guard (4 cases), `TestCommitMainPath` deleted (tested mocks)
-- `tests/test_create_ticket_problem.py` — T148 + impl-review: 4 tests
-- `tests/test_close_ticket_stage_files.py` — refactored: uses conftest helpers (–169 lines)
-- `tests/test_close_ticket_path_only.py` — refactored: uses conftest helpers (–11 lines)
-- `tests/test_close_ticket_source_sr.py` — refactored: uses conftest helpers (–45 lines)
-- `tests/test_close_ticket_hook_integration.py` — refactored: uses conftest helpers (–31 lines)
+- `portfolio/CLAUDE.md` — new: portfolio-level process docs (ideation → stress test → spec → dev handoff)
+- `portfolio/portfolio.md` — new: master tracker across all app workspaces (status, sectors, metrics)
+- `portfolio/templates/spec.md` — new: standardized spec template for new app ideas
+- `portfolio/rejected/supplement-optimizer.md` — moved from workspaces/sub-tracker/ideas/rejected/; stress test rationale
+- `workspaces/sub-tracker/CLAUDE.md` — new: app-level handoff instructions and build commands
+- `workspaces/sub-tracker/SPEC.md` — new: full product spec (problem, competitors, data model, build plan)
+- `workspaces/sub-tracker/workspace.yaml` — new
+- `workspaces/sub-tracker/sessions.md` — new
+- `workspaces/sub-tracker/tickets/INDEX.md` — new
+- `workspaces/retention-app/SPEC.md` — new: parked idea spec with risks and build criteria
+- `workspaces/retention-app/workspace.yaml` — new (status: parked)
 
-Tickets opened: T147 (medium, close_ticket --commit), T148 (low, create_ticket --problem) — promoted from SR-012/SR-013
-Tickets closed: T147, T148
-Reviews: impl-review (3 findings fixed: index-clean guard for --commit, _apply_problem fail-closed, TestCommitMainPath deleted); /simplify (8 findings fixed, 6 skipped; –226 test lines)
+Tickets opened: none
+Tickets closed: none
 Open at close: T141 (deferred, YAGNI), T146 (low, deferred)
 
 ---
@@ -72,3 +72,4 @@ S24 2026-05-30: triaged SR-008/009/010 → T135/T136/T137 (workspace-blind tooli
 S25 2026-05-31: closed T138/T139/T135/T136/T137 (SR-008/009/010/011 sweep complete); hook cwd-deadlock fixed, session stamping, ticket-number scoping, index workspace-blindness, telemetry attribution; T140/T141 opened; 2 open at close
 S26 2026-05-31: cleared S25 Opus backlog — closed T142/T143/T140 (hook fail-closed differentiation, cross-layer reader dedup, create_ticket session-awareness + --harness); verified T141 join key & deferred under YAGNI; impl-review fixed invariants grep; workflow-review opened+closed T144/T145 (close_ticket --append) and opened T146; 2 deferred open at close
 S27 2026-05-31: promoted SR-012/SR-013 → closed T147/T148 (close_ticket --commit + index-clean guard, create_ticket --problem); impl-review 3 inline fixes; /simplify deduplicated test boilerplate (–226 lines, conftest.py); 2 deferred open at close
+S28 2026-06-01: ideation session — competitor analysis + stress tests (sub-tracker, retention-app, supplement-optimizer, UK utility); portfolio layer created with spec template + rejected ideas pipeline; no code changes
