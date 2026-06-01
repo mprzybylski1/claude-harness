@@ -2,12 +2,12 @@
 id: T152
 title: Detect gitignored docs_path location at session-start
 severity: medium
-status: open
+status: closed
 phase: 2
 layer: tooling
 # repo: <name from workspace.yaml repos list>
 opened: S29 2026-06-01
-closed:
+closed: S29 2026-06-01
 ---
 
 ## Problem
@@ -16,9 +16,11 @@ A workspace can configure docs_path to point inside a repo whose .gitignore excl
 
 ## Acceptance Criteria
 
-- [ ] session-start or a new helper runs git check-ignore against docs_path and surfaces a high-severity warning if the path is ignored
-- [ ] Warning text: docs_path is gitignored — workspace docs will not sync across machines
-- [ ] Skipped silently when docs_path is not configured
+- [x] session-start or a new helper runs git check-ignore against docs_path and surfaces a high-severity warning if the path is ignored
+- [x] Warning text: docs_path is gitignored — workspace docs will not sync across machines
+- [x] Skipped silently when docs_path is not configured
 
 ## Resolution
-(Fill in on close.)
+New check_docs_path_gitignored.py runs git check-ignore on workspace docs_path. Wired into session-start as step 9 (workspace sessions only). Surfaces high-severity warning when docs_path is gitignored.
+
+Closed S29 2026-06-01.

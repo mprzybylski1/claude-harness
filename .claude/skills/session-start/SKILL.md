@@ -108,6 +108,13 @@ Read these files **sequentially** (use workspace-scoped paths if in a workspace)
    showing them once. Empty output means no concerns; omit the section from the briefing.
    Include non-empty output under **Your raised concerns** in the Step 3 briefing.
 
+9. **Workspace session only:** Run
+   `python scripts/tools/check_docs_path_gitignored.py <WORKSPACE_SLUG>` —
+   checks whether the workspace's `docs_path` is inside a gitignored directory.
+   If output is non-empty, surface it in the Step 3 briefing as a high-severity warning
+   under **docs_path gitignored**. If empty, omit the section.
+   Skipped silently when docs_path is not configured.
+
 **If extract_session_brief.py or extract_opus_key_sections.py do not yet support --sessions
 or --opus flags:** read the files directly as a fallback and note the gap.
 
@@ -167,6 +174,9 @@ Run the appropriate command to get the session ID:
 [Full output of python scripts/tools/surface_workspace_concerns.py --workspace <WORKSPACE_SLUG>]
 ```
 
+**docs_path gitignored:** *(workspace session only — omit section entirely if check_docs_path_gitignored.py produces no output)*
+- [Output of check_docs_path_gitignored.py, or omit]
+
 **Suggested focus:**
 - [1-3 specific tickets most relevant to current gate or critical/high severity]
 ---
@@ -188,6 +198,7 @@ Do not begin implementation until the user responds.
 - Harness-root sessions show pending raised concerns from all workspaces
 - Workspace sessions show only their own raised concerns; terminal items auto-archived after surfacing
 - Both concerns sections omitted entirely when empty (no noise)
+- Gitignored docs_path surfaced as high-severity warning for workspace sessions
 - The user is asked before work begins
 
 ## Do not use this skill when

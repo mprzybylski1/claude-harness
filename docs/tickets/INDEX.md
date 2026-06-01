@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S29 2026-06-01. 7 open tickets.
+Generated S29 2026-06-01. 6 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -11,11 +11,10 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Medium (3)
+## Medium (2)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
-| T152 | Detect gitignored docs_path location at session-start | Ph2 | tooling | this session |
 | T154 | close_ticket.py auto-stages workspace internal/ archives | Ph2 | tooling | this session |
 | T156 | Investigate telemetry under-counting in workspace sessions | Ph2 | tooling | this session |
 
