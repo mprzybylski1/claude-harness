@@ -100,11 +100,12 @@ Nobody solves both: automatic discovery AND full privacy.
 
 | # | Feature | Priority | Notes |
 |---|---------|----------|-------|
-| 11 | On-device email receipt scanning | P1 | Regex + NaturalLanguage.framework; surfaces suggestions |
-| 12 | Screen Time usage correlation | P2 | "Used 2x this month — $7/use"; needs DeviceActivity entitlement research |
-| 13 | Price increase detection + history | P1 | Flag deltas on user-confirmed edits |
-| 14 | Family sharing (shared iCloud container) | P2 | "Who pays for what" household view |
-| 15 | Cancellation flow guides | P2 | Step-by-step for hard-to-cancel services |
+| 11 | Bank statement import (PDF/CSV) | P1 | On-device parsing via Vision (PDF OCR) or CSV; surfaces recurring charges as suggestions; no bank link needed |
+| 12 | On-device email receipt scanning | P1 | Regex + NaturalLanguage.framework; surfaces suggestions |
+| 13 | Screen Time usage correlation | P2 | "Used 2x this month — $7/use"; needs DeviceActivity entitlement research |
+| 14 | Price increase detection + history | P1 | Flag deltas on user-confirmed edits |
+| 15 | Family sharing (shared iCloud container) | P2 | "Who pays for what" household view |
+| 16 | Cancellation flow guides | P2 | Step-by-step for hard-to-cancel services |
 
 ### V1.2+ (Post-Launch Backlog)
 
@@ -129,6 +130,7 @@ Nobody solves both: automatic discovery AND full privacy.
 | Widgets | WidgetKit | Small + Medium widgets |
 | IAP | StoreKit 2 | Modern async API; no server validation for non-consumables |
 | Minimum target | iOS 17.0 | SwiftData requires iOS 17; covers 85%+ of active devices |
+| Statement import (V1.1) | Vision (PDF OCR) + CSV parsing | On-device; user shares statement via Files/Share Sheet |
 | Email parsing (V1.1) | NaturalLanguage + regex | On-device; no data leaves the phone |
 
 ### Data Model
@@ -298,7 +300,8 @@ User saves/edits subscription
 
 | Day | Deliverable |
 |-----|-------------|
-| 11-12 | On-device email receipt scanning (Share Sheet intake or mail access); regex + NLP extraction for Stripe/Apple/Google/PayPal receipt formats; suggestion UI |
+| 11 | Bank statement import (PDF/CSV via Files picker or Share Sheet); Vision framework OCR for PDF, direct parsing for CSV; recurring charge detection via merchant name frequency; suggestion UI for user confirmation |
+| 12 | On-device email receipt scanning (Share Sheet intake); regex + NLP extraction for Stripe/Apple/Google/PayPal receipt formats; suggestion UI |
 | 13 | Screen Time usage correlation (research DeviceActivity entitlement first; fallback to manual); ROI badge per subscription |
 | 14 | Price increase detection (edit-triggered delta detection; history storage; monthly summary notification; price history chart) |
 
@@ -316,7 +319,8 @@ User saves/edits subscription
 2. Cancellation guides → V1.2
 3. Screen Time integration → V1.2
 4. Email scanning → post-launch update
-5. **Never cut:** notifications, widgets, iCloud sync, paywall
+5. Bank statement import → post-launch update
+6. **Never cut:** notifications, widgets, iCloud sync, paywall
 
 ---
 

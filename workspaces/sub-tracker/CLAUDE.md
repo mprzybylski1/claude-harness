@@ -32,7 +32,7 @@ Git repo is initialized. Xcode project setup is T001.
 ### What This Is
 
 A subscription/recurring expense tracker for iOS that differentiates on:
-1. **No bank link** — manual entry + on-device email scanning (V1.1)
+1. **No bank link** — manual entry, bank statement import, and on-device email scanning (V1.1)
 2. **No subscription fee** — $7.99 one-time purchase
 3. **Reliable notifications** — the #1 failure of existing privacy-first trackers
 4. **iCloud sync** — zero backend, zero cost, solves data-loss complaints
@@ -86,7 +86,7 @@ No network layer. No API clients. No server.
 
 - **Week 1:** Data model, CRUD, service catalog, add/edit flow, dashboard
 - **Week 2:** Notifications, widgets, StoreKit paywall, QA, App Store submit
-- **Week 3:** Email scanning, Screen Time correlation, price history
+- **Week 3:** Bank statement import, email scanning, Screen Time correlation, price history
 - **Week 4:** Family sharing, cancellation guides, marketing launch
 
 Full day-by-day breakdown in `SPEC.md` under "Build Plan".
