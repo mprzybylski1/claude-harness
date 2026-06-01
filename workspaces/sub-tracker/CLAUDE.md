@@ -100,7 +100,7 @@ All commands assume `cwd = ~/SubTracker` (the symlinked repo path).
 ```bash
 xcodebuild -project SubTracker.xcodeproj -scheme SubTracker \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test 2>&1 \
-  | grep -E "Test Suite|Test case|Executed|error:|BUILD (SUCCEEDED|FAILED)"
+  | grep -E "◇|✔|✘|Test run|error:|BUILD (SUCCEEDED|FAILED)"
 ```
 
 ### Build for device
