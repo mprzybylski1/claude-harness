@@ -1,15 +1,17 @@
 # Ticket Index
 
-Generated S2 2026-06-01. 0 open tickets.
+Generated S3 2026-06-01. 1 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
 
 *(none)*
 
-## High (0)
+## High (1)
 
-*(none)*
+| ID | Title | Phase | Layer | Age |
+|----|-------|-------|-------|-----|
+| T006 | Notification engine — permission, scheduling, 64-cap, rescheduleAll | Ph2 | frontend | this session |
 
 ## Medium (0)
 
