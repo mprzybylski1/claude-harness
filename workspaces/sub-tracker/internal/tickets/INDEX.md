@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S3 2026-06-01. 0 open tickets.
+Generated S4 2026-06-02. 0 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
