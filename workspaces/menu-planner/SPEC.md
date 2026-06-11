@@ -273,7 +273,7 @@ belt-and-braces fix.
 ## Open Questions
 
 - [ ] **App name.** "Menu Planner" is a working title. Decide before the domain purchase, not before code.
-- [ ] **Recipe source languages.** English-only, or also Polish (or other) recipe sites? Affects the parse prompt and canonical ingredient naming (merge "cebula" with "onion"?). Decide in Phase 0 with real URLs.
+- [x] **Recipe source languages.** RESOLVED (Phase 0, S1): **English-only.** The household cooks from English sites; no non-English sources. Polish dropped.
 - [ ] **Frontend framework final call** (SvelteKit default vs React). Confirm at Phase 1 start.
-- [ ] **Claude model for parsing** — Haiku vs Sonnet. Phase 0 benchmark decides.
+- [x] **Claude model for parsing** — RESOLVED (Phase 0, S1): **Sonnet 4.6** (`claude-sonnet-4-6`). 9/9 clean vs Haiku 8/9 (Haiku doubled a ¼-cup flour). Cost negligible at household volume (~3p/parse). Haiku stays a fallback if volume ever changes the maths.
 - [ ] **Serving scaling** — default recipes to 2 servings with auto-scaling of quantities, or store as-published? Lean: store as-published, scale at display time. Confirm during Phase 1.

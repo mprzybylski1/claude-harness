@@ -16,8 +16,11 @@ At session start, run `/session-start`. Context files for this workspace:
 
 ## Project Status
 
-**Phase:** Planning — spec written S0 (2026-06-11). Next: Phase 0 (parse-quality
-proof against 10 real recipe URLs) before any app code.
+**Phase:** Phase 0 complete (S1 2026-06-11) — parse PoC is **GO** (T001). Sonnet
+9/9, Haiku 8/9 against 9 real URLs; extraction 8/9 JSON-LD + 1 readability, no
+bot-blocks. **Model locked: Sonnet 4.6. Language: English-only.** Next: Phase 1
+MVP — Supabase schema + RLS, `POST /parse` Edge Function (reuse the `phase0/`
+prompt + `Recipe` schema + `convert` logic), recipe library, week plan, PWA.
 
 ## Repos
 
