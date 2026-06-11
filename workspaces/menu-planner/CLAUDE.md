@@ -23,9 +23,9 @@ proof against 10 real recipe URLs) before any app code.
 
 _See workspace.yaml for declared repos._
 
-Repo path is `~/MenuPlanner` (not yet created — `git init` happens in the first
-working session). Planned layout: monorepo with `app/` (SvelteKit PWA) and
-`supabase/` (migrations + Edge Functions).
+Repo path is `~/MenuPlanner` (initialized S0, branch `main`, README + .gitignore
+only). Planned layout: monorepo with `app/` (SvelteKit PWA) and `supabase/`
+(migrations + Edge Functions).
 
 ## Key Context for Future Sessions
 
