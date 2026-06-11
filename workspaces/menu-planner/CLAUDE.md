@@ -24,8 +24,9 @@ proof against 10 real recipe URLs) before any app code.
 _See workspace.yaml for declared repos._
 
 Repo path is `~/MenuPlanner` (initialized S0, branch `main`, README + .gitignore
-only). Planned layout: monorepo with `app/` (SvelteKit PWA) and `supabase/`
-(migrations + Edge Functions).
+only). Remote: `git@github.com:mprzybylski1/MenuPlanner.git` (private). Planned
+layout: monorepo with `app/` (SvelteKit PWA) and `supabase/` (migrations + Edge
+Functions).
 
 ## Key Context for Future Sessions
 
