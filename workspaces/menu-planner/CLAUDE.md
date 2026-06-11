@@ -19,17 +19,18 @@ At session start, run `/session-start`. Context files for this workspace:
 **Phase:** Phase 0 complete (S1 2026-06-11) — parse PoC is **GO** (T001). Sonnet
 9/9, Haiku 8/9 against 9 real URLs; extraction 8/9 JSON-LD + 1 readability, no
 bot-blocks. **Model locked: Sonnet 4.6. Language: English-only.** Next: Phase 1
-MVP — Supabase schema + RLS, `POST /parse` Edge Function (reuse the `phase0/`
+MVP — Supabase schema + RLS, `POST /parse` Edge Function (reuse the `parsing/`
 prompt + `Recipe` schema + `convert` logic), recipe library, week plan, PWA.
 
 ## Repos
 
 _See workspace.yaml for declared repos._
 
-Repo path is `~/MenuPlanner` (initialized S0, branch `main`, README + .gitignore
-only). Remote: `git@github.com:mprzybylski1/MenuPlanner.git` (private). Planned
-layout: monorepo with `app/` (SvelteKit PWA) and `supabase/` (migrations + Edge
-Functions).
+Repo path is `~/MenuPlanner` (branch `main`). Remote:
+`git@github.com:mprzybylski1/MenuPlanner.git` (private). Monorepo layout:
+`app/` (SvelteKit PWA — T005), `supabase/` (migrations + Edge Functions —
+T002/T003), `parsing/` (Python parse prototype + 34 tests + model/cost
+benchmark; the proven reference the `/parse` Edge Function is ported from).
 
 ## Key Context for Future Sessions
 
@@ -81,5 +82,10 @@ A two-user household app:
 
 ## Commands
 
-_None yet — repo not created. Update this section when `~/MenuPlanner` exists
-(dev server, supabase CLI, test runner)._
+```bash
+# Parse prototype tests + benchmark (Python; run from ~/MenuPlanner)
+python -m pytest parsing/tests/                      # 34 conversion-checker tests
+python -m parsing.run --urls parsing/urls.txt        # re-run the model/cost benchmark
+```
+
+_App (`app/`) and Supabase (`supabase/`) commands land with T005 and T002/T003._
