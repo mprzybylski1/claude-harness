@@ -274,6 +274,6 @@ belt-and-braces fix.
 
 - [ ] **App name.** "Menu Planner" is a working title. Decide before the domain purchase, not before code.
 - [x] **Recipe source languages.** RESOLVED (Phase 0, S1): **English-only.** The household cooks from English sites; no non-English sources. Polish dropped.
-- [ ] **Frontend framework final call** (SvelteKit default vs React). Confirm at Phase 1 start.
+- [x] **Frontend framework** — RESOLVED (Phase 1 start, S1): **SvelteKit** (small bundle, fast on mobile, hosted on Cloudflare Pages).
 - [x] **Claude model for parsing** — RESOLVED (Phase 0, S1): **Sonnet 4.6** (`claude-sonnet-4-6`). 9/9 clean vs Haiku 8/9 (Haiku doubled a ¼-cup flour). Cost negligible at household volume (~3p/parse). Haiku stays a fallback if volume ever changes the maths.
-- [ ] **Serving scaling** — default recipes to 2 servings with auto-scaling of quantities, or store as-published? Lean: store as-published, scale at display time. Confirm during Phase 1.
+- [x] **Serving scaling** — RESOLVED (Phase 1 start, S1): **store as-published, scale at display time.** Keeps `original_text` honest; the recipe's own servings count drives display-time scaling.
