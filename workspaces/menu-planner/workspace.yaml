@@ -1,0 +1,8 @@
+name: Menu Planner
+type: personal
+status: planning
+opened: '2026-06-11'
+repos:
+- name: menu-planner
+  path: ~/MenuPlanner
+  role: primary
