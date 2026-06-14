@@ -386,7 +386,7 @@ def _resolve_diff_base(run, explicit_base: "str | None") -> tuple[str | None, st
         v = run(["git", "rev-parse", "--verify", "--quiet", f"{explicit_base}^{{commit}}"])
         sha = v.stdout.strip()
         if v.returncode != 0 or not sha:
-            return (_BASE_INVALID, explicit_base, "", None)
+            return (_BASE_INVALID, None, "", None)
         return (sha, sha, f"--base {explicit_base}", None)
 
     log_out = run(["git", "log", "--oneline", f"--grep={_SESSION_CLOSE_PREFIX}", "-20"]).stdout

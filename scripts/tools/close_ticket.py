@@ -843,11 +843,12 @@ def main() -> None:
         committed_any = False
         for git_root in roots:
             root_paths = [p for p in staged_paths if _git_root_for(p)[0] == git_root]
-            _check_index_clean(git_root, root_paths, ticket_path)
-            # T154/T158: a gitignored workspace internal/ stages nothing here — skip
-            # rather than failing `git commit` with "nothing to commit".
+            # T154/T158: check _nothing_staged BEFORE _check_index_clean — a gitignored
+            # workspace internal/ has nothing staged, so the index-clean guard is a
+            # no-op anyway but calling it first wastes a git subprocess.
             if _nothing_staged(git_root):
                 continue
+            _check_index_clean(git_root, root_paths, ticket_path)
             try:
                 subprocess.check_call(["git", "-C", git_root, "commit", "-m", commit_msg])
                 print(f"Committed in {git_root}: {commit_msg}")
@@ -857,7 +858,8 @@ def main() -> None:
                       file=sys.stderr)
                 sys.exit(2)
         if not committed_any:
-            print("NOTE: nothing tracked to commit (workspace internal/ is gitignored).",
+            print("NOTE: nothing tracked to commit in any repo "
+                  "(all archive paths may be gitignored).",
                   file=sys.stderr)
     else:
         print("Suggested commit:")
