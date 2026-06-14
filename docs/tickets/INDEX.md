@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S29 2026-06-01. 6 open tickets.
+Generated S30 2026-06-14. 11 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -11,21 +11,26 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Medium (2)
+## Medium (5)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
-| T154 | close_ticket.py auto-stages workspace internal/ archives | Ph2 | tooling | this session |
-| T156 | Investigate telemetry under-counting in workspace sessions | Ph2 | tooling | this session |
+| T154 | close_ticket.py auto-stages workspace internal/ archives | Ph2 | tooling | 1 session |
+| T156 | Investigate telemetry under-counting in workspace sessions | Ph2 | tooling | 1 session |
+| T157 | prepare_opus_context.py workspace anchor fallback | Ph2 | tooling | this session |
+| T158 | close_ticket.py workspace-internal staging skip | Ph2 | tooling | this session |
+| T159 | close_ticket.py --files cross-repo support | Ph2 | tooling | this session |
 
-## Low (4)
+## Low (6)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
-| T141 | analyze_tool_log: join telemetry index to native transcript for token-level data | Ph2 | tooling | 4 sessions |
-| T146 | cwd-drift fragility in 'python scripts/tools/X.py' invocations after a cd elsewhere | Ph2 | tooling | 3 sessions |
-| T149 | Improve current_session.py error message when sessions.md exists in wrong format | Ph2 | tooling | this session |
-| T155 | prepare_opus_context.py --base flag for fresh workspace repos | Ph2 | tooling | this session |
+| T141 | analyze_tool_log: join telemetry index to native transcript for token-level data | Ph2 | tooling | 5 sessions |
+| T146 | cwd-drift fragility in 'python scripts/tools/X.py' invocations after a cd elsewhere | Ph2 | tooling | 4 sessions |
+| T149 | Improve current_session.py error message when sessions.md exists in wrong format | Ph2 | tooling | 1 session |
+| T155 | prepare_opus_context.py --base flag for fresh workspace repos | Ph2 | tooling | 1 session |
+| T160 | close_ticket.py auto-pass ACs when --resolution given | Ph2 | tooling | this session |
+| T163 | rotate_opus_notes.py header pattern misses workspace opus_notes format — grows unbounded | Ph2 | tooling | this session |
 
 ## Unknown (0)
 

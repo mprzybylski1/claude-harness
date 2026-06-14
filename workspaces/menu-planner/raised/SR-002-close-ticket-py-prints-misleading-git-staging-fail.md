@@ -4,8 +4,8 @@ from: menu-planner
 raised: S1 2026-06-11
 title: close_ticket.py prints misleading git-staging-failed warning for gitignored workspaces/*/internal/ paths
 severity: low
-status: raised
-harness_ticket:
+status: promoted
+harness_ticket: T158
 resolved_in:
 ---
 

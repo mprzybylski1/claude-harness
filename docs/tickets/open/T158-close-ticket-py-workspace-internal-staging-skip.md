@@ -8,6 +8,7 @@ layer: tooling
 # repo: <name from workspace.yaml repos list>
 opened: S30 2026-06-02
 closed:
+source: menu-planner/SR-002
 ---
 
 ## Problem
