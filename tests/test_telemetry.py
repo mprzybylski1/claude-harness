@@ -861,3 +861,72 @@ class TestLogErrorBootstrapGuard:
             f"State IO failure must not bypass rate limit: got {total} lines "
             f"(stderr={stderr_lines}, file={file_lines})"
         )
+
+
+# ── T156: session-uuid join key sourced from the stdin payload ────────────────
+
+class TestSessionUuidSource:
+    """claude_session_uuid must come from the stdin payload (session_id /
+    transcript_path), not only the CLAUDE_CODE_SESSION_ID env var which is unset
+    in many session contexts (left ~68% of records with an empty uuid)."""
+
+    def _log_record(self, tmp_path, payload_dict, env_uuid=None):
+        import os
+        import unittest.mock as mock
+        sys.path.insert(0, str(ROOT / "scripts" / "hooks"))
+        import log_tool_usage as ltu
+
+        fake_root = _make_fake_root(tmp_path, telemetry_on=True, sentinel=True)
+        fake_log = fake_root / ".git" / "session_tool_log.jsonl"
+        env = dict(os.environ)
+        env.pop("CLAUDE_CODE_SESSION_ID", None)
+        if env_uuid is not None:
+            env["CLAUDE_CODE_SESSION_ID"] = env_uuid
+        with mock.patch.object(ltu, "ROOT", fake_root), \
+             mock.patch.object(ltu, "_SENTINEL", fake_root / ".git" / "workflow_telemetry_on"), \
+             mock.patch.object(ltu, "_LOG_PATH", fake_log), \
+             mock.patch.object(ltu, "_ERR_PATH", fake_root / ".git" / "session_tool_log.errors"), \
+             mock.patch.dict(os.environ, env, clear=True), \
+             mock.patch("sys.stdin.read", return_value=json.dumps(payload_dict)):
+            try:
+                ltu.main()
+            except SystemExit:
+                pass
+        lines = [ln for ln in fake_log.read_text().splitlines() if ln.strip()]
+        assert lines, "hook must have written a record"
+        return json.loads(lines[-1])
+
+    def test_uuid_from_payload_session_id(self, tmp_path):
+        rec = self._log_record(
+            tmp_path,
+            {"tool_name": "Read", "tool_input": {"file_path": "x.py"},
+             "session_id": "abc-123-uuid",
+             "transcript_path": "/p/other-uuid.jsonl"},
+            env_uuid="env-uuid",
+        )
+        assert rec["claude_session_uuid"] == "abc-123-uuid"
+
+    def test_uuid_from_transcript_path_when_no_session_id(self, tmp_path):
+        rec = self._log_record(
+            tmp_path,
+            {"tool_name": "Read", "tool_input": {"file_path": "x.py"},
+             "transcript_path": "/p/projects/def-456-uuid.jsonl"},
+            env_uuid="env-uuid",
+        )
+        assert rec["claude_session_uuid"] == "def-456-uuid"
+
+    def test_uuid_falls_back_to_env_var(self, tmp_path):
+        rec = self._log_record(
+            tmp_path,
+            {"tool_name": "Read", "tool_input": {"file_path": "x.py"}},
+            env_uuid="env-789-uuid",
+        )
+        assert rec["claude_session_uuid"] == "env-789-uuid"
+
+    def test_uuid_empty_when_no_source(self, tmp_path):
+        rec = self._log_record(
+            tmp_path,
+            {"tool_name": "Read", "tool_input": {"file_path": "x.py"}},
+            env_uuid=None,
+        )
+        assert rec["claude_session_uuid"] == ""

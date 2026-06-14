@@ -20,9 +20,12 @@ Session/workspace stamping (T137, was T057):
     (workspace, session) filter never collides across layers (SR-010). The prior
     path-based scheme (T057) under-attributed any call that didn't touch a declared
     repo file (bare Bash, harness-file reads) to the harness layer.
-  - claude_session_uuid = $CLAUDE_CODE_SESSION_ID, which IS the native JSONL
-    transcript filename — a live join key to richer per-call data (tokens, full
-    I/O) without a parallel logger. The join itself is deferred (see T137 ticket).
+  - claude_session_uuid = the native JSONL transcript filename — a live join key
+    to richer per-call data (tokens, full I/O) without a parallel logger. Sourced
+    from the stdin payload's session_id (then transcript_path stem, then the
+    CLAUDE_CODE_SESSION_ID env var as last resort); the env var alone is unset in
+    many session contexts, which left ~68% of records with an empty uuid (T156).
+    The join itself is deferred (see T141 ticket).
   - The hook does NOT read .git/CLAUDE_SESSION_ID. That cache is written by
     current_session.py and gets clobbered by mixed harness/workspace callers,
     so it cannot be trusted for per-call stamping.
@@ -125,6 +128,25 @@ def _session_from_sessions_md(sessions_md: Path | None) -> str:
     except Exception as exc:
         _log_error(f"session derivation failed: {exc}")
     return ""
+
+
+def _session_uuid(payload: dict) -> str:
+    """Return the native session/transcript UUID for the join key (T156).
+
+    Source priority:
+      1. payload["session_id"] — Claude Code always includes it in the PostToolUse
+         stdin payload (the same payload this hook reads tool_name from).
+      2. stem of payload["transcript_path"] — the transcript filename IS the UUID.
+      3. CLAUDE_CODE_SESSION_ID env var — last resort; it is unset in many session
+         contexts, which left ~68% of records with an empty uuid (the original bug).
+    """
+    sid = payload.get("session_id")
+    if sid:
+        return str(sid)
+    tp = payload.get("transcript_path")
+    if tp:
+        return Path(str(tp)).stem
+    return os.environ.get("CLAUDE_CODE_SESSION_ID", "")
 
 
 def _extract_path(tool_name: str, tool_input: dict) -> str:
@@ -262,8 +284,10 @@ def main() -> None:
         "workspace": workspace,
         # Live join key to the native JSONL transcript (filename == this UUID).
         # Enables an on-demand join for richer per-call data (tokens, full I/O)
-        # without a parallel logger — see the deferred join ticket.
-        "claude_session_uuid": os.environ.get("CLAUDE_CODE_SESSION_ID", ""),
+        # without a parallel logger — see the deferred join ticket. Sourced from the
+        # stdin payload (session_id / transcript_path), which is reliably present
+        # unlike the env var (T156).
+        "claude_session_uuid": _session_uuid(payload),
     }
 
     try:
