@@ -31,7 +31,24 @@ def get_current_session(sessions_path: Path = SESSIONS_MD) -> int:
     content = sessions_path.read_text()
     matches = re.findall(r"^S(\d+) \d{4}-\d{2}-\d{2}:", content, re.MULTILINE)
     if not matches:
-        print("ERROR: no 'S<N> YYYY-MM-DD:' entries found in sessions.md", file=sys.stderr)
+        # T149: the file loaded but no Session Log entry matched. Surface the first
+        # non-blank line and the expected pattern so a wrong-format file (e.g. a
+        # markdown-table scaffold) is diagnosable instead of silently blocking callers.
+        first_line = next((ln for ln in content.splitlines() if ln.strip()), "")
+        lines = [
+            f"ERROR: no 'S<N> YYYY-MM-DD:' Session Log entries found in {sessions_path}."
+        ]
+        if first_line:
+            lines.append(
+                f"  File loaded ({len(content)} chars); first non-blank line: {first_line!r}"
+            )
+            lines.append(
+                "  Expected a line matching: ^S<N> YYYY-MM-DD:  "
+                "(e.g. 'S12 2026-06-15: summary')"
+            )
+        else:
+            lines.append("  File is empty or only whitespace.")
+        print("\n".join(lines), file=sys.stderr)
         sys.exit(1)
 
     return int(matches[-1]) + 1
