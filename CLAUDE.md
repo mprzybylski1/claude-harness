@@ -10,6 +10,19 @@ This file provides guidance to Claude Code when working in this repository.
 pytest tests/
 ```
 
+### `scripts/h` — run a harness tool from any cwd
+
+Bare `python scripts/tools/X.py` breaks after a `cd` elsewhere. Use the `scripts/h`
+wrapper, which self-locates the harness root (via `$CLAUDE_PROJECT_DIR`, falling back
+to its own path), so it works from any directory (T146):
+
+```bash
+scripts/h close_ticket T123 --resolution "..." --commit
+scripts/h current_session
+```
+
+`h <tool>` maps to `scripts/tools/<tool>.py`.
+
 ---
 
 ## Key Constraints & Honest Limitations

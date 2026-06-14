@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S30 2026-06-15. 2 open tickets.
+Generated S30 2026-06-15. 1 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -15,12 +15,11 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Low (2)
+## Low (1)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
 | T141 | analyze_tool_log: join telemetry index to native transcript for token-level data | Ph2 | tooling | 5 sessions |
-| T146 | cwd-drift fragility in 'python scripts/tools/X.py' invocations after a cd elsewhere | Ph2 | tooling | 4 sessions |
 
 ## Unknown (0)
 

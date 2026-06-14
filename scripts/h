@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# h — run a harness tool (scripts/tools/<name>.py) from any working directory (T146).
+#
+# Usage:  h <tool> [args...]
+#   e.g.  h close_ticket T140 --resolution "..." --commit
+#         h current_session
+#
+# Resolves the harness root from $CLAUDE_PROJECT_DIR, falling back to this script's
+# own location (it lives at scripts/h), so it works regardless of cwd — fixing the
+# cwd-drift fragility of bare `python scripts/tools/X.py` after a `cd` elsewhere.
+set -euo pipefail
+[ $# -ge 1 ] || { echo "usage: h <tool> [args...]  (tool = a scripts/tools/ file, no .py)" >&2; exit 2; }
+root="${CLAUDE_PROJECT_DIR:-}"
+[ -n "$root" ] && [ -d "$root/scripts/tools" ] || root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+tool="${1%.py}"; shift
+script="$root/scripts/tools/$tool.py"
+[ -f "$script" ] || { echo "h: no such tool: scripts/tools/$tool.py (root=$root)" >&2; exit 2; }
+exec python "$script" "$@"
