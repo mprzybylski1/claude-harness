@@ -113,8 +113,12 @@ the harness layer, or a different workspace.
 Concrete cases this covers:
 - Missing workspace `internal/sessions.md` → reject writing a session ID into a
   workspace SR (`raise_for_harness.py`, T132).
-- `close_ticket.py --files` paths spanning multiple git repos → reject before
-  staging (T125).
+- `close_ticket.py --files` paths that fall outside **every** git repo → reject
+  before staging. Paths spanning *multiple* git repos are permitted, but each repo
+  must be staged and committed **separately** (one commit per git root, sharing the
+  ticket-derived message) — never a single index spanning repos, and never silent.
+  (T125 established the blanket reject; T159 narrowed it: a no-repo path still
+  rejects, multiple-repo paths are handled by explicit per-root commits.)
 - Workspace-scoped diff/context tools targeting a path outside the workspace's
   declared repos → reject via `workspace_config.assert_workspace_boundary`
   (see "Workspace isolation" below).
@@ -122,7 +126,10 @@ Concrete cases this covers:
 **Why:** Silent defaults caused workspace SRs to ship with harness session numbers
 (pre-T116) and risked cross-repo staged commits (pre-T125). The cost of a wrong
 default value is always higher than the cost of an explicit error, because the
-wrong value persists in audit trails and downstream parsers.
+wrong value persists in audit trails and downstream parsers. The invariant's teeth
+are *no silent and no single-index cross-repo commit* — not "one repo only". T159
+keeps both teeth while supporting multi-repo closes: it commits each repo
+explicitly and separately, so nothing is silent and no commit spans roots.
 
 **Verification:**
 

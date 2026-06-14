@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S30 2026-06-14. 7 open tickets.
+Generated S30 2026-06-14. 6 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -11,12 +11,11 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Medium (2)
+## Medium (1)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
 | T156 | Investigate telemetry under-counting in workspace sessions | Ph2 | tooling | 1 session |
-| T159 | close_ticket.py --files cross-repo support | Ph2 | tooling | this session |
 
 ## Low (5)
 

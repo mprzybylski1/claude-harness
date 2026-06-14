@@ -1,8 +1,9 @@
 """Tests for T147: close_ticket.py --commit flag and commit prefix derivation.
 
 Commit prefix: fix(T###) when --files includes non-.md code files, docs(T###) otherwise.
-Multi-root guard: --commit refuses when staged files span multiple git roots.
 Index-clean guard: --commit refuses when the index contains unrelated staged changes.
+(Multi-root commits are now per-repo — see T159 integration tests in
+test_close_ticket_stage_files.py — not refused.)
 """
 from __future__ import annotations
 
@@ -72,24 +73,6 @@ class TestCollectStagedRoots:
     def test_empty_paths(self):
         roots = close_ticket._collect_staged_roots([])
         assert roots == set()
-
-
-class TestCommitMultiRootRefusal:
-    """--commit must refuse when staged files span multiple git roots."""
-
-    def test_multi_root_exits_2(self, capsys):
-        roots = {"/repo-a", "/repo-b"}
-        msg = "fix(T099): did the thing"
-        with pytest.raises(SystemExit) as exc:
-            close_ticket._refuse_multi_root_commit(roots, "T099", msg)
-        assert exc.value.code == 2
-        err = capsys.readouterr().err
-        assert "multiple git roots" in err.lower()
-        assert "/repo-a" in err or "/repo-b" in err
-
-    def test_single_root_does_not_exit(self):
-        roots = {"/repo"}
-        close_ticket._refuse_multi_root_commit(roots, "T099", "fix(T099): x")
 
 
 class TestCheckIndexClean:

@@ -279,20 +279,6 @@ def _collect_staged_roots(paths: list[Path]) -> set[str]:
     return roots
 
 
-def _refuse_multi_root_commit(roots: set[str], ticket_id: str, message: str) -> None:
-    """Exit 2 if roots has more than one entry, printing per-root suggested commits."""
-    if len(roots) <= 1:
-        return
-    print(
-        f"ERROR: --commit refused — staged files for {ticket_id} span multiple git roots.\n"
-        f"  Commit each root separately:",
-        file=sys.stderr,
-    )
-    for root in sorted(roots):
-        print(f'  git -C {root} commit -m "{message}"', file=sys.stderr)
-    sys.exit(2)
-
-
 def _check_index_clean(git_root: str, expected_paths: list[Path], ticket_path: Path) -> None:
     """Exit 2 if the index contains staged changes beyond what close_ticket staged.
 
@@ -471,60 +457,6 @@ def _check_gitignored(paths: list[Path]) -> list[Path]:
             sys.exit(2)
 
     return ignored
-
-
-def _check_cross_repo_files(
-    ticket_path: Path, extra_files: list[Path], ticket_id: str
-) -> None:
-    """Exit 1 if any --files path lives in a different git repo than the ticket.
-
-    A workspace ticket's deliverable sometimes accidentally includes a harness-
-    repo file (e.g. workspaces/<slug>/CLAUDE.md or scripts/tools/X.py). Without
-    this guard the cross-repo path would be staged in its own repo but the
-    single suggested commit lands in only one repo — orphan staging discovered
-    later. Refuse the close with a concrete recipe instead. T125 / SR-005.
-    """
-    if not extra_files:
-        return
-    ticket_root, _ = _git_root_for(ticket_path)
-    if ticket_root is None:
-        return  # _git_stage will surface the not-in-a-repo case
-    out_of_repo: dict[str, list[Path]] = defaultdict(list)
-    for ef in extra_files:
-        ef_root, _ = _git_root_for(ef)
-        if ef_root is not None and ef_root != ticket_root:
-            out_of_repo[ef_root].append(ef)
-    if not out_of_repo:
-        return
-    print(
-        f"ERROR: {ticket_id} has --files paths in a different repo than the ticket.",
-        file=sys.stderr,
-    )
-    def _rel(path: Path, repo_root: str) -> str:
-        try:
-            return str(path.resolve().relative_to(repo_root))
-        except ValueError:
-            return str(path)
-
-    print(f"  Ticket repo: {ticket_root}", file=sys.stderr)
-    print("  Out-of-repo --files:", file=sys.stderr)
-    for root, files in out_of_repo.items():
-        for f in files:
-            print(f"    {_rel(f, root)}  (in {root})", file=sys.stderr)
-    print(file=sys.stderr)
-    print(
-        f"  Commit those paths in their own repo first, then re-run "
-        f"close_ticket.py {ticket_id} without them:",
-        file=sys.stderr,
-    )
-    for root, files in out_of_repo.items():
-        rels = [_rel(f, root) for f in files]
-        print(f"    git -C {root} add -- {' '.join(rels)}", file=sys.stderr)
-        print(
-            f"    git -C {root} commit -m \"docs({ticket_id}): <description>\"",
-            file=sys.stderr,
-        )
-    sys.exit(1)
 
 
 def _stage_extra_files(extra_files: list[Path]) -> None:
@@ -813,7 +745,9 @@ def main() -> None:
             for p in ignored:
                 print(f"ERROR: --files path '{p}' is gitignored — cannot stage", file=sys.stderr)
             sys.exit(1)
-        _check_cross_repo_files(ticket_path, extra_files, ticket_id)
+        # T159: --files may span multiple git repos; each is staged + committed in its
+        # own repo (per-root) below. A path in NO git repo is still rejected — that
+        # happens in _stage_extra_files (exit 2) before the ticket is moved.
 
     # AC check (--tick-acs rewrites boxes before the gate; --force skips it)
     if args.tick_acs:
@@ -897,25 +831,32 @@ def main() -> None:
     print()
 
     if args.commit:
-        roots = _collect_staged_roots(staged_paths)
-        _refuse_multi_root_commit(roots, ticket_id, commit_msg)
-        git_root = roots.pop() if roots else None
-        if git_root is None:
+        # T159: staged files may span multiple git roots (workspace project repo +
+        # harness repo). Commit each root separately with the shared message — never a
+        # single index spanning repos (Invariant 3). The index-clean guard runs per root.
+        roots = sorted(_collect_staged_roots(staged_paths))
+        if not roots:
             print("ERROR: --commit but no staged files are in a git repo", file=sys.stderr)
             sys.exit(2)
-        _check_index_clean(git_root, staged_paths, ticket_path)
-        # T154/T158: when the workspace internal/ is gitignored, nothing tracked was
-        # staged. A bare `git commit` would fail "nothing to commit" — report success.
-        if _nothing_staged(git_root):
-            print("NOTE: nothing tracked to commit (workspace internal/ is gitignored).",
-                  file=sys.stderr)
-        else:
+        committed_any = False
+        for git_root in roots:
+            root_paths = [p for p in staged_paths if _git_root_for(p)[0] == git_root]
+            _check_index_clean(git_root, root_paths, ticket_path)
+            # T154/T158: a gitignored workspace internal/ stages nothing here — skip
+            # rather than failing `git commit` with "nothing to commit".
+            if _nothing_staged(git_root):
+                continue
             try:
                 subprocess.check_call(["git", "-C", git_root, "commit", "-m", commit_msg])
-                print(f"Committed: {commit_msg}")
+                print(f"Committed in {git_root}: {commit_msg}")
+                committed_any = True
             except subprocess.CalledProcessError as exc:
-                print(f"ERROR: git commit failed (exit {exc.returncode})", file=sys.stderr)
+                print(f"ERROR: git commit failed in {git_root} (exit {exc.returncode})",
+                      file=sys.stderr)
                 sys.exit(2)
+        if not committed_any:
+            print("NOTE: nothing tracked to commit (workspace internal/ is gitignored).",
+                  file=sys.stderr)
     else:
         print("Suggested commit:")
         print(f'  git commit -m "{commit_msg}"')

@@ -309,7 +309,9 @@ class TestCloseTicketStageFiles:
 
 
 class TestCloseTicketCrossRepoFiles:
-    """T125 / SR-005: refuse --files paths that span a different git repo than the ticket."""
+    """T159: --files may span multiple git repos — stage + commit each repo separately
+    (one commit per root, shared message). Only a path in NO git repo is rejected.
+    (Supersedes the T125 blanket reject; see Invariant 3.)"""
 
     def _setup_workspace(self, tmp_path: Path) -> tuple[Path, Path, Path, Path]:
         """Build a harness repo + a workspace project repo with docs_path pointing into the project.
@@ -364,8 +366,8 @@ class TestCloseTicketCrossRepoFiles:
 
         return harness, project, ticket, project_code
 
-    def test_workspace_ticket_refuses_harness_rooted_file(self, tmp_path):
-        """Workspace ticket + harness-repo --files path → exit 1, ticket stays in open/."""
+    def test_workspace_ticket_stages_harness_rooted_file(self, tmp_path):
+        """Workspace ticket + harness-repo --files path → succeeds; file staged in harness repo."""
         harness, project, ticket, _ = self._setup_workspace(tmp_path)
         harness_file = harness / "scripts" / "tools" / "shared.py"
 
@@ -373,17 +375,20 @@ class TestCloseTicketCrossRepoFiles:
             harness, "T999", "--workspace", "test-ws", "--resolution", "done",
             "--files", str(harness_file),
         )
-        assert result.returncode == 1, (
-            f"Expected exit 1, got {result.returncode}\n{result.stderr}"
+        assert result.returncode == 0, (
+            f"Cross-repo --files should now succeed, got {result.returncode}\n{result.stderr}"
         )
-        assert "different repo" in result.stderr.lower(), result.stderr
-        assert "shared.py" in result.stderr, result.stderr
-        assert ticket.exists(), "ticket must remain in open/ after cross-repo refusal"
-        archive = project / ".harness" / "archive" / ticket.name
-        assert not archive.exists(), "archive must not be created on cross-repo refusal"
+        assert not ticket.exists(), "ticket should be archived"
+        harness_status = subprocess.run(
+            ["git", "-C", str(harness), "status", "--porcelain"],
+            capture_output=True, text=True, check=True,
+        ).stdout
+        assert "shared.py" in harness_status and any(
+            "shared.py" in ln and ln[:1] not in (" ", "?") for ln in harness_status.splitlines()
+        ), f"shared.py must be staged in the harness repo:\n{harness_status}"
 
-    def test_workspace_ticket_mixed_files_lists_only_offenders(self, tmp_path):
-        """Mixed --files: error lists only the harness-rooted paths, not the workspace ones."""
+    def test_workspace_ticket_mixed_files_staged_in_both_repos(self, tmp_path):
+        """Mixed --files: project file staged in project repo, harness file in harness repo."""
         harness, project, ticket, project_code = self._setup_workspace(tmp_path)
         harness_file = harness / "scripts" / "tools" / "shared.py"
 
@@ -391,14 +396,57 @@ class TestCloseTicketCrossRepoFiles:
             harness, "T999", "--workspace", "test-ws", "--resolution", "done",
             "--files", str(project_code), str(harness_file),
         )
-        assert result.returncode == 1, result.stderr
-        assert "shared.py" in result.stderr, result.stderr
-        out_of_repo_section = result.stderr.split("Out-of-repo --files:")[1] \
-            .split("Commit those paths")[0]
-        assert "main.py" not in out_of_repo_section, (
-            f"Workspace-project file must not be flagged as out-of-repo:\n{result.stderr}"
+        assert result.returncode == 0, result.stderr
+        proj_status = subprocess.run(
+            ["git", "-C", str(project), "status", "--porcelain"],
+            capture_output=True, text=True, check=True,
+        ).stdout
+        harness_status = subprocess.run(
+            ["git", "-C", str(harness), "status", "--porcelain"],
+            capture_output=True, text=True, check=True,
+        ).stdout
+        assert "main.py" in proj_status, f"project file must stage in project repo:\n{proj_status}"
+        assert "shared.py" in harness_status, f"harness file must stage in harness repo:\n{harness_status}"
+
+    def test_cross_repo_commit_lands_in_each_repo(self, tmp_path):
+        """--commit with cross-repo --files creates one commit per repo, shared message."""
+        harness, project, ticket, project_code = self._setup_workspace(tmp_path)
+        harness_file = harness / "scripts" / "tools" / "shared.py"
+
+        def _head_subject(repo: Path) -> str:
+            return subprocess.run(
+                ["git", "-C", str(repo), "log", "-1", "--format=%s"],
+                capture_output=True, text=True, check=True,
+            ).stdout.strip()
+
+        before_project = _head_subject(project)
+        before_harness = _head_subject(harness)
+
+        result = run_close_ticket(
+            harness, "T999", "--workspace", "test-ws", "--resolution", "done",
+            "--files", str(project_code), str(harness_file), "--commit",
         )
-        assert ticket.exists()
+        assert result.returncode == 0, result.stderr
+        after_project = _head_subject(project)
+        after_harness = _head_subject(harness)
+        assert after_project != before_project, "a new commit must land in the project repo"
+        assert after_harness != before_harness, "a new commit must land in the harness repo"
+        # Shared ticket-derived message (fix prefix because code files are included).
+        assert "T999" in after_project and "T999" in after_harness
+        assert after_project == after_harness, "both repos must share the ticket commit message"
+
+    def test_files_path_in_no_repo_rejected(self, tmp_path):
+        """A --files path inside NO git repo is still rejected; ticket stays in open/."""
+        harness, project, ticket, _ = self._setup_workspace(tmp_path)
+        loose = tmp_path / "loose.py"  # tmp_path itself is not a git repo
+        loose.write_text("# loose\n")
+
+        result = run_close_ticket(
+            harness, "T999", "--workspace", "test-ws", "--resolution", "done",
+            "--files", str(loose),
+        )
+        assert result.returncode != 0, "a path in no git repo must be rejected"
+        assert ticket.exists(), "ticket must remain in open/ when --files is rejected"
 
     def test_workspace_ticket_workspace_files_still_works(self, tmp_path):
         """Regression: workspace ticket + workspace-project --files closes cleanly."""
