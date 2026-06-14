@@ -232,3 +232,71 @@ class TestExpandCarryForwardMultiFile:
         assert "old cross-file finding" in all_text, \
             "expand_carry_forward must search all archive decade files"
         assert "current finding" in all_text
+
+
+class TestRotateOpusNotesNoEmDashFormat:
+    """T163: workspace opus_notes use '# Opus Review S<N>' with NO em-dash separator
+    (e.g. '# Opus Review S1 2026-06-11'). The old regex required '— ' so it found 0
+    sections and never rotated — the file grew unbounded."""
+
+    def _make_review(self, session_n: int) -> str:
+        return (
+            f"# Opus Review S{session_n} 2026-06-1{session_n}\n\n"
+            f"## Invariant Violations\nNone\n\n"
+            f"## Architectural Concerns\n1. finding\n\n"
+            f"## Suggested Next Session Focus\nFix it.\n\n"
+        )
+
+    def test_no_emdash_three_sections_rotate_to_one(self, tmp_path):
+        from rotate_opus_notes import rotate
+        notes = tmp_path / "opus_notes.md"
+        notes.write_text(
+            "# Opus Notes — Menu Planner\n\n"
+            + self._make_review(1) + self._make_review(2) + self._make_review(3),
+            encoding="utf-8",
+        )
+        archive_dir = tmp_path / "archive"
+        archive_dir.mkdir()
+
+        rotate(notes=notes, archive_dir=archive_dir)
+
+        remaining = notes.read_text()
+        # Keep exactly the newest (steady-state design: 1 before Opus appends → 2 after).
+        assert "# Opus Review S3" in remaining
+        assert "# Opus Review S1" not in remaining
+        assert "# Opus Review S2" not in remaining
+        archived = (archive_dir / "opus_notes_S0-S9.md").read_text()
+        assert "# Opus Review S1" in archived
+        assert "# Opus Review S2" in archived
+
+    def test_no_emdash_single_section_reports_one_not_zero(self, tmp_path, capsys):
+        from rotate_opus_notes import rotate
+        notes = tmp_path / "opus_notes.md"
+        notes.write_text(
+            "# Opus Notes — Menu Planner\n\n" + self._make_review(5),
+            encoding="utf-8",
+        )
+        archive_dir = tmp_path / "archive"
+        archive_dir.mkdir()
+
+        rotate(notes=notes, archive_dir=archive_dir)
+        out = capsys.readouterr().out
+        assert "1 section" in out, f"single section must be counted as 1, not 0:\n{out}"
+
+    def test_emdash_format_still_rotates(self, tmp_path):
+        """Regression: the harness em-dash format must still rotate."""
+        from rotate_opus_notes import rotate
+        notes = tmp_path / "opus_notes.md"
+        notes.write_text(
+            "<!-- header -->\n\n"
+            "# Opus Review — S26\n\n## Architectural Concerns\n1. a\n\n"
+            "# Opus Review — S29\n\n## Architectural Concerns\n1. b\n\n",
+            encoding="utf-8",
+        )
+        archive_dir = tmp_path / "archive"
+        archive_dir.mkdir()
+
+        rotate(notes=notes, archive_dir=archive_dir)
+        remaining = notes.read_text()
+        assert "# Opus Review — S29" in remaining
+        assert "# Opus Review — S26" not in remaining

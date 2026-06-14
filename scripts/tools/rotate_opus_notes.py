@@ -25,7 +25,11 @@ ARCHIVE_DIR = ROOT / "docs" / "archive"
 
 # Matches the start of each review section at the beginning of a line.
 # Group 1 captures the session number so we can route to the right archive bucket.
-_SECTION_RE = re.compile(r"^#{1,2} Opus Review — S(\d+)", re.MULTILINE)
+# The separator before S<N> is optional and tolerant of dash variants: the harness
+# format is "# Opus Review — S26" (em-dash) but workspace opus_notes use
+# "# Opus Review S1 2026-06-11" (no separator). Requiring "— " missed the workspace
+# format entirely, so those files never rotated and grew unbounded (T163).
+_SECTION_RE = re.compile(r"^#{1,2} Opus Review (?:[—–-] )?S(\d+)", re.MULTILINE)
 
 
 def _archive_header(decade_start: int, decade_end: int) -> str:

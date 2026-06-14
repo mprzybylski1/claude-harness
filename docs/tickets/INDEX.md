@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S30 2026-06-15. 4 open tickets.
+Generated S30 2026-06-15. 3 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -15,14 +15,13 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Low (4)
+## Low (3)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
 | T141 | analyze_tool_log: join telemetry index to native transcript for token-level data | Ph2 | tooling | 5 sessions |
 | T146 | cwd-drift fragility in 'python scripts/tools/X.py' invocations after a cd elsewhere | Ph2 | tooling | 4 sessions |
 | T149 | Improve current_session.py error message when sessions.md exists in wrong format | Ph2 | tooling | 1 session |
-| T163 | rotate_opus_notes.py header pattern misses workspace opus_notes format — grows unbounded | Ph2 | tooling | this session |
 
 ## Unknown (0)
 
