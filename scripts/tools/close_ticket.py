@@ -646,7 +646,9 @@ def main() -> None:
     gate_group.add_argument("--force", action="store_true",
                             help="Close even if some ACs are still unchecked")
     gate_group.add_argument("--tick-acs", action="store_true",
-                            help="Mark all unchecked ACs as done and close")
+                            help="Mark all unchecked ACs as done, then close — use when "
+                                 "you've verified the work and don't want to tick AC "
+                                 "checkboxes by hand (the explicit alternative to --force)")
     parser.add_argument("--workspace", metavar="SLUG",
                         help="Workspace slug to search (required when ID is ambiguous)")
     parser.add_argument("--files", nargs="+", metavar="PATH",
