@@ -40,6 +40,11 @@ _SESSION_CLOSE_PREFIX = _hc.session_close_prefix(_HARNESS)
 MAX_DIFF_LINES = 600    # truncate very large diffs — stat shown first
 SESSION_LOG_KEEP = 10   # number of recent session log entries to include
 
+# Canonical empty-tree object. Diffing from it yields the whole repo as additions;
+# used as the diff base for a fresh workspace repo that has no session-close anchor
+# yet, so the Opus review still sees this session's work (T157/T155).
+_EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+
 # Diff-cap filtering: these path prefixes are excluded from line counting so that
 # batch ticket/archive additions don't trigger truncation of code changes.
 _DIFF_CAP_EXCLUDE = ("docs/tickets/", "docs/archive/")
@@ -353,6 +358,55 @@ def _static_analysis(root: Path = ROOT) -> str:
     return "\n".join(fn(root) for fn in checks)
 
 
+# ── Diff-base resolution ─────────────────────────────────────────────────────
+
+# Sentinel returned when an explicit --base value cannot be resolved to a commit.
+_BASE_INVALID = "__invalid__"
+
+
+def _resolve_diff_base(run, explicit_base: "str | None") -> tuple[str | None, str | None, str, str | None]:
+    """Resolve the git revision to diff the session against.
+
+    Precedence:
+      1. ``--base SHA`` (explicit) — validated; an unresolvable value returns
+         ``_BASE_INVALID`` so the caller can fail-closed.
+      2. Last session-close commit (``--grep`` anchor) — the normal path.
+      3. Initial-commit fallback — diff from the empty tree so a fresh workspace
+         repo with no session-close anchor still produces a non-empty diff (T157).
+
+    Returns ``(base_spec, log_base, label, warning)``:
+      base_spec : revision to diff from — a commit SHA, ``_EMPTY_TREE``,
+                  ``_BASE_INVALID``, or None (repo has no commits).
+      log_base  : commit SHA usable for ``git log <log_base>..HEAD``, or None when
+                  base_spec is the empty tree (no commit to log from).
+      label     : short description for the section header.
+      warning   : stderr message when a fallback path is used, else None.
+    """
+    if explicit_base:
+        v = run(["git", "rev-parse", "--verify", "--quiet", f"{explicit_base}^{{commit}}"])
+        sha = v.stdout.strip()
+        if v.returncode != 0 or not sha:
+            return (_BASE_INVALID, explicit_base, "", None)
+        return (sha, sha, f"--base {explicit_base}", None)
+
+    log_out = run(["git", "log", "--oneline", f"--grep={_SESSION_CLOSE_PREFIX}", "-20"]).stdout
+    anchor = next((ln.split()[0] for ln in (l.strip() for l in log_out.splitlines()) if ln), None)
+    if anchor:
+        return (anchor, anchor, f"last session-close ({anchor[:12]})", None)
+
+    # No anchor, no --base: diff from the initial commit (empty tree).
+    head = run(["git", "rev-parse", "--verify", "--quiet", "HEAD"]).stdout.strip()
+    if not head:
+        return (None, None, "no commits", None)
+    warning = (
+        "WARNING: no session-close anchor commit found — diffing from the initial "
+        "commit (whole repo history) so the review sees this session's work. This is "
+        "expected on a workspace repo's first session. Pass --base SHA to set an "
+        "explicit diff base."
+    )
+    return (_EMPTY_TREE, None, "initial commit — no session-close anchor (whole history)", warning)
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def _parse_args() -> "argparse.Namespace":
@@ -360,6 +414,10 @@ def _parse_args() -> "argparse.Namespace":
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--repo", default=None, metavar="PATH",
                    help="Primary repo path for git diff (default: harness root)")
+    p.add_argument("--base", default=None, metavar="SHA",
+                   help="Explicit git revision to diff from, overriding session-close "
+                        "anchor detection. Use for a fresh workspace repo that has no "
+                        "session-close commit yet.")
     p.add_argument("--sessions", default=None, metavar="PATH",
                    help="Path to sessions.md (default: docs/sessions.md in harness root)")
     p.add_argument("--opus", default=None, metavar="PATH",
@@ -390,37 +448,42 @@ def main() -> None:
         "The static analysis section answers invariant check questions — no source file reads needed."
     )
 
-    # ── Git log since last session close ─────────────────────────────────────
-    base_sha: str | None = None
-    log_out = run(["git", "log", "--oneline", f"--grep={_SESSION_CLOSE_PREFIX}", "-20"]).stdout
-    log_lines = [ln.strip() for ln in log_out.splitlines() if ln.strip()]
-    if log_lines:
-        base_sha = log_lines[0].split()[0]
+    # ── Resolve the diff base (—base / session-close anchor / initial commit) ─
+    base_spec, log_base, base_label, base_warning = _resolve_diff_base(run, args.base)
+    if base_spec == _BASE_INVALID:
+        print(f"ERROR: --base {args.base!r} is not a valid commit in this repo.",
+              file=sys.stderr)
+        sys.exit(2)
+    if base_warning:
+        print(base_warning, file=sys.stderr)
 
-    if base_sha:
-        log = run(["git", "log", f"{base_sha}..HEAD", "--oneline"]).stdout
+    # ── Commits in this session ──────────────────────────────────────────────
+    if log_base:
+        log = run(["git", "log", f"{log_base}..HEAD", "--oneline"]).stdout
         parts.append(_section(
-            f"Commits since last session-close ({base_sha[:12]})",
+            f"Commits since {base_label}",
             log.strip() or "(none — all changes are uncommitted)",
         ))
+    elif base_spec == _EMPTY_TREE:
+        log = run(["git", "log", "HEAD", "--oneline", "-20"]).stdout
+        parts.append(_section(
+            f"Commits ({base_label})",
+            log.strip() or "(none)",
+        ))
     else:
-        parts.append("## Warning\n\nNo prior 'session close' commit found.\n")
+        parts.append("## Warning\n\nRepository has no commits.\n")
 
     # ── Session diff ──────────────────────────────────────────────────────────
-    if base_sha:
-        diff = run(["git", "diff", f"{base_sha}..HEAD"]).stdout
-        diff_stat = run(["git", "diff", f"{base_sha}..HEAD", "--stat"]).stdout
+    if base_spec == _EMPTY_TREE:
+        # Empty tree isn't a commit — use the two-arg form, not A..HEAD.
+        diff = run(["git", "diff", base_spec, "HEAD"]).stdout
+        diff_stat = run(["git", "diff", base_spec, "HEAD", "--stat"]).stdout
+    elif base_spec:
+        diff = run(["git", "diff", f"{base_spec}..HEAD"]).stdout
+        diff_stat = run(["git", "diff", f"{base_spec}..HEAD", "--stat"]).stdout
     else:
-        r_diff = run(["git", "diff", "main...HEAD"])
-        diff = r_diff.stdout
-        diff_stat = run(["git", "diff", "main...HEAD", "--stat"]).stdout
-        if r_diff.returncode != 0 or not diff.strip():
-            print(
-                "WARNING: no session-close anchor found and 'git diff main...HEAD' returned "
-                "no output — diff may be empty because the default branch is not 'main'. "
-                "Pass --repo or ensure a session-close commit exists.",
-                file=sys.stderr,
-            )
+        diff = ""
+        diff_stat = ""
 
     capped_diff, was_truncated, truncated_paths, large_assets = _apply_diff_cap(
         diff.strip(), MAX_DIFF_LINES

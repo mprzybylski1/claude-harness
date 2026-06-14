@@ -4,9 +4,9 @@ from: menu-planner
 raised: S1 2026-06-11
 title: prepare_opus_context.py produces 0-diff-line context on first workspace session (no session-close anchor)
 severity: medium
-status: promoted
+status: resolved
 harness_ticket: T157
-resolved_in:
+resolved_in: S30
 ---
 
 ## Context
