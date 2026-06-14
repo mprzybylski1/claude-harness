@@ -113,6 +113,20 @@ Read these files **sequentially** (use workspace-scoped paths if in a workspace)
    under **docs_path gitignored**. If empty, omit the section.
    Skipped silently when docs_path is not configured.
 
+10. Run `python scripts/tools/check_session_continuity.py` — detects whether the
+    about-to-be-used session number S<N> was already stamped on tickets by a prior,
+    unlogged session (a numbering collision, e.g. the ghost S30). For a workspace
+    session, pass the workspace paths:
+    ```
+    python scripts/tools/check_session_continuity.py \
+      --sessions <INTERNAL>/sessions.md \
+      --tickets-dir <INTERNAL>/tickets/open \
+      --archive-dir <INTERNAL>/archive
+    ```
+    Empty output means no collision; omit the section. If non-empty, surface it under
+    **Session-number collision** in the Step 3 briefing and reconcile before opening
+    new S<N> tickets.
+
 **Do not read individual ticket files at session start.** The INDEX has everything needed.
 
 If the workspace's archive contains relevant reviews, search with `grep` in `<INTERNAL>/archive/`.
@@ -171,6 +185,11 @@ Run the appropriate command to get the session ID:
 
 **docs_path gitignored:** *(workspace session only — omit section entirely if check_docs_path_gitignored.py produces no output)*
 - [Output of check_docs_path_gitignored.py, or omit]
+
+**Session-number collision:** *(omit section entirely if check_session_continuity.py produces no output)*
+```
+[Output of check_session_continuity.py, or omit]
+```
 
 **Suggested focus:**
 - [1-3 specific tickets most relevant to current gate or critical/high severity]

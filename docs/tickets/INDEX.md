@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S30 2026-06-15. 6 open tickets.
+Generated S30 2026-06-15. 5 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -11,12 +11,11 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Medium (2)
+## Medium (1)
 
 | ID | Title | Phase | Layer | Age |
 |----|-------|-------|-------|-----|
 | T156 | Investigate telemetry under-counting in workspace sessions | Ph2 | tooling | 1 session |
-| T165 | Ghost session: tickets stamped with an unlogged session number cause S<N> collisions | Ph2 | process | this session |
 
 ## Low (4)
 
