@@ -419,6 +419,13 @@ def _git_root_for(path: Path) -> tuple[str | None, str]:
         return None, str(exc)
 
 
+def _nothing_staged(git_root: str) -> bool:
+    """Return True if git_root's index has no staged changes (git diff --cached --quiet)."""
+    return subprocess.run(
+        ["git", "-C", git_root, "diff", "--cached", "--quiet"]
+    ).returncode == 0
+
+
 def _check_gitignored(paths: list[Path]) -> list[Path]:
     """Return subset of paths that are ignored by git.
 
@@ -569,6 +576,16 @@ def _git_stage(
             file=sys.stderr,
         )
         sys.exit(2)
+    # T154/T158: a workspace's internal/ dir is gitignored at the harness level, so
+    # the archive dest is not tracked here. `git add` of an ignored path errors —
+    # skip staging gracefully (the move already succeeded) rather than failing.
+    if _check_gitignored([dest]):
+        print(
+            f"NOTE: {dest.parent} is gitignored in {git_root} — archive moved, nothing "
+            "staged (this workspace's internal state is not tracked by the harness repo).",
+            file=sys.stderr,
+        )
+        return
     try:
         subprocess.check_call(
             ["git", "-C", git_root, "rm", "--cached", "--ignore-unmatch", "--", str(ticket_path)],
@@ -887,12 +904,18 @@ def main() -> None:
             print("ERROR: --commit but no staged files are in a git repo", file=sys.stderr)
             sys.exit(2)
         _check_index_clean(git_root, staged_paths, ticket_path)
-        try:
-            subprocess.check_call(["git", "-C", git_root, "commit", "-m", commit_msg])
-            print(f"Committed: {commit_msg}")
-        except subprocess.CalledProcessError as exc:
-            print(f"ERROR: git commit failed (exit {exc.returncode})", file=sys.stderr)
-            sys.exit(2)
+        # T154/T158: when the workspace internal/ is gitignored, nothing tracked was
+        # staged. A bare `git commit` would fail "nothing to commit" — report success.
+        if _nothing_staged(git_root):
+            print("NOTE: nothing tracked to commit (workspace internal/ is gitignored).",
+                  file=sys.stderr)
+        else:
+            try:
+                subprocess.check_call(["git", "-C", git_root, "commit", "-m", commit_msg])
+                print(f"Committed: {commit_msg}")
+            except subprocess.CalledProcessError as exc:
+                print(f"ERROR: git commit failed (exit {exc.returncode})", file=sys.stderr)
+                sys.exit(2)
     else:
         print("Suggested commit:")
         print(f'  git commit -m "{commit_msg}"')
