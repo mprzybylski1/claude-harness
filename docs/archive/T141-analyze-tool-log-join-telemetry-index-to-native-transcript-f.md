@@ -2,12 +2,12 @@
 id: T141
 title: analyze_tool_log: join telemetry index to native transcript for token-level data
 severity: low
-status: open
+status: closed
 phase: 2
 layer: tooling
 # repo: <name from workspace.yaml repos list>
 opened: S25 2026-05-31
-closed:
+closed: S30 2026-06-15
 ---
 
 ## Problem
@@ -52,4 +52,6 @@ schema/format drift defensively (AC #3).
 - [ ] This is the deferred half of T137's fix+bridge decision (see docs/native_vs_custom.md telemetry rationale)
 
 ## Resolution
-(Fill in on close.)
+Closed as YAGNI-confirmed (not built — by design). T141's own AC#2 gates the build on a consumer needing token-level data; none exists, so building the transcript-token join now would violate that clause. The join-key premise was already verified S26 (claude_session_uuid maps to a real ~/.claude/projects/.../<uuid>.jsonl transcript), and that key is now reliably populated after the T156 fix. T156 also added scripts/tools/telemetry_coverage.py, which already implements the uuid→transcript join (counting tool_use) — so the infrastructure for a future token-level audit exists and a build is straightforward when a real consumer (e.g. a /workflow-review token audit) appears. Re-open a fresh ticket at that point rather than carrying this one open indefinitely (5 sessions). Re-confirm the env-var name + ~/.claude/projects layout against the Claude Code version in use before building.
+
+Closed S30 2026-06-15.

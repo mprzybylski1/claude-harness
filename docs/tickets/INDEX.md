@@ -1,6 +1,6 @@
 # Ticket Index
 
-Generated S30 2026-06-15. 1 open tickets.
+Generated S30 2026-06-15. 0 open tickets.
 Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 ## Critical (0)
@@ -15,11 +15,9 @@ Re-generate: `python scripts/tools/generate_ticket_index.py`
 
 *(none)*
 
-## Low (1)
+## Low (0)
 
-| ID | Title | Phase | Layer | Age |
-|----|-------|-------|-------|-----|
-| T141 | analyze_tool_log: join telemetry index to native transcript for token-level data | Ph2 | tooling | 5 sessions |
+*(none)*
 
 ## Unknown (0)
 
