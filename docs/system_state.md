@@ -1,6 +1,6 @@
 # System State
 
-_Last updated: S29 2026-06-14_
+_Last updated: S30 2026-06-15_
 
 ---
 
@@ -23,16 +23,7 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Open Tickets
 
-**6 open tickets**
-
-| ID | Title | Phase | Age |
-|----|-------|-------|-----|
-| T154 | close_ticket.py auto-stages workspace internal/ archives | Ph2 | tooling | this session |
-| T156 | Investigate telemetry under-counting in workspace sessions | Ph2 | tooling | this session |
-| T141 | analyze_tool_log: join telemetry index to native transcript for token-level data | Ph2 | tooling | 4 sessions |
-| T146 | cwd-drift fragility in 'python scripts/tools/X.py' invocations after a cd elsewhere | Ph2 | tooling | 3 sessions |
-| T149 | Improve current_session.py error message when sessions.md exists in wrong format | Ph2 | tooling | this session |
-| T155 | prepare_opus_context.py --base flag for fresh workspace repos | Ph2 | tooling | this session |
+_No open tickets._
 
 ---
 

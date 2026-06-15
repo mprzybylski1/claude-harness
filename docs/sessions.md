@@ -19,24 +19,27 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Active Work
 
-**S29 — closed T150/T151/T152 (workspace path portability, scaffold format, gitignored docs_path); prose-trimmed CLAUDE.md and skills (−80 lines); impl-review 2 inline fixes.**
+**S30 — cleared all 11 open tickets to 0; 14 tickets closed; Invariant 3 amended; test suite 574→613; impl-review 3 inline fixes.**
 
 Files changed:
-- `scripts/tools/workspace_config.py` — added `is_machine_specific_path()` and `portable_path()` helpers
-- `scripts/tools/workspace.py` — warn on machine-specific paths at create; store portable `~/...` form
-- `scripts/tools/repo_hygiene.py` — new `check_workspace_paths()` WARN check
-- `scripts/tools/check_docs_path_gitignored.py` — new: `git check-ignore` check for workspace docs_path
-- `workspaces/scrabble-score/workspace.yaml` — migrated paths to `~/...` form
-- `.claude/skills/session-start/SKILL.md` — added step 9 (gitignored docs_path check); prose trimmed
-- `.claude/skills/session-close/SKILL.md` — removed stale flag hedges; de-fenced bash example
-- `CLAUDE.md` — collapsed two post-mortem essays and removed empty TODO scaffolding (−69 lines)
-- `tests/test_machine_specific_paths.py` — 23 tests for T150
-- `tests/test_workspace_scaffold.py` — 8 tests for T151
-- `tests/test_check_docs_path_gitignored.py` — 5 tests for T152
+- `scripts/tools/prepare_opus_context.py` — `--base` flag + initial-commit (empty-tree) fallback for fresh workspace repos (T157/T155); impl-review fix: `log_base=None` on invalid `--base`
+- `scripts/tools/close_ticket.py` — skip staging when archive dest is gitignored (T158/T154); cross-repo `--files` now commits per-repo (T159); `--tick-acs` help text (T160); commit-loop order fix (impl-review)
+- `scripts/tools/rotate_opus_notes.py` — regex made em-dash-optional to match workspace format (T163)
+- `scripts/tools/current_session.py` — better error message when sessions.md has wrong format (T149)
+- `scripts/tools/check_session_continuity.py` — new: advisory session-start guard for S\<N\> collisions (T165)
+- `scripts/tools/telemetry_coverage.py` — new: native-vs-telemetry coverage smoke check (T156)
+- `scripts/hooks/log_tool_usage.py` — `claude_session_uuid` from stdin payload not env var (T156)
+- `scripts/workflows/implement_ticket.py` — new: restored the never-committed orchestrator (T164)
+- `scripts/h` — new: cwd-independent tool wrapper (T146)
+- `docs/architecture_invariants.md` — Invariant 3 amended: multi-repo `--files` permitted via per-repo commits (T159)
+- `.claude/skills/session-start/SKILL.md` — step 10: check_session_continuity wired in (T165)
+- `CLAUDE.md` — `scripts/h` usage documented (T146)
+- `tests/` — 39 new tests across 9 test files; full suite 574→613
 
-Tickets opened: none
-Tickets closed: T150, T151, T152
-Open at close: T141 (deferred, YAGNI), T146 (low, deferred), T149/T154/T155/T156 (low/medium, open)
+Tickets opened this session: T164, T165 (both closed this session)
+Tickets closed: T155, T157, T154, T158, T159, T160, T163, T156, T164, T165, T149, T146, T141 (YAGNI), T163
+Triage: menu-planner SR-001→T157, SR-002→T158, SR-003→T163; impl-review commit e61bd9c
+Open at close: 0
 
 ---
 
@@ -74,3 +77,4 @@ S26 2026-05-31: cleared S25 Opus backlog — closed T142/T143/T140 (hook fail-cl
 S27 2026-05-31: promoted SR-012/SR-013 → closed T147/T148 (close_ticket --commit + index-clean guard, create_ticket --problem); impl-review 3 inline fixes; /simplify deduplicated test boilerplate (–226 lines, conftest.py); 2 deferred open at close
 S28 2026-06-01: ideation session — competitor analysis + stress tests (sub-tracker, retention-app, supplement-optimizer, UK utility); portfolio layer created with spec template + rejected ideas pipeline; no code changes
 S29 2026-06-01: closed T150/T151/T152 (workspace path portability, scaffold format, gitignored docs_path); prose-trimmed CLAUDE.md + skills (−80 lines); impl-review 2 inline fixes
+S30 2026-06-15: cleared all 11 open tickets to 0 (14 closed); Invariant 3 amended; orchestrator restored; telemetry uuid fixed; session-collision guard; 574→613 tests; impl-review 3 fixes
