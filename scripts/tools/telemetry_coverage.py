@@ -102,17 +102,37 @@ def main(argv: list[str] | None = None) -> int:
 
     transcript = _resolve_transcript(args)
     if transcript is None:
-        print("telemetry_coverage: no transcript found to compare against.", file=sys.stderr)
+        if args.transcript:
+            detail = f"--transcript path not found: {args.transcript}"
+        elif args.uuid:
+            detail = f"no transcript named {args.uuid}.jsonl under {args.projects_dir}"
+        else:
+            detail = f"no *.jsonl transcripts under {args.projects_dir}"
+        print(f"telemetry_coverage: no transcript to compare against ({detail}).",
+              file=sys.stderr)
         return 0
 
     uuid = args.uuid or transcript.stem
     native = count_native_tool_uses(transcript)
     captured = count_telemetry_records(Path(args.log), uuid)
-    ratio = (captured / native) if native else 1.0
 
     print(f"transcript: {transcript.name}")
     print(f"native tool_use calls : {native}")
     print(f"telemetry records     : {captured}")
+
+    # Fail-closed: with no ground truth (0 native tool_use — empty, truncated, or wrong
+    # transcript) coverage is unmeasurable. Never report 100% / pass the gate here, or
+    # the tool whose whole job is catching under-capture would silently pass on bad input.
+    if native == 0:
+        print("coverage              : N/A (transcript has no tool_use calls — "
+              "empty, truncated, or wrong file)")
+        if args.min_coverage is not None:
+            print("FAIL: cannot verify coverage — transcript has no tool_use calls",
+                  file=sys.stderr)
+            return 1
+        return 0
+
+    ratio = captured / native
     print(f"coverage              : {ratio:.0%}")
     if captured > native:
         print("note: telemetry > native — likely session-number/uuid conflation "

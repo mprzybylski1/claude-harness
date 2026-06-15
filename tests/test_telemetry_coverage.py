@@ -85,3 +85,26 @@ def test_no_transcript_is_advisory(tmp_path):
     )
     assert result.returncode == 0
     assert "no transcript" in result.stderr.lower()
+
+
+def test_empty_transcript_does_not_report_false_coverage(tmp_path):
+    """A transcript with 0 tool_use must NOT report 100% / pass --min-coverage (fail-open)."""
+    t = tmp_path / "abc.jsonl"
+    log = tmp_path / "log.jsonl"
+    t.write_text(json.dumps({"message": {"role": "user", "content": "hi"}}) + "\n")  # no tool_use
+    _log(log, "abc", 0)
+    # Without a threshold: must not claim 100%.
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--transcript", str(t), "--log", str(log)],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0
+    assert "100%" not in result.stdout
+    assert "N/A" in result.stdout or "no tool_use" in result.stdout.lower()
+    # With a threshold: unverifiable coverage must FAIL closed, not pass.
+    result2 = subprocess.run(
+        [sys.executable, str(SCRIPT), "--transcript", str(t), "--log", str(log),
+         "--min-coverage", "0.8"],
+        capture_output=True, text=True,
+    )
+    assert result2.returncode == 1, "empty transcript must fail the --min-coverage gate"
