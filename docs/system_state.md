@@ -1,6 +1,6 @@
 # System State
 
-_Last updated: S30 2026-06-15_
+_Last updated: S30 2026-06-25_
 
 ---
 
@@ -23,7 +23,11 @@ Phase 1 gate: complete (S6 2026-05-25)
 
 ## Open Tickets
 
-_No open tickets._
+**1 open ticket**
+
+| ID | Title | Phase | Age |
+|----|-------|-------|-----|
+| T166 | Agentic app-idea research workflow (/research-ideas) | Ph2 | tooling | this session |
 
 ---
 
