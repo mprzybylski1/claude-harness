@@ -102,7 +102,11 @@ converted recipes.
 ### Cut List (decided, not backlog)
 
 - Inventory tracking + restock notifications (see Decisions Locked).
-- Public/multi-household support, sharing recipes with friends, social anything.
+- ~~Public/multi-household support, sharing recipes with friends, social anything.~~
+  **Partially reversed 2026-06-27 (T082–T084):** allowlisted multi-household onboarding
+  (a new permitted email gets its own isolated household) and **copy-only** recipe
+  sharing across households (share link → recipient gets an independent fork; no shared
+  rows, no sync). Still out: public open signup, social features, live collaborative recipes.
 - Meal types beyond dinner in the UI (model supports them; UI doesn't).
 
 ---
