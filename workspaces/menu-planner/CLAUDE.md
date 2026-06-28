@@ -33,7 +33,9 @@ Repo path is `~/MenuPlanner` (branch `main`). Remote:
 `git@github.com:mprzybylski1/MenuPlanner.git` (private). Monorepo layout:
 `app/` (SvelteKit PWA — T005), `supabase/` (migrations + Edge Functions —
 T002/T003), `parsing/` (Python parse prototype + 34 tests + model/cost
-benchmark; the proven reference the `/parse` Edge Function is ported from).
+benchmark; **FROZEN** historical Phase-0 artifact — the `/parse` Edge Function
+was originally ported from it but is now canonical and has diverged (T092
+English-merge-key + display_name; T095). Don't port prompt/schema changes back here).
 
 ## Key Context for Future Sessions
 
