@@ -277,7 +277,7 @@ belt-and-braces fix.
 ## Open Questions
 
 - [ ] **App name.** "Menu Planner" is a working title. Decide before the domain purchase, not before code.
-- [x] **Recipe source languages.** RESOLVED (Phase 0, S1): **English-only.** The household cooks from English sites; no non-English sources. Polish dropped.
+- [x] **Recipe source languages.** ~~RESOLVED (Phase 0, S1): **English-only.** The household cooks from English sites; no non-English sources. Polish dropped.~~ **Reversed 2026-06-27 (T092, paste-to-recipe):** a hand-entered Polish recipe proved non-English sources are real, and `canonical_name` overloaded as both display name and shopping-merge key breaks in inflected languages (declined "jogurtu" never merges with "jogurt"). The ingredient name is now split — a source-language grammatical `display_name` (shown; e.g. Polish genitive "płatków owsianych") plus a hidden **English** `canonical_name` merge key ("rolled oats"). Non-English recipes read naturally and still merge. This builds the language-neutral *anchor* only; a full translation layer (instructions/title/UI language) stays out of scope (future project B).
 - [x] **Frontend framework** — RESOLVED (Phase 1 start, S1): **SvelteKit** (small bundle, fast on mobile, hosted on Cloudflare Pages).
 - [x] **Claude model for parsing** — RESOLVED (Phase 0, S1): **Sonnet 4.6** (`claude-sonnet-4-6`). 9/9 clean vs Haiku 8/9 (Haiku doubled a ¼-cup flour). Cost negligible at household volume (~3p/parse). Haiku stays a fallback if volume ever changes the maths.
 - [x] **Serving scaling** — RESOLVED (Phase 1 start, S1): **store as-published, scale at display time.** Keeps `original_text` honest; the recipe's own servings count drives display-time scaling.

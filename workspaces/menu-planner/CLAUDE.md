@@ -18,7 +18,10 @@ At session start, run `/session-start`. Context files for this workspace:
 
 **Phase:** Phase 0 complete (S1 2026-06-11) — parse PoC is **GO** (T001). Sonnet
 9/9, Haiku 8/9 against 9 real URLs; extraction 8/9 JSON-LD + 1 readability, no
-bot-blocks. **Model locked: Sonnet 4.6. Language: English-only.** Next: Phase 1
+bot-blocks. **Model locked: Sonnet 4.6.** ~~Language: English-only.~~ **Multi-language
+sources accepted (T092, reversed 2026-06-27):** ingredient name split into a
+source-language grammatical `display_name` (shown) + a hidden **English**
+`canonical_name` merge key — see SPEC.md "Open Questions". Next: Phase 1
 MVP — Supabase schema + RLS, `POST /parse` Edge Function (reuse the `parsing/`
 prompt + `Recipe` schema + `convert` logic), recipe library, week plan, PWA.
 
