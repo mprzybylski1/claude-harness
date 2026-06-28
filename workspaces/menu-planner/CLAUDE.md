@@ -94,3 +94,34 @@ python -m parsing.run --urls parsing/urls.txt        # re-run the model/cost ben
 ```
 
 _App (`app/`) and Supabase (`supabase/`) commands land with T005 and T002/T003._
+
+## On-device / headless UI testing (the standard process)
+
+Reusable harness at **`~/MenuPlanner/tools/verify/`** (standalone, own deps, not in the
+app build). Use it to test UI changes on a phone — or fully headless — against the
+**local** Supabase stack, with a permanent seeded test user and **no real email**.
+Full detail + gotchas: `tools/verify/README.md`. Recorded in memory:
+`reference_menuplanner_headless_verification`.
+
+Prereqs: local stack up (`supabase status`), and once: `cd tools/verify && npm install
+&& npx playwright install chromium`.
+
+```bash
+cd ~/MenuPlanner/tools/verify
+npm run seed         # permanent test user (cookbook-verify@example.com) + recipes (idempotent)
+npm run phone-dev    # serves dev on the Mac LAN IP (temp app/.env.local, auto-removed)
+npm run login-link   # prints a ONE-TAP login URL → open on the phone, no OTP typing
+npm run shoot        # headless: OTP login + screenshots → out/*.png (+ JSON verdict)
+npm run code         # fallback: print the latest OTP from Mailpit to relay
+```
+
+- **One-tap link** = single-use token_hash to the app's own `/auth/callback` (verifies
+  server-side; works from the phone where the emailed magic link can't). Re-run for a fresh one.
+- **Self-verify:** `npm run shoot` writes real PNGs the assistant can read directly +
+  send to the operator — no phone needed for a first pass.
+- **Real/personal recipes:** drop full recipes in **gitignored** `tools/verify/seed-extra.json`
+  (`seed` loads them after the built-ins). To pull one from production, use the **Supabase
+  MCP** (`execute_sql` on project `hyoapyzqfjkhvrcwszgf`) — note a `/share/<token>` URL is a
+  `recipe_shares.token`, *not* a recipe id (join `recipe_shares` → `recipes`).
+- **Exact prod artifact:** for the real built worker, `cd app && wrangler versions upload`
+  gives a no-traffic preview URL; promote with `wrangler versions deploy`.
