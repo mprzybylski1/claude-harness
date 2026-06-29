@@ -16,14 +16,22 @@ At session start, run `/session-start`. Context files for this workspace:
 
 ## Project Status
 
-**Phase:** Phase 0 complete (S1 2026-06-11) — parse PoC is **GO** (T001). Sonnet
-9/9, Haiku 8/9 against 9 real URLs; extraction 8/9 JSON-LD + 1 readability, no
-bot-blocks. **Model locked: Sonnet 4.6.** ~~Language: English-only.~~ **Multi-language
-sources accepted (T092, reversed 2026-06-27):** ingredient name split into a
-source-language grammatical `display_name` (shown) + a hidden **English**
-`canonical_name` merge key — see SPEC.md "Open Questions". Next: Phase 1
-MVP — Supabase schema + RLS, `POST /parse` Edge Function (reuse the `parsing/`
-prompt + `Recipe` schema + `convert` logic), recipe library, week plan, PWA.
+**Phase:** Phase 0 GO (S1 2026-06-11, parse PoC T001 — Sonnet 9/9; **model locked
+Sonnet 4.6**). **Phases 1 & 2 shipped and deployed** (S2–S17): Supabase schema + RLS
++ magic-link auth, `POST /parse` Edge Function, recipe library + filters, weekly
+dinner plan (realtime), PWA, the **offline epic** (app-shell SW + read cache + write
+outbox), **auto shopping list** (rolling-window merge by `canonical_name`),
+`POST /suggest` preference-driven menu suggestion, **`improve`-with-AI**,
+paste-to-recipe, multi-meal days, and **multi-skin theming** (T103). Live on
+Cloudflare Workers + hosted Supabase (ref `hyoapyzqfjkhvrcwszgf`). **Multi-language
+sources (T092):** ingredient name split into a source-language grammatical
+`display_name` (shown) + a hidden **English** `canonical_name` merge key.
+
+**Active direction (S18 2026-06-29):** see
+`~/MenuPlanner/docs/superpowers/specs/2026-06-29-handoff-actioned-roadmap.md` — the
+ordering loop (canonical↔SKU keystone + Sainsbury's deep-link search), break-the-rut
+suggestions, and a **gated** e-ink-cooking-device + business-validation exploration
+(passion-mode default; business behind money-on-the-line gates).
 
 ## Repos
 
@@ -56,8 +64,14 @@ A two-user household app:
 - Not a native iOS app (PWA-first; native wrapper is a Phase 3 *option* — no
   Apple Developer Program exists or is needed yet).
 - Not a RAG system (index-in-prompt; corpus too small for embeddings).
-- No inventory tracking (cut, not deferred — see SPEC.md Decisions Locked).
-- Single household — no multi-tenant, social, or sharing features.
+- No *sensed/manual* inventory tracking (cut — see SPEC.md Decisions Locked).
+  *Inferred* inventory (delivery − cooked, zero-upkeep) is a sanctioned future
+  software feature (roadmap T113), not a reversal.
+- **Multi-household live (T082–T084):** allowlisted onboarding (each permitted email
+  gets its own isolated household) + **copy-only** recipe sharing (share link →
+  recipient gets an independent fork; no shared rows, no sync). Still out: public
+  open signup, social features, live collaboration. *Depth* (read-only share vs full
+  multi-tenant social) is an open question — see roadmap.
 
 ### Technical Decisions (Locked S0)
 

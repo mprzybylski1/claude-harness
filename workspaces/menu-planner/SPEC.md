@@ -49,7 +49,7 @@ product for the App Store.
 | Obsidian | **Dropped** | Original idea; abandoned in favour of an app the partner can actually use. No vault, no sync plugins. |
 | Recipe parsing | **Hosted, server-side** — Supabase Edge Function calling the Claude API | Keys stay off phones; phones stay thin. |
 | RAG | **Not building it.** Index-in-prompt instead | Household corpus will be a few hundred recipes for years — the whole index (titles, tags, times, history) fits in one Claude prompt. Embeddings/vector search only earn their keep past ~1,000 recipes. Revisit then. |
-| Inventory + restock notifications | **Cut, not deferred** | Manual inventory tracking requires updating stock after every shop and every meal; nobody sustains it. Shopping list gives 80% of the value with zero upkeep. Revisit only if shopping-list use sticks for 2+ months. |
+| Inventory + restock notifications | **Cut, not deferred** | Manual inventory tracking requires updating stock after every shop and every meal; nobody sustains it. Shopping list gives 80% of the value with zero upkeep. Revisit only if shopping-list use sticks for 2+ months. **Refined 2026-06-29:** the cut stands for *sensed/manual* inventory and IKEA-style smart-hardware. *Inferred* inventory — computed from delivery-in (reconciliation) − cooked-out, zero upkeep — is a sanctioned future software feature (roadmap T113), not a reversal of this cut. |
 | Planning scope | **Dinner-first** | Week view plans dinners. Data model has a meal-slot field so lunch/other can come later, but the UI doesn't pay for them yet. |
 
 ---
