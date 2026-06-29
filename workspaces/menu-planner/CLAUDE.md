@@ -124,4 +124,7 @@ npm run code         # fallback: print the latest OTP from Mailpit to relay
   MCP** (`execute_sql` on project `hyoapyzqfjkhvrcwszgf`) — note a `/share/<token>` URL is a
   `recipe_shares.token`, *not* a recipe id (join `recipe_shares` → `recipes`).
 - **Exact prod artifact:** for the real built worker, `cd app && wrangler versions upload`
-  gives a no-traffic preview URL; promote with `wrangler versions deploy`.
+  gives a no-traffic preview URL; promote with `wrangler versions deploy "<version-id>@100" --yes`.
+  **Use the `Worker Version ID` printed by `versions upload`** — do NOT pick it from
+  `wrangler versions list | head` (that list is OLDEST-first; `head -1` deploys a stale
+  version, briefly regressing prod — happened S16).
