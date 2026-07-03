@@ -99,6 +99,36 @@ converted recipes.
 - **Native iOS wrapper** — only if the PWA proves itself and widgets/native feel
   are missed. Requires Apple Developer Program ($99/yr). Backend unchanged.
 
+### AI recipe photos (S22, 2026-07-03 — shipped)
+
+Every recipe without a real source photo gets an AI-generated, human-reviewed photo
+via a deduplicated reuse pool. Design: `~/MenuPlanner/docs/superpowers/plans/2026-07-03-ai-recipe-photo-generation.md`
+(decisions D1–D7 + invariants INV-1..5). Tickets T128, T144–T147.
+
+- **Reuse-first serving:** recipe creation fires `photo-match` (fire-and-forget):
+  zero-temp structured *plating descriptor* (5 facets, vessel excluded — house style
+  pins it) → `text-embedding-3-small` (1536-d) → pgvector cosine KNN over the
+  approved pool. Hit assigns instantly; miss shows "Photo coming".
+- **Invariants:** reuse only from `ai_generated`+`approved` (sole gate:
+  `match_approved_image` RPC); real photos never enter the pool (recipes with
+  `image_url` skip the flow entirely; `images` table is AI-only); nothing serves
+  without human approval (`approve_recipe_image` is the only door, row-count-guarded).
+- **Miss branch is manual (v1):** Settings → "Admin: recipe photos" — generate one
+  GPT-Image candidate (warm-editorial house-style suffix from `app_config`),
+  approve / reject-and-regenerate. τ (`photo_match_tau` = 0.15 cosine, conservative
+  per INV-3), style suffix, and gen model are `app_config` values.
+- **Skin-matched styles (future-proofed):** pool partitioned by `style_key`
+  (`warm-editorial-v1`); a per-skin style later = config row + generation pass.
+- **Alongside:** recipes split into typed machinery columns + `recipe_body` jsonb
+  (T144); real photos self-hosted in Supabase Storage `recipe-images` (T128).
+
+**Deferred (recorded, not built):** (1) **human review throughput** — manual
+miss-handling survives ~500 recipes/yr; real traction triggers the async
+generation queue + auto-QA decision; (2) **per-user skin-matched serving** —
+needs per-(descriptor, style) resolution at render instead of the single
+`assigned_image_id` FK; the pool already supports it; (3) **τ tuning** — only on
+real false-merge/false-miss data, never curated sets, never toward reuse rate.
+
 ### Cut List (decided, not backlog)
 
 - Inventory tracking + restock notifications (see Decisions Locked).
