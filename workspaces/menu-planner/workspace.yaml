@@ -2,6 +2,10 @@ name: Menu Planner
 type: personal
 status: planning
 opened: '2026-06-11'
+# Workspace docs (tickets, sessions, opus_notes, audits) live in the app repo so they
+# are version-controlled + backed up, instead of the gitignored workspaces/*/internal/
+# default. Migrated S31 2026-07-07 (T200). All harness tools resolve via internal_dir().
+docs_path: ~/MenuPlanner/docs/harness
 repos:
 - name: menu-planner
   path: ~/MenuPlanner
