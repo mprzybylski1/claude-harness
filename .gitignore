@@ -9,6 +9,12 @@ venv/
 docs/opus_review_context.md
 .git/CLAUDE_SESSION_ID
 
+# OS junk
+.DS_Store
+
+# Supabase CLI local link state (created when the MCP/CLI links a project)
+supabase/.temp/
+
 # IDE / editor
 .idea/
 
